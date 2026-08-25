@@ -1,0 +1,562 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import bcrypt from 'bcryptjs'
+import Database from 'better-sqlite3'
+import { customAlphabet, nanoid } from 'nanoid'
+import { emptySheet, TOKEN_PALETTE, type CharacterSheetData, type FogState, type NamedEntry } from '../src/lib/types.ts'
+import { tokenSizeSquares } from '../src/lib/utils.ts'
+import { loadSrdMonsters } from './srd.ts'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const dataDir = path.join(root, 'data')
+fs.mkdirSync(dataDir, { recursive: true })
+
+export const db = new Database(path.join(dataDir, 'table.sqlite'))
+db.pragma('journal_mode = WAL')
+db.pragma('foreign_keys = ON')
+
+export const ids = {
+  id: () => nanoid(12),
+  join: customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6),
+  personal: customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8),
+  token: () => nanoid(24),
+}
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS dm_accounts (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  passcode_hash TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS auth_tokens (
+  token TEXT PRIMARY KEY,
+  role TEXT NOT NULL,
+  dm_id TEXT,
+  character_id TEXT,
+  campaign_id TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS campaigns (
+  id TEXT PRIMARY KEY,
+  dm_account_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  FOREIGN KEY (dm_account_id) REFERENCES dm_accounts(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS bestiary_monsters (
+  id TEXT PRIMARY KEY,
+  dm_account_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  size TEXT,
+  creature_type TEXT,
+  alignment TEXT,
+  ac_value INTEGER,
+  ac_note TEXT,
+  hp_max INTEGER,
+  hit_dice_formula TEXT,
+  speed TEXT,
+  str INTEGER, dex INTEGER, con INTEGER, int INTEGER, wis INTEGER, cha INTEGER,
+  saving_throws TEXT,
+  skills TEXT,
+  damage_vulnerabilities TEXT,
+  damage_resistances TEXT,
+  damage_immunities TEXT,
+  condition_immunities TEXT,
+  senses TEXT,
+  languages TEXT,
+  challenge_rating REAL,
+  xp INTEGER,
+  proficiency_bonus INTEGER,
+  traits TEXT,
+  actions TEXT,
+  legendary_actions TEXT,
+  reactions TEXT,
+  bonus_actions TEXT,
+  lair_actions TEXT,
+  source TEXT,
+  FOREIGN KEY (dm_account_id) REFERENCES dm_accounts(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS player_characters (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL,
+  personal_code TEXT NOT NULL UNIQUE,
+  owner_display_name TEXT,
+  name TEXT,
+  token_color TEXT,
+  source_pdf_url TEXT,
+  sheet_json TEXT NOT NULL,
+  FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS maps (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  image_url TEXT NOT NULL,
+  grid_size INTEGER NOT NULL,
+  grid_cols INTEGER NOT NULL,
+  grid_rows INTEGER NOT NULL,
+  grid_type TEXT NOT NULL DEFAULT 'square',
+  FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS encounter_templates (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL,
+  map_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  monsters_json TEXT NOT NULL,
+  FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS encounter_instances (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL,
+  encounter_template_id TEXT,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  round_number INTEGER NOT NULL,
+  current_turn_position INTEGER NOT NULL,
+  fog_state TEXT NOT NULL,
+  map_id TEXT,
+  FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS combatants (
+  id TEXT PRIMARY KEY,
+  encounter_instance_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  source TEXT NOT NULL,
+  source_id TEXT,
+  initiative INTEGER NOT NULL DEFAULT 0,
+  hp_current INTEGER NOT NULL,
+  hp_max INTEGER NOT NULL,
+  hp_temp INTEGER NOT NULL DEFAULT 0,
+  ac INTEGER NOT NULL,
+  conditions_json TEXT NOT NULL,
+  turn_order_position INTEGER NOT NULL,
+  color TEXT,
+  notes TEXT,
+  FOREIGN KEY (encounter_instance_id) REFERENCES encounter_instances(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS tokens_on_map (
+  id TEXT PRIMARY KEY,
+  encounter_instance_id TEXT NOT NULL,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  ref_type TEXT NOT NULL,
+  ref_id TEXT NOT NULL,
+  label TEXT,
+  color TEXT,
+  size_squares INTEGER NOT NULL DEFAULT 1,
+  visible_to_players INTEGER NOT NULL DEFAULT 1,
+  FOREIGN KEY (encounter_instance_id) REFERENCES encounter_instances(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS live_sessions (
+  id TEXT PRIMARY KEY,
+  join_code TEXT NOT NULL UNIQUE,
+  campaign_id TEXT NOT NULL,
+  encounter_instance_id TEXT,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
+);
+`)
+
+export function now() {
+  return Date.now()
+}
+
+export function jparse<T>(s: string, fallback: T): T {
+  try {
+    return JSON.parse(s) as T
+  } catch {
+    return fallback
+  }
+}
+
+export function monsterFromRow(row: Record<string, unknown>) {
+  return {
+    id: row.id as string,
+    dmAccountId: row.dm_account_id as string,
+    name: row.name as string,
+    size: row.size as string,
+    creatureType: row.creature_type as string,
+    alignment: row.alignment as string,
+    acValue: row.ac_value as number,
+    acNote: row.ac_note as string,
+    hpMax: row.hp_max as number,
+    hitDiceFormula: row.hit_dice_formula as string,
+    speed: row.speed as string,
+    str: row.str as number,
+    dex: row.dex as number,
+    con: row.con as number,
+    int: row.int as number,
+    wis: row.wis as number,
+    cha: row.cha as number,
+    savingThrows: row.saving_throws as string,
+    skills: row.skills as string,
+    damageVulnerabilities: row.damage_vulnerabilities as string,
+    damageResistances: row.damage_resistances as string,
+    damageImmunities: row.damage_immunities as string,
+    conditionImmunities: row.condition_immunities as string,
+    senses: row.senses as string,
+    languages: row.languages as string,
+    challengeRating: row.challenge_rating as number,
+    xp: row.xp as number,
+    proficiencyBonus: row.proficiency_bonus as number,
+    traits: jparse<NamedEntry[]>(row.traits as string, []),
+    actions: jparse<NamedEntry[]>(row.actions as string, []),
+    legendaryActions: jparse<NamedEntry[]>(row.legendary_actions as string, []),
+    reactions: jparse<NamedEntry[]>(row.reactions as string, []),
+    bonusActions: jparse<NamedEntry[]>(row.bonus_actions as string, []),
+    lairActions: jparse<NamedEntry[]>(row.lair_actions as string, []),
+    source: row.source as 'srd' | 'custom',
+  }
+}
+
+export function characterFromRow(row: Record<string, unknown>) {
+  return {
+    id: row.id as string,
+    campaignId: row.campaign_id as string,
+    personalCode: row.personal_code as string,
+    ownerDisplayName: row.owner_display_name as string,
+    name: row.name as string,
+    tokenColor: row.token_color as string,
+    sourcePdfUrl: (row.source_pdf_url as string) || null,
+    sheet: jparse<CharacterSheetData>(row.sheet_json as string, emptySheet()),
+  }
+}
+
+export function insertMonster(
+  dmId: string,
+  m: Omit<ReturnType<typeof loadSrdMonsters>[number], 'source'> & { id?: string; source: 'srd' | 'custom' },
+) {
+  const id = m.id ?? ids.id()
+  db.prepare(
+    `INSERT INTO bestiary_monsters (
+      id, dm_account_id, name, size, creature_type, alignment, ac_value, ac_note, hp_max, hit_dice_formula, speed,
+      str, dex, con, int, wis, cha, saving_throws, skills, damage_vulnerabilities, damage_resistances, damage_immunities,
+      condition_immunities, senses, languages, challenge_rating, xp, proficiency_bonus, traits, actions, legendary_actions,
+      reactions, bonus_actions, lair_actions, source
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    id,
+    dmId,
+    m.name,
+    m.size,
+    m.creatureType,
+    m.alignment,
+    m.acValue,
+    m.acNote,
+    m.hpMax,
+    m.hitDiceFormula,
+    m.speed,
+    m.str,
+    m.dex,
+    m.con,
+    m.int,
+    m.wis,
+    m.cha,
+    m.savingThrows,
+    m.skills,
+    m.damageVulnerabilities,
+    m.damageResistances,
+    m.damageImmunities,
+    m.conditionImmunities,
+    m.senses,
+    m.languages,
+    m.challengeRating,
+    m.xp,
+    m.proficiencyBonus,
+    JSON.stringify(m.traits),
+    JSON.stringify(m.actions),
+    JSON.stringify(m.legendaryActions),
+    JSON.stringify(m.reactions),
+    JSON.stringify(m.bonusActions),
+    JSON.stringify(m.lairActions),
+    m.source,
+  )
+  return id
+}
+
+export function seedBestiaryForDm(dmId: string) {
+  const count = db.prepare('SELECT COUNT(*) as c FROM bestiary_monsters WHERE dm_account_id = ?').get(dmId) as { c: number }
+  if (count.c > 0) return count.c
+  const monsters = loadSrdMonsters()
+  const tx = db.transaction(() => {
+    for (const m of monsters) insertMonster(dmId, m)
+  })
+  tx()
+  return monsters.length
+}
+
+function defaultFog(cols: number, rows: number): FogState {
+  return {
+    cols,
+    rows,
+    enabled: false,
+    revealed: Array.from({ length: cols * rows }, () => 1),
+  }
+}
+
+export function spawnFromTemplate(campaignId: string, templateId: string, name?: string) {
+  const template = db.prepare('SELECT * FROM encounter_templates WHERE id = ? AND campaign_id = ?').get(templateId, campaignId) as
+    | Record<string, unknown>
+    | undefined
+  if (!template) throw new Error('Template not found')
+  const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(template.map_id) as Record<string, unknown>
+  const monsters = jparse<{ bestiaryMonsterId: string; name: string; quantity: number; startX: number; startY: number; color: string }[]>(
+    template.monsters_json as string,
+    [],
+  )
+  const instanceId = ids.id()
+  const cell = Number(map.grid_size)
+  db.prepare(
+    `INSERT INTO encounter_instances (id, campaign_id, encounter_template_id, name, status, round_number, current_turn_position, fog_state, map_id)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    instanceId,
+    campaignId,
+    templateId,
+    name || (template.name as string),
+    'active',
+    1,
+    0,
+    JSON.stringify(defaultFog(Number(map.grid_cols), Number(map.grid_rows))),
+    map.id,
+  )
+
+  let order = 0
+  let placed = 0
+  for (const spec of monsters) {
+    const src = db.prepare('SELECT * FROM bestiary_monsters WHERE id = ?').get(spec.bestiaryMonsterId) as Record<string, unknown> | undefined
+    if (!src) continue
+    for (let i = 0; i < spec.quantity; i++) {
+      const cid = ids.id()
+      const label = spec.quantity > 1 ? `${spec.name} ${i + 1}` : spec.name
+      db.prepare(
+        `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        cid,
+        instanceId,
+        label,
+        'bestiary',
+        spec.bestiaryMonsterId,
+        0,
+        src.hp_max,
+        src.hp_max,
+        0,
+        src.ac_value,
+        '[]',
+        order++,
+        spec.color,
+        '',
+      )
+      const sx = spec.startX || 0
+      const sy = spec.startY || 0
+      const col = sx > 0 ? sx : 2 + (placed % 8)
+      const row = sy > 0 ? sy : 2 + Math.floor(placed / 8)
+      db.prepare(
+        `INSERT INTO tokens_on_map (id, encounter_instance_id, x, y, ref_type, ref_id, label, color, size_squares, visible_to_players)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        ids.id(),
+        instanceId,
+        col * cell + cell / 2,
+        row * cell + cell / 2,
+        'combatant',
+        cid,
+        label,
+        spec.color || '#c4453c',
+        tokenSizeSquares(String(src.size ?? 'Medium')),
+        1,
+      )
+      placed++
+    }
+  }
+  return instanceId
+}
+
+export function addCharacterCombatant(instanceId: string, characterId: string) {
+  const ch = db.prepare('SELECT * FROM player_characters WHERE id = ?').get(characterId) as Record<string, unknown> | undefined
+  if (!ch) throw new Error('Character not found')
+  const existing = db
+    .prepare(`SELECT id FROM combatants WHERE encounter_instance_id = ? AND source = 'character' AND source_id = ?`)
+    .get(instanceId, characterId)
+  if (existing) return existing as { id: string }
+  const sheet = jparse<CharacterSheetData>(ch.sheet_json as string, emptySheet())
+  const inst = db.prepare('SELECT map_id FROM encounter_instances WHERE id = ?').get(instanceId) as { map_id: string }
+  const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(inst.map_id) as Record<string, unknown> | undefined
+  const cell = Number(map?.grid_size ?? 70)
+  const maxPos = db.prepare('SELECT COALESCE(MAX(turn_order_position), -1) as m FROM combatants WHERE encounter_instance_id = ?').get(instanceId) as {
+    m: number
+  }
+  const cid = ids.id()
+  db.prepare(
+    `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    cid,
+    instanceId,
+    ch.name,
+    'character',
+    characterId,
+    0,
+    sheet.hpCurrent,
+    sheet.hpMax,
+    sheet.hpTemp,
+    sheet.ac,
+    '[]',
+    maxPos.m + 1,
+    ch.token_color,
+    '',
+  )
+  const count = db.prepare('SELECT COUNT(*) as c FROM tokens_on_map WHERE encounter_instance_id = ?').get(instanceId) as { c: number }
+  db.prepare(
+    `INSERT INTO tokens_on_map (id, encounter_instance_id, x, y, ref_type, ref_id, label, color, size_squares, visible_to_players)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    ids.id(),
+    instanceId,
+    cell * (2 + (count.c % 6)) + cell / 2,
+    cell * 10 + cell / 2,
+    'combatant',
+    cid,
+    ch.name as string,
+    ch.token_color as string,
+    1,
+    1,
+  )
+  return { id: cid }
+}
+
+function seedDemo() {
+  const existing = db.prepare('SELECT id FROM dm_accounts WHERE name = ?').get('Hearthkeeper') as { id: string } | undefined
+  if (existing) return
+  const dmId = ids.id()
+  db.prepare('INSERT INTO dm_accounts (id, name, passcode_hash, created_at) VALUES (?,?,?,?)').run(
+    dmId,
+    'Hearthkeeper',
+    bcrypt.hashSync('torch', 10),
+    now(),
+  )
+  seedBestiaryForDm(dmId)
+  const campaignId = ids.id()
+  db.prepare('INSERT INTO campaigns (id, dm_account_id, name) VALUES (?,?,?)').run(campaignId, dmId, 'Phandalin Nights')
+  const mapId = ids.id()
+  db.prepare('INSERT INTO maps (id, campaign_id, name, image_url, grid_size, grid_cols, grid_rows, grid_type) VALUES (?,?,?,?,?,?,?,?)').run(
+    mapId,
+    campaignId,
+    'Cragmaw Hideout',
+    '/maps/cragmaw-hideout.svg',
+    70,
+    20,
+    15,
+    'square',
+  )
+
+  const elaraSheet = emptySheet()
+  elaraSheet.className = 'Wizard 3'
+  elaraSheet.level = 3
+  elaraSheet.race = 'High Elf'
+  elaraSheet.background = 'Sage'
+  elaraSheet.alignment = 'Chaotic Good'
+  elaraSheet.abilities = { str: 8, dex: 16, con: 14, int: 16, wis: 12, cha: 10 }
+  elaraSheet.ac = 13
+  elaraSheet.hpMax = 20
+  elaraSheet.hpCurrent = 20
+  elaraSheet.hitDice = '3d6'
+  elaraSheet.speed = '30 ft.'
+  elaraSheet.savingThrowProf = { str: false, dex: false, con: false, int: true, wis: true, cha: false }
+  elaraSheet.skillProf = { arcana: true, history: true, investigation: true, perception: true }
+  elaraSheet.spellcastingAbility = 'int'
+  elaraSheet.spellSlots = [4, 2, 0, 0, 0, 0, 0, 0, 0]
+  elaraSheet.spells = [
+    { name: 'Fire Bolt', level: 0, prepared: true },
+    { name: 'Mage Armor', level: 1, prepared: true },
+    { name: 'Magic Missile', level: 1, prepared: true },
+    { name: 'Misty Step', level: 2, prepared: true },
+  ]
+  elaraSheet.attacks = [{ name: 'Fire Bolt', bonus: '+5', damage: '1d10 fire' }]
+  elaraSheet.personality = 'I speak in riddles when I am nervous, which is often.'
+  elaraSheet.ideals = 'Knowledge should be shared over a full mug, not hoarded.'
+  elaraSheet.bonds = 'Brok pulled me out of a collapsing watchtower. I owe him.'
+  elaraSheet.flaws = 'I cannot walk past an unmarked book.'
+  elaraSheet.features = 'Fey Ancestry. Darkvision 60 ft. Ritual Casting.'
+  elaraSheet.equipment = 'Spellbook, quarterstaff, component pouch, 12 gp'
+
+  const brokSheet = emptySheet()
+  brokSheet.className = 'Fighter 3'
+  brokSheet.level = 3
+  brokSheet.race = 'Mountain Dwarf'
+  brokSheet.background = 'Soldier'
+  brokSheet.alignment = 'Lawful Good'
+  brokSheet.abilities = { str: 16, dex: 12, con: 16, int: 8, wis: 13, cha: 10 }
+  brokSheet.ac = 18
+  brokSheet.hpMax = 32
+  brokSheet.hpCurrent = 32
+  brokSheet.hitDice = '3d10'
+  brokSheet.speed = '25 ft.'
+  brokSheet.savingThrowProf = { str: true, dex: false, con: true, int: false, wis: false, cha: false }
+  brokSheet.skillProf = { athletics: true, intimidation: true, perception: true, survival: true }
+  brokSheet.attacks = [{ name: 'Warhammer', bonus: '+5', damage: '1d8+3 bludgeoning' }]
+  brokSheet.personality = 'I measure a room by its exits, then by its ale.'
+  brokSheet.ideals = 'Hold the line. The people behind you are why you fight.'
+  brokSheet.bonds = 'Elara is the only wizard I trust with my back.'
+  brokSheet.flaws = 'I take every insult as a challenge to wrestle.'
+  brokSheet.features = 'Second Wind. Action Surge. Dwarven Resilience.'
+  brokSheet.equipment = 'Chain mail, shield, warhammer, javelins (3), 18 gp'
+
+  const elaraId = ids.id()
+  const brokId = ids.id()
+  db.prepare(
+    `INSERT INTO player_characters (id, campaign_id, personal_code, owner_display_name, name, token_color, source_pdf_url, sheet_json)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(elaraId, campaignId, 'ELARA7K2', 'Mira', 'Elara Voss', TOKEN_PALETTE[4], null, JSON.stringify(elaraSheet))
+  db.prepare(
+    `INSERT INTO player_characters (id, campaign_id, personal_code, owner_display_name, name, token_color, source_pdf_url, sheet_json)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(brokId, campaignId, 'BROK4M9X', 'Joss', 'Brok Ironvein', TOKEN_PALETTE[2], null, JSON.stringify(brokSheet))
+
+  const goblin = db.prepare(`SELECT id FROM bestiary_monsters WHERE dm_account_id = ? AND name = 'Goblin'`).get(dmId) as { id: string } | undefined
+  const bugbear = db.prepare(`SELECT id FROM bestiary_monsters WHERE dm_account_id = ? AND name = 'Bugbear'`).get(dmId) as { id: string } | undefined
+  const wolf = db.prepare(`SELECT id FROM bestiary_monsters WHERE dm_account_id = ? AND name = 'Wolf'`).get(dmId) as { id: string } | undefined
+  const templateId = ids.id()
+  db.prepare('INSERT INTO encounter_templates (id, campaign_id, map_id, name, monsters_json) VALUES (?,?,?,?,?)').run(
+    templateId,
+    campaignId,
+    mapId,
+    'Cragmaw Ambush',
+    JSON.stringify([
+      { bestiaryMonsterId: goblin?.id, name: 'Goblin', quantity: 4, startX: 8, startY: 5, color: '#4ea36a' },
+      { bestiaryMonsterId: bugbear?.id, name: 'Bugbear', quantity: 1, startX: 11, startY: 4, color: '#c4453c' },
+      { bestiaryMonsterId: wolf?.id, name: 'Wolf', quantity: 2, startX: 6, startY: 7, color: '#8a6a4a' },
+    ]),
+  )
+
+  const instanceId = spawnFromTemplate(campaignId, templateId, 'Cragmaw Ambush')
+  addCharacterCombatant(instanceId, elaraId)
+  addCharacterCombatant(instanceId, brokId)
+
+  const combatants = db.prepare('SELECT id, name FROM combatants WHERE encounter_instance_id = ?').all(instanceId) as { id: string; name: string }[]
+  const inits: Record<string, number> = {}
+  for (const c of combatants) {
+    const roll = c.name.startsWith('Elara') ? 16 : c.name.startsWith('Brok') ? 12 : c.name.startsWith('Bugbear') ? 14 : c.name.startsWith('Wolf') ? 13 : 10
+    inits[c.id] = roll
+  }
+  const ordered = [...combatants].sort((a, b) => inits[b.id] - inits[a.id])
+  ordered.forEach((c, i) => {
+    db.prepare('UPDATE combatants SET initiative = ?, turn_order_position = ? WHERE id = ?').run(inits[c.id], i, c.id)
+  })
+  db.prepare(`UPDATE encounter_instances SET status = 'paused', round_number = 2, current_turn_position = 1 WHERE id = ?`).run(instanceId)
+  const bug = combatants.find((c) => c.name === 'Bugbear')
+  if (bug) db.prepare('UPDATE combatants SET hp_current = 18, conditions_json = ? WHERE id = ?').run(JSON.stringify(['Poisoned']), bug.id)
+
+  db.prepare('INSERT INTO live_sessions (id, join_code, campaign_id, encounter_instance_id, created_at) VALUES (?,?,?,?,?)').run(
+    ids.id(),
+    'HEARTH',
+    campaignId,
+    instanceId,
+    now(),
+  )
+}
+
+seedDemo()

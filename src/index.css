@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Cinzel", ui-serif, Georgia, serif;
+  --font-body: "Source Serif 4", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-bg: #120e0b;
+  --color-panel: #1c1612;
+  --color-panel-2: #261e18;
+  --color-ink: #f3e6d0;
+  --color-muted: #a89480;
+  --color-gold: #d4b45a;
+  --color-gold-2: #f0d78c;
+  --color-ember: #e07030;
+  --color-blood: #c4453c;
+  --color-moss: #4ea36a;
+  --color-sky: #6ea8c9;
+  --color-line: rgba(212, 180, 90, 0.22);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+}
+
+body {
+  background-image:
+    radial-gradient(1200px 500px at 50% -10%, rgba(224, 112, 48, 0.12), transparent 55%),
+    radial-gradient(800px 400px at 100% 100%, rgba(212, 180, 90, 0.06), transparent 50%);
+}
+
+#root {
+  width: 100%;
+  max-width: none;
+  border: 0;
+  text-align: initial;
+  min-height: 100dvh;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+::selection {
+  background: rgba(224, 112, 48, 0.35);
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(212, 180, 90, 0.35) transparent;
+}
+
+.parchment {
+  background:
+    linear-gradient(180deg, rgba(243, 230, 208, 0.06), transparent 40%),
+    var(--color-panel);
+}
+
+.stat-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
