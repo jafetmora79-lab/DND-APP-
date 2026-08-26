@@ -8,11 +8,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-gold text-bg hover:bg-gold-2',
-        ember: 'bg-ember text-ink hover:bg-ember/90',
+        default: 'btn-gold',
+        ember: 'btn-gold',
         outline: 'border border-line bg-transparent text-ink hover:bg-panel-2',
         ghost: 'text-muted hover:text-ink hover:bg-panel-2',
-        danger: 'bg-blood text-ink hover:bg-blood/90',
+        danger: 'btn-blood',
+        success: 'btn-moss',
       },
       size: {
         default: 'h-10 px-4',

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { Check, Copy } from 'lucide-react'
+import { TokenColorPicker } from '@/components/TokenColorPicker'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/input'
 import { ABILITIES, ABILITY_LABELS, SKILLS, sheetHasBio, sheetHasSkills, sheetHasSpells, type Ability, type Attack, type PlayerCharacter } from '@/lib/types'
@@ -49,6 +50,11 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
           <p className="mt-1 text-sm text-muted">
             {sheet.race} {sheet.className || 'Adventurer'} · played by {character.ownerDisplayName || 'unclaimed'}
           </p>
+          {canEdit && (
+            <div className="mt-3">
+              <TokenColorPicker value={character.tokenColor} onChange={(tokenColor) => onChange({ tokenColor })} />
+            </div>
+          )}
           {isDm && character.personalCode && character.personalCode !== '••••••••' && (
             <p className="mt-1 flex flex-wrap items-center gap-2 font-mono text-xs text-gold">
               Personal code {character.personalCode}
