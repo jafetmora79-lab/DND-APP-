@@ -4,6 +4,8 @@ D&D LIVE TABLE — HOW THE APP WORKS (CURRENT)
 Plain overview of what this app is, every feature that actually exists, and
 how a night at the table flows. Written from the running code, not a roadmap.
 
+Gaps in start / rounds / finish (DM vs phones): WHAT-IS-MISSING.txt.
+
 This is a campaign companion for Dungeons & Dragons 5e at a REAL table. Dice
 are rolled in person. The app tracks the map, tokens, HP, turns, sheets, and
 the campaign notebook. It is not a VTT with lighting, sound, or a rules engine

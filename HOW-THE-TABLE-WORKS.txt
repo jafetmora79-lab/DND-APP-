@@ -14,6 +14,8 @@ The live site is typically:
 This file describes how the app works now (including how players get onto an
 encounter). It is the process from first login through the end of a fight.
 
+Gaps (start of fight, rounds, finish, DM vs phones): see WHAT-IS-MISSING.txt.
+
 
 1. TWO WAYS THE APP RUNS
 ------------------------
