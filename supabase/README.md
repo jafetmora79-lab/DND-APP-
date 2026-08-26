@@ -17,7 +17,7 @@ Do not put the `service_role` key in the frontend.
 
 Open **SQL Editor → New query**, paste the **entire** `schema.sql` file, and click **Run**.
 
-That creates every table (including `maps`), row-level security, the `join_table` / `peek_join` RPCs, realtime, and the `maps` + `pdfs` storage buckets.
+That creates every table (including `maps`), row-level security, the `join_table` / `peek_join` RPCs, realtime, and the `maps` + `pdfs` storage buckets. New projects should run this file only.
 
 If you already ran an older `schema.sql` and creating a map fails with **blocked_cells** / schema cache, run `migrate-map-maker.sql` (or re-run the current `schema.sql`). It adds the column and reloads PostgREST.
 
