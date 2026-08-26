@@ -1,0 +1,293 @@
+HOW THE D&D LIVE TABLE WORKS
+============================
+
+This is a campaign companion for running Dungeons & Dragons 5e at a real table.
+The Dungeon Master preps maps, monsters, characters, and encounter templates on
+one screen. Players join from phones with a table join code plus their personal
+character code. Between fights everyone sits at a shared “tavern table.” When
+combat starts, the map, tokens, tracker, and sheets stay in sync.
+
+The live site is typically:
+
+  https://jafetmora79-lab.github.io/DND-APP-/
+
+This file describes how the app works now (including how players get onto an
+encounter). It is the process from first login through the end of a fight.
+
+
+1. TWO WAYS THE APP RUNS
+------------------------
+
+LOCAL (npm run dev)
+  - SQLite database in data/table.sqlite
+  - WebSocket live updates
+  - Open http://127.0.0.1:4731
+  - Sample DM: table name Hearthkeeper, passcode torch
+  - Sample players: join code HEARTH, personal codes ELARA7K2 and BROK4M9X
+
+HOSTED (GitHub Pages + Supabase)
+  - Same UI, talking to Postgres, Auth, Realtime, and Storage
+  - Passcodes must be at least 6 characters
+  - New Supabase projects: run supabase/schema.sql once
+  - Existing projects that predate later features also need the migrate-*.sql
+    files, then:  notify pgrst, 'reload schema';
+  - GitHub Pages must use GitHub Actions (not deploy-from-branch /docs)
+  - Repository secrets: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+
+Without those secrets, Pages can still show the static app, but phones cannot
+join a hosted table.
+
+
+2. WHO LOGS IN HOW
+------------------
+
+DUNGEON MASTER
+  Home → Start → create or open a table with a name + passcode.
+  After login you see your campaigns. Create one, then open Prep or Live.
+
+PLAYER
+  Home → enter the table join code (six characters, shown on the DM live
+  header) AND the personal character code (from Prep → Characters).
+  The player lands on the same live table as the DM: tavern scene + sheets
+  between fights, map + their sheet during combat.
+
+The join code belongs to the campaign table. It does not change when you start
+the next encounter. Personal codes belong to characters. The DM can regenerate
+a personal code from Prep.
+
+
+3. THE DM LOOP (THE WHOLE SESSION)
+----------------------------------
+
+  Home
+    Tavern painting, title, Start.
+
+  Campaigns
+    Create or open a campaign. Each campaign has its own maps, templates, and
+    characters. The monster bestiary is shared across every campaign at that
+    DM table.
+
+  Prep library (four tabs)
+    Maps, Bestiary, Encounters, Characters. Details in section 4.
+
+  Live hub (no fight)
+    Same join code. Scene image + caption (default tavern hearth). Character
+    sheets stay visible. DM can:
+      - Start the next ready encounter template
+      - Resume a paused fight
+      - Upload a new scene picture and caption
+    Ready templates show a check when they have a map and at least one monster.
+
+  Combat
+    Map (Konva, 5-ft squares), initiative tracker, attacks, fog of war.
+    Header: Finalize Won/Lost, Next encounter, Table (pause and return to the
+    hub), Pause.
+
+  After the fight
+    DM finalizes Won or Lost. Everyone sees the overlay, then the table returns
+    to the hub. Next encounter loads the next template on the same join code.
+
+
+4. PREP LIBRARY
+---------------
+
+MAPS
+  - Square grid. One square = 5 feet.
+  - Blank grid or a picture as the background.
+  - Paint blocked squares (walls, pits). Tokens cannot stop on those.
+  - Typical size is something like 20×15. You can go smaller or larger.
+
+BESTIARY
+  - Shared across the DM’s campaigns.
+  - Seeded from the SRD (about 300 creatures) plus anything you add.
+  - Full stat block editor. Quantity on an encounter places that many tokens.
+
+CHARACTERS
+  - Name, sheet (Combat / Skills / Spells / Bio), personal join code.
+  - Token color picker. That color is the circle on the map.
+  - Optional PDF import fills what it can from a digital character sheet.
+  - Empty sheet tabs hide. Ability modifiers, skill bonuses, and passive
+    Perception calculate automatically.
+  - Sheets are visible to the whole table. The owner and the DM can edit.
+
+ENCOUNTERS (templates)
+  This is where you decide what the fight looks like BEFORE you go live.
+
+  1. Name the encounter and pick a map.
+  2. Add monsters from the bestiary dropdown. Quantity 4 goblins = four
+     separate tokens, not one stack. Drag them apart on the preview map.
+  3. Add players (see section 5). This is the part that used to feel broken.
+  4. Click Save. The preview stays open so you can confirm tokens are still
+     there. If you skip Save, starting squares are not stored.
+  5. A template is “Ready” when it has a map and at least one monster. Player
+     starts are optional but strongly recommended so the party is already on
+     the map when combat begins.
+
+  Edit placement on a saved template reloads it so you can move tokens again.
+  Remember to Save after moving.
+
+
+5. HOW PLAYERS GET ONTO AN ENCOUNTER
+------------------------------------
+
+There are two different “add a player” paths. They are easy to mix up.
+
+A) PREP — starting squares on the template (recommended)
+
+  Prep → Encounters → Player starting squares.
+
+  - Click Place on map. A token appears near the south-center of the map
+    (walkable, not on top of a monster if a free square exists).
+  - Drag that token to the square where the fight should start.
+  - Or click Move, then click a square on the map.
+  - Click a square even before Place: the next unplaced character is dropped
+    there.
+  - Remove takes them off the template (not off the campaign roster).
+  - SAVE THE TEMPLATE. Until you save, those starts exist only on this screen.
+
+  When the DM later hits Start on that template, each placed character becomes
+  a combatant AND a token at that square. They show up in the tracker with HP
+  and AC from their sheet.
+
+B) LIVE COMBAT — + Name buttons during a fight
+
+  During combat, under the tracker, each campaign character has a button:
+
+    + Elara     → adds Elara to this fight and puts a token on the map
+    Elara on map → already in this fight; the button is disabled
+
+  Use this when:
+    - You started a template that did not include player starts
+    - A late player shows up mid-fight
+    - Someone was removed / never spawned
+
+  After you click, the board reloads. If it fails, an error appears at the top
+  instead of failing silently.
+
+  If they are already in the fight, clicking does not create a second copy.
+
+C) What does NOT add them
+
+  - Joining the table as a player (join code + personal code) puts them at the
+    hub with their sheet. It does not drop a token onto a fight that is already
+    running, unless they were placed on that template and you started it.
+  - Creating a character in Prep does not put them on any encounter until you
+    Place on map (and save) or press + Name in combat.
+
+
+6. LIVE COMBAT DETAILS
+----------------------
+
+MAP
+  - Pan, zoom, drag tokens. Tokens snap to 5-ft squares.
+  - Dropping on a blocked square snaps the token back.
+  - Fog: Reveal / Hide / toggle. Players only see revealed squares when fog
+    is on. The DM still sees dimmed hidden squares.
+
+TRACKER
+  - Initiative, current / max / temp HP, conditions, next turn, reorder.
+  - State hangs off the encounter instance, not the night’s join code, so you
+    can pause and resume next week.
+
+ATTACKS
+  - Pick an attack on the selected creature, tap a target in range, enter the
+    d20 from the physical table and the damage.
+  - Hit if d20 + bonus is STRICTLY greater than Armor Class (equal to AC misses).
+  - Natural 20 always hits.
+  - Natural 1 always misses, and the target has advantage against the fumbler
+    on their next attack against them. Same rule for PCs and monsters.
+
+HEADER
+  - Finalize Won / Lost
+  - Next encounter (next template, same join code)
+  - Table (pause the fight, return to the hub)
+  - Pause
+
+PLAYERS IN COMBAT
+  - See the map (fog-respecting) and a sheet drawer.
+  - They can attack with their own character the same way: pick attack, tap
+    target, enter the d20 and damage.
+
+
+7. BETWEEN FIGHTS (THE CAMPAIGN TABLE)
+--------------------------------------
+
+The live session stays open on one join code for the whole night (and across
+nights if you want).
+
+When no fight is active:
+  - Scene image (upload or the default tavern hearth)
+  - Caption you can edit
+  - All character sheets
+  - Ready-to-start templates with a check mark
+  - Paused fights you can resume
+
+Won / Lost overlay appears after the DM finalizes, then everyone is back here.
+
+
+8. TOKEN LOOK
+-------------
+
+Monsters get a thematic fill (goblin green, dragon red, undead pale, and so
+on) from name/type.
+
+Player tokens use the color chosen on the character sheet, with a darker
+gradient stop so the initials stay readable.
+
+Name, HP bar, and AC sit above the circle. Condition rings (poisoned,
+unconscious, etc.) wrap the token.
+
+
+9. DATA THAT MUST BE SAVED / MIGRATED
+-------------------------------------
+
+Encounter templates store:
+  - map id
+  - monsters_json (each species: id, quantity, start squares, per-copy positions)
+  - characters_json (each player: character id, name, start square, color)
+
+If a hosted project was created before characters_json existed, saving player
+starts will tell you to run supabase/migrate-encounter-play.sql and then:
+
+  notify pgrst, 'reload schema';
+
+The same pattern applies to later campaign-table columns (last_outcome, scene
+fields) via supabase/migrate-campaign-table.sql.
+
+Local SQLite adds missing columns automatically on boot.
+
+
+10. SAMPLE NIGHT, STEP BY STEP
+------------------------------
+
+  1. DM: Start → Hearthkeeper / torch (or your own table).
+  2. Open the campaign. Prep → Characters: confirm names, colors, codes.
+     Copy personal codes to the players.
+  3. Prep → Maps: make or open the battle map. Paint blocked squares.
+  4. Prep → Encounters: name it, pick the map, add monsters, Place each
+     player, drag them, SAVE.
+  5. Open Live. Copy the join code. Players join with that code + personal
+     code. You are all at the tavern table.
+  6. Start the ready encounter. Tokens appear where you placed them.
+     Missing someone? Use + Name under the tracker.
+  7. Roll initiative at the real table, type it in, Sort.
+  8. Fight: move tokens, attack with d20 + damage, paint fog if you want.
+  9. Finalize Won or Lost. Back at the tavern. Next encounter when ready,
+     or Pause / Table to pick up later.
+
+If a player token never appears, check in this order:
+  - Was the character created in this campaign?
+  - On the template: was Place on map used AND Save clicked?
+  - Did Start use that same template?
+  - During combat: did + Name report an error at the top of the live page?
+  - Hosted: did save mention migrate-encounter-play.sql / schema cache?
+
+
+11. WHAT THIS APP DELIBERATELY DOES NOT DO
+------------------------------------------
+
+Hex grids, dynamic lighting, token animations, sound, multiple maps in one
+fight, OCR for handwritten sheets, and importing from an external monster API.
+
+Measurement tools and freehand wall drawing are out of scope; blocked squares
+on the 5-ft grid cover impassable terrain.

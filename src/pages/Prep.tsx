@@ -21,7 +21,7 @@ import {
   type TemplateCharacter,
   type TemplateMonster,
 } from '@/lib/types'
-import { cn, DEFAULT_SCRATCH_CELL, mapFeet, nearestWalkableCell, spreadCells, tokenSizeSquares } from '@/lib/utils'
+import { cn, DEFAULT_SCRATCH_CELL, mapFeet, nearestWalkableCell, playerStartOrigin, spreadCells, tokenOccupiesBlocked, tokenSizeSquares } from '@/lib/utils'
 import { monsterTokenLook, playerTokenLook, templateReady } from '@/lib/token-look'
 import { copyText } from '@/lib/copy'
 
@@ -134,6 +134,25 @@ function placementTokens(
   return tokens
 }
 
+function placeCharacterOnTemplate(
+  tpl: Partial<EncounterTemplate>,
+  ch: PlayerCharacter,
+  cell: { col: number; row: number },
+): Partial<EncounterTemplate> {
+  const next: TemplateCharacter = {
+    characterId: ch.id,
+    name: ch.name,
+    startX: cell.col,
+    startY: cell.row,
+    color: ch.tokenColor,
+  }
+  const list = [...(tpl.characters ?? [])]
+  const i = list.findIndex((c) => c.characterId === ch.id)
+  if (i >= 0) list[i] = { ...list[i], ...next }
+  else list.push(next)
+  return { ...tpl, characters: list }
+}
+
 export function Prep() {
   const { campaignId } = useParams()
   const [tab, setTab] = useState<(typeof tabs)[number]>('Maps')
@@ -155,6 +174,7 @@ export function Prep() {
   const [beastQty, setBeastQty] = useState(1)
   const [beastFilter, setBeastFilter] = useState('')
   const [copied, setCopied] = useState('')
+  const [placingCharacterId, setPlacingCharacterId] = useState<string | null>(null)
 
   async function reload() {
     if (!campaignId) return
@@ -217,11 +237,34 @@ export function Prep() {
   }
 
   async function saveTemplate() {
-    if (!campaignId || !tpl.name || !tpl.mapId) return
-    await api.saveTemplate(campaignId, tpl)
-    setMsg('Encounter template saved.')
-    setTpl({ name: '', mapId: '', monsters: [], characters: [] })
-    await reload()
+    if (!campaignId || !tpl.name || !tpl.mapId) {
+      setMsg('Name the encounter and pick a map before saving.')
+      return
+    }
+    try {
+      const r = await api.saveTemplate(campaignId, tpl)
+      const savedId = tpl.id ?? (r as { template?: EncounterTemplate }).template?.id
+      const [m, b, t, c] = await Promise.all([api.maps(campaignId), api.bestiary(), api.templates(campaignId), api.characters(campaignId)])
+      setMaps(m.maps)
+      setMonsters(b.monsters)
+      setTemplates(t.templates)
+      setCharacters(c.characters)
+      if (savedId) {
+        const fresh = t.templates.find((x) => x.id === savedId)
+        setTpl(
+          fresh
+            ? {
+                ...fresh,
+                monsters: fresh.monsters ?? [],
+                characters: fresh.characters ?? [],
+              }
+            : { ...tpl, id: savedId },
+        )
+      }
+      setMsg('Encounter saved. Player starting squares stay on this template and spawn when you start the fight.')
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Could not save the encounter.')
+    }
   }
 
   async function copyCode(code: string, id: string) {
@@ -256,7 +299,11 @@ export function Prep() {
           </button>
         ))}
       </div>
-      {msg && <p className="mt-3 text-sm text-moss">{msg}</p>}
+      {msg && (
+        <p className={cn('mt-3 text-sm', /could not|before saving|run migrate/i.test(msg) ? 'text-blood' : 'text-moss')}>
+          {msg}
+        </p>
+      )}
 
       {tab === 'Maps' && (
         editingMapId && maps.find((m) => m.id === editingMapId) ? (
@@ -575,48 +622,56 @@ export function Prep() {
               </div>
               <div className="rounded-lg border border-line/70 p-3">
                 <div className="text-xs uppercase tracking-wider text-muted">Player starting squares</div>
-                <p className="mt-1 text-xs text-muted">Place each character on the map, then drag their token to where the fight starts.</p>
+                <p className="mt-1 text-xs text-muted">
+                  Place each character, then drag their token or click a square to set where they start. Save the template or they will not appear when the fight starts.
+                </p>
+                {placingCharacterId && (
+                  <p className="mt-2 text-xs text-gold">
+                    Click a square on the map to set {characters.find((c) => c.id === placingCharacterId)?.name ?? 'this character'}’s start.
+                  </p>
+                )}
                 <ul className="mt-2 space-y-2">
                   {characters.map((ch) => {
                     const placed = (tpl.characters ?? []).some((c) => c.characterId === ch.id)
+                    const placing = placingCharacterId === ch.id
                     return (
                       <li key={ch.id} className="flex items-center gap-2 text-sm">
                         <span className="h-3 w-3 rounded-full" style={{ background: ch.tokenColor }} />
                         <span className="flex-1">{ch.name}</span>
                         {placed ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() =>
-                              setTpl({ ...tpl, characters: (tpl.characters ?? []).filter((c) => c.characterId !== ch.id) })
-                            }
-                          >
-                            Remove
-                          </Button>
+                          <>
+                            <Button
+                              size="sm"
+                              variant={placing ? 'default' : 'ghost'}
+                              onClick={() => setPlacingCharacterId(placing ? null : ch.id)}
+                            >
+                              {placing ? 'Click a square…' : 'Move'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                if (placingCharacterId === ch.id) setPlacingCharacterId(null)
+                                setTpl({ ...tpl, characters: (tpl.characters ?? []).filter((c) => c.characterId !== ch.id) })
+                              }}
+                            >
+                              Remove
+                            </Button>
+                          </>
                         ) : (
                           <Button
                             size="sm"
-                            variant="outline"
+                            variant={placing ? 'default' : 'outline'}
                             disabled={!tpl.mapId}
                             onClick={() => {
                               const map = maps.find((m) => m.id === tpl.mapId)
                               if (!map) return
                               const occupied = occupiedKeys(tpl.monsters ?? [], tpl.characters ?? [], map)
-                              const origin = { col: 2, row: Math.max(0, map.gridRows - 3) }
+                              const origin = playerStartOrigin(map.gridCols, map.gridRows)
                               const cell = spreadCells(origin, 1, map.gridCols, map.gridRows, map.blocked, occupied)[0]
-                              setTpl({
-                                ...tpl,
-                                characters: [
-                                  ...(tpl.characters ?? []),
-                                  {
-                                    characterId: ch.id,
-                                    name: ch.name,
-                                    startX: cell.col,
-                                    startY: cell.row,
-                                    color: ch.tokenColor,
-                                  },
-                                ],
-                              })
+                              setTpl(placeCharacterOnTemplate(tpl, ch, cell))
+                              setPlacingCharacterId(ch.id)
+                              setMsg(`Placed ${ch.name}. Drag the token or click another square, then save the template.`)
                             }}
                           >
                             Place on map
@@ -634,7 +689,10 @@ export function Prep() {
                 {tpl.id && (
                   <Button
                     variant="ghost"
-                    onClick={() => setTpl({ name: '', mapId: '', monsters: [], characters: [] })}
+                    onClick={() => {
+                      setPlacingCharacterId(null)
+                      setTpl({ name: '', mapId: '', monsters: [], characters: [] })
+                    }}
                   >
                     New template
                   </Button>
@@ -662,6 +720,25 @@ export function Prep() {
                   }}
                   isDm
                   tool="select"
+                  selectedId={placingCharacterId ?? undefined}
+                  onCellClick={(col, row) => {
+                    const map = maps.find((m) => m.id === tpl.mapId)
+                    if (!map) return
+                    if (tokenOccupiesBlocked(map.blocked, col, row, map.gridCols, map.gridRows)) {
+                      setMsg('That square is blocked. Pick an open square.')
+                      return
+                    }
+                    const ch =
+                      characters.find((c) => c.id === placingCharacterId) ??
+                      characters.find((c) => !(tpl.characters ?? []).some((x) => x.characterId === c.id))
+                    if (!ch) {
+                      setMsg('Choose Place on map or Move for a character, then click a square.')
+                      return
+                    }
+                    setTpl(placeCharacterOnTemplate(tpl, ch, { col, row }))
+                    setPlacingCharacterId(ch.id)
+                    setMsg(`Set ${ch.name} to square (${col + 1}, ${row + 1}). Save the template to keep this start.`)
+                  }}
                   onMove={(id, x, y) => {
                     const map = maps.find((m) => m.id === tpl.mapId)!
                     const col = Math.max(0, Math.round((x - map.gridSize / 2) / map.gridSize))
@@ -723,7 +800,8 @@ export function Prep() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() =>
+                      onClick={() => {
+                        setPlacingCharacterId(null)
                         setTpl({
                           ...t,
                           monsters: t.monsters.map((m, i) => ({
@@ -733,7 +811,7 @@ export function Prep() {
                           })),
                           characters: t.characters ?? [],
                         })
-                      }
+                      }}
                     >
                       Edit placement
                     </Button>

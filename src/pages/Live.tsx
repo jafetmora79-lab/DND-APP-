@@ -151,6 +151,40 @@ export function Live() {
     }
   }
 
+  async function addPlayer(characterId: string, name: string) {
+    if (!instance) return
+    const already = snap?.combatants.find((c) => c.source === 'character' && c.sourceId === characterId)
+    if (already) {
+      setSelected(already.id)
+      setError(`${name} is already in this fight.`)
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await api.addCombatant(instance.id, { characterId })
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : `Could not add ${name} to the fight.`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addMonster(bestiaryMonsterId: string) {
+    if (!instance) return
+    setBusy(true)
+    setError('')
+    try {
+      await api.addCombatant(instance.id, { bestiaryMonsterId })
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add that monster.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function resume(id: string) {
     if (!campaignId) return
     setBusy(true)
@@ -409,18 +443,27 @@ export function Live() {
                 if (e.key !== 'Enter') return
                 const hit = monsters.find((m) => m.name.toLowerCase().includes(addQ.toLowerCase()))
                 if (hit) {
-                  api.addCombatant(instance.id, { bestiaryMonsterId: hit.id })
+                  void addMonster(hit.id)
                   setAddQ('')
                 }
               }}
             />
           </div>
           <div className="mt-2 flex flex-wrap gap-1">
-            {snap.characters.map((ch) => (
-              <Button key={ch.id} size="sm" variant="ghost" onClick={() => api.addCombatant(instance.id, { characterId: ch.id })}>
-                + {ch.name}
-              </Button>
-            ))}
+            {snap.characters.map((ch) => {
+              const onMap = snap.combatants.some((c) => c.source === 'character' && c.sourceId === ch.id)
+              return (
+                <Button
+                  key={ch.id}
+                  size="sm"
+                  variant={onMap ? 'outline' : 'ghost'}
+                  disabled={busy || onMap}
+                  onClick={() => void addPlayer(ch.id, ch.name)}
+                >
+                  {onMap ? `${ch.name} on map` : `+ ${ch.name}`}
+                </Button>
+              )
+            })}
           </div>
         </aside>
 

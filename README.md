@@ -2,6 +2,8 @@
 
 A campaign companion for running Dungeons & Dragons 5e at a real table: a persistent DM library, a live session that phones can follow, character sheets the whole party can read, and encounters you can pause mid-fight and resume next week — HP, positions, turn order, and fog included.
 
+For a plain-language walkthrough of the whole night (login → prep → placing players on an encounter → live table → combat → won/lost), see [HOW-THE-TABLE-WORKS.txt](HOW-THE-TABLE-WORKS.txt).
+
 Monster stat blocks are seeded from the Systems Reference Document 5.1 (© Wizards of the Coast, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)). Structured JSON comes from the [5e-bits/5e-database](https://github.com/5e-bits/5e-database) project.
 
 ## What you can do

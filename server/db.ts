@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs'
 import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
 import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type FogState, type NamedEntry, type TemplateCharacter, type TemplateMonster } from '../src/lib/types.ts'
-import { parseBlockedCells, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
+import { cellCenter, parseBlockedCells, playerStartOrigin, spreadCells, tokenCellKeys, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
 import { applyDamage, attackOutcome, attacksFromMonster, consumeAdvantage, grantAdvantage, isAttackInRange, parseAttackBonus, parseRangeFeet, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { loadSrdMonsters } from './srd.ts'
 
@@ -457,17 +457,55 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
   return instanceId
 }
 
+function mapForInstance(instanceId: string) {
+  const inst = db.prepare('SELECT map_id FROM encounter_instances WHERE id = ?').get(instanceId) as { map_id: string } | undefined
+  if (!inst?.map_id) return undefined
+  return db.prepare('SELECT * FROM maps WHERE id = ?').get(inst.map_id) as Record<string, unknown> | undefined
+}
+
+function placeCharacterToken(
+  instanceId: string,
+  combatantId: string,
+  label: string,
+  color: string,
+  map: Record<string, unknown> | undefined,
+  start?: { col: number; row: number },
+) {
+  const cell = Number(map?.grid_size ?? 70)
+  const cols = Number(map?.grid_cols ?? 20)
+  const rows = Number(map?.grid_rows ?? 15)
+  const blocked = map ? parseBlockedCells(map.blocked_cells, cols, rows) : []
+  const tokens = db.prepare('SELECT x, y, size_squares FROM tokens_on_map WHERE encounter_instance_id = ?').all(instanceId) as {
+    x: number
+    y: number
+    size_squares: number
+  }[]
+  const occupied = tokenCellKeys(
+    tokens.map((t) => ({ x: t.x, y: t.y, sizeSquares: t.size_squares })),
+    cell,
+  )
+  const origin = start ?? playerStartOrigin(cols, rows)
+  const found = spreadCells(origin, 1, cols, rows, blocked, occupied)[0]
+  const pos = cellCenter(found.col, found.row, cell)
+  db.prepare(
+    `INSERT INTO tokens_on_map (id, encounter_instance_id, x, y, ref_type, ref_id, label, color, size_squares, visible_to_players)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+  ).run(ids.id(), instanceId, pos.x, pos.y, 'combatant', combatantId, label, color, 1, 1)
+}
+
 export function addCharacterCombatant(instanceId: string, characterId: string, start?: { col: number; row: number }) {
   const ch = db.prepare('SELECT * FROM player_characters WHERE id = ?').get(characterId) as Record<string, unknown> | undefined
   if (!ch) throw new Error('Character not found')
   const existing = db
     .prepare(`SELECT id FROM combatants WHERE encounter_instance_id = ? AND source = 'character' AND source_id = ?`)
-    .get(instanceId, characterId)
-  if (existing) return existing as { id: string }
+    .get(instanceId, characterId) as { id: string } | undefined
+  const map = mapForInstance(instanceId)
+  if (existing) {
+    const tok = db.prepare('SELECT id FROM tokens_on_map WHERE encounter_instance_id = ? AND ref_id = ?').get(instanceId, existing.id)
+    if (!tok) placeCharacterToken(instanceId, existing.id, String(ch.name), String(ch.token_color), map, start)
+    return existing
+  }
   const sheet = jparse<CharacterSheetData>(ch.sheet_json as string, emptySheet())
-  const inst = db.prepare('SELECT map_id FROM encounter_instances WHERE id = ?').get(instanceId) as { map_id: string }
-  const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(inst.map_id) as Record<string, unknown> | undefined
-  const cell = Number(map?.grid_size ?? 70)
   const maxPos = db.prepare('SELECT COALESCE(MAX(turn_order_position), -1) as m FROM combatants WHERE encounter_instance_id = ?').get(instanceId) as {
     m: number
   }
@@ -492,34 +530,7 @@ export function addCharacterCombatant(instanceId: string, characterId: string, s
     '',
     sheet.abilities.con,
   )
-  const count = db.prepare('SELECT COUNT(*) as c FROM tokens_on_map WHERE encounter_instance_id = ?').get(instanceId) as { c: number }
-  const pos = walkablePixel(
-    map
-      ? {
-          blocked: parseBlockedCells(map.blocked_cells, Number(map.grid_cols), Number(map.grid_rows)),
-          gridCols: Number(map.grid_cols),
-          gridRows: Number(map.grid_rows),
-          gridSize: cell,
-        }
-      : { blocked: [], gridCols: 20, gridRows: 15, gridSize: cell },
-    start?.col ?? 2 + (count.c % 6),
-    start?.row ?? 10,
-  )
-  db.prepare(
-    `INSERT INTO tokens_on_map (id, encounter_instance_id, x, y, ref_type, ref_id, label, color, size_squares, visible_to_players)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
-  ).run(
-    ids.id(),
-    instanceId,
-    pos.x,
-    pos.y,
-    'combatant',
-    cid,
-    ch.name as string,
-    ch.token_color as string,
-    1,
-    1,
-  )
+  placeCharacterToken(instanceId, cid, String(ch.name), String(ch.token_color), map, start)
   return { id: cid }
 }
 
