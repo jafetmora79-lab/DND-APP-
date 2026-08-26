@@ -1,9 +1,10 @@
 import { useRef, type ReactNode } from 'react'
-import { ImagePlus, Play } from 'lucide-react'
+import { Check, ImagePlus, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AmbianceStage } from '@/components/AmbianceStage'
 import type { EncounterInstance, EncounterOutcome, EncounterTemplate, PlayerCharacter } from '@/lib/types'
+import { templateReady } from '@/lib/token-look'
 import { cn } from '@/lib/utils'
 
 type DmProps = {
@@ -77,7 +78,7 @@ export function TableHub({
             </Button>
             {dm.hasImage && (
               <Button size="sm" variant="ghost" disabled={dm.busy} onClick={dm.onClearImage}>
-                Use placeholder
+                Use tavern scene
               </Button>
             )}
           </div>
@@ -128,7 +129,10 @@ export function TableHub({
               {dm.templates.map((t) => (
                 <li key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2">
                   <div className="min-w-0">
-                    <div className="truncate">{t.name}</div>
+                    <div className="flex items-center gap-2 truncate">
+                      {templateReady(t) && <Check className="h-4 w-4 shrink-0 text-moss" aria-label="Ready" />}
+                      <span className="truncate">{t.name}</span>
+                    </div>
                     <div className="truncate text-xs text-muted">{t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')}</div>
                   </div>
                   <Button size="sm" variant="ember" disabled={dm.busy} onClick={() => dm.onStart(t.id)}>

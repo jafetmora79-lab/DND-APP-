@@ -9,12 +9,12 @@ type Props = {
 }
 
 export function AmbianceStage({ imageUrl, caption, className }: Props) {
-  const fallback = publicAsset('ambiance-placeholder.svg')
+  const fallback = publicAsset('tavern-hearth.jpg')
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
   const src = imageUrl && failedUrl !== imageUrl ? imageUrl : fallback
 
   return (
-    <figure className={cn('relative overflow-hidden bg-panel', className)}>
+    <figure className={cn('relative overflow-hidden bg-hud', className)}>
       <img
         src={src}
         alt={caption || 'Campaign scene'}
@@ -23,7 +23,7 @@ export function AmbianceStage({ imageUrl, caption, className }: Props) {
           if (imageUrl) setFailedUrl(imageUrl)
         }}
       />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg/80 via-transparent to-bg/20" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg/80 via-transparent to-bg/25" />
       {caption ? (
         <figcaption className="absolute bottom-0 left-0 right-0 p-4 font-display text-lg text-gold-2 md:text-2xl">
           {caption}

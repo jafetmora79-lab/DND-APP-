@@ -1,13 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Dices, Map as MapIcon, ScrollText, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth'
-import { usingSupabase } from '@/lib/config'
+import { publicAsset, usingSupabase } from '@/lib/config'
 
 export function Landing() {
-  const { loginDm, registerDm, joinPlayer } = useAuth()
+  const { user, loading, loginDm, registerDm, joinPlayer } = useAuth()
   const nav = useNavigate()
   const [mode, setMode] = useState<'dm' | 'join'>('dm')
   const [creating, setCreating] = useState(false)
@@ -21,6 +20,10 @@ export function Landing() {
 
   async function submitDm(e: FormEvent) {
     e.preventDefault()
+    if (user?.role === 'dm') {
+      nav('/dm')
+      return
+    }
     setBusy(true)
     setError('')
     try {
@@ -39,8 +42,8 @@ export function Landing() {
     setBusy(true)
     setError('')
     try {
-      const user = await joinPlayer(joinCode, personal)
-      if (user.role === 'player') nav(`/play/${user.campaignId}`)
+      const next = await joinPlayer(joinCode, personal)
+      if (next.role === 'player') nav(`/play/${next.campaignId}`)
       else nav('/dm')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not join')
@@ -50,102 +53,87 @@ export function Landing() {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 py-8 md:py-14">
-      <header className="text-center">
-        <p className="text-xs uppercase tracking-[0.35em] text-gold">Campaign companion</p>
-        <h1 className="mt-3 font-display text-4xl text-gold-2 md:text-6xl">D&D Live Table</h1>
-        <p className="mx-auto mt-4 max-w-2xl text-muted">
-          Prep maps, a shared bestiary, and encounter templates. Open a live session and every phone at the table
-          mirrors the map, the tracker, and every character sheet — then pause mid-fight and pick it up next week, HP and fog included.
-        </p>
-      </header>
+    <div className="relative min-h-dvh overflow-hidden bg-bg">
+      <img src={publicAsset('tavern-hearth.jpg')} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      <div className="absolute inset-0 bg-[#11100E]/60" />
+      <div className="relative z-10 mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4 py-10">
+        <header className="text-center">
+          <p className="text-xs font-medium uppercase tracking-[0.4em] text-gold">Campaign companion</p>
+          <h1 className="title-gold mt-3 font-display text-4xl font-bold md:text-6xl">D&D LIVE TABLE</h1>
+          <p className="mx-auto mt-4 max-w-md text-sm text-ink/85">
+            Prep the campaign, open the live table, and keep every phone on the same map, tracker, and character sheet.
+          </p>
+        </header>
 
-      <div className="mt-10 grid gap-4 md:grid-cols-3">
-        {[
-          { icon: MapIcon, title: 'Prep library', copy: 'Maps, SRD bestiary, and encounter templates live with the campaign — the bestiary follows you across every table you run.' },
-          { icon: Users, title: 'The live table', copy: 'Players join with tonight’s code plus their personal character code. They watch. You move tokens and run combat.' },
-          { icon: ScrollText, title: 'Sheets for the whole table', copy: 'Anyone can read any sheet. Only the owner and the DM can change it. Empty tabs stay hidden.' },
-        ].map((c) => (
-          <div key={c.title} className="rounded-xl border border-line bg-panel/80 p-5">
-            <c.icon className="h-5 w-5 text-ember" />
-            <h2 className="mt-3 font-display text-lg text-gold">{c.title}</h2>
-            <p className="mt-2 text-sm text-muted">{c.copy}</p>
+        <div className="mt-8 rounded-xl border border-line bg-hud/90 p-6 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm">
+          <div className="mb-4 flex gap-2">
+            <Button variant={mode === 'dm' ? 'default' : 'ghost'} className="flex-1" type="button" onClick={() => setMode('dm')}>
+              Dungeon Master
+            </Button>
+            <Button variant={mode === 'join' ? 'default' : 'ghost'} className="flex-1" type="button" onClick={() => setMode('join')}>
+              Join as player
+            </Button>
           </div>
-        ))}
-      </div>
 
-      <div className="mx-auto mt-10 w-full max-w-lg rounded-xl border border-line bg-panel p-6">
-        <div className="mb-4 flex gap-2">
-          <Button variant={mode === 'dm' ? 'default' : 'ghost'} className="flex-1" onClick={() => setMode('dm')}>
-            Dungeon Master
-          </Button>
-          <Button variant={mode === 'join' ? 'default' : 'ghost'} className="flex-1" onClick={() => setMode('join')}>
-            Join as player
-          </Button>
+          {mode === 'dm' ? (
+            <form className="grid gap-3" onSubmit={submitDm}>
+              {user?.role === 'dm' ? (
+                <p className="text-sm text-muted">Signed in as {user.name}. Start to open your campaigns.</p>
+              ) : (
+                <>
+                  <Field label="Table name">
+                    <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" required />
+                  </Field>
+                  <Field label="Passcode">
+                    <Input
+                      type="password"
+                      value={passcode}
+                      onChange={(e) => setPasscode(e.target.value)}
+                      autoComplete="current-password"
+                      minLength={usingSupabase ? 6 : 4}
+                      required
+                    />
+                  </Field>
+                  {usingSupabase && <p className="text-xs text-muted">Hosted tables need a passcode of at least 6 characters.</p>}
+                  <label className="flex items-center gap-2 text-sm text-muted">
+                    <input type="checkbox" checked={creating} onChange={(e) => setCreating(e.target.checked)} />
+                    Claim a new table
+                  </label>
+                </>
+              )}
+              {error && <p className="text-sm text-blood">{error}</p>}
+              <Button type="submit" size="lg" disabled={busy || loading}>
+                {busy ? 'Opening…' : 'Start'}
+              </Button>
+            </form>
+          ) : (
+            <form className="grid gap-3" onSubmit={submitJoin}>
+              <Field label="Tonight’s join code">
+                <Input value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} autoCapitalize="characters" required />
+              </Field>
+              <Field label="Your personal character code">
+                <Input value={personal} onChange={(e) => setPersonal(e.target.value.toUpperCase())} autoCapitalize="characters" required />
+              </Field>
+              {error && <p className="text-sm text-blood">{error}</p>}
+              <Button type="submit" size="lg" disabled={busy || loading}>
+                {busy ? 'Joining…' : 'Start'}
+              </Button>
+            </form>
+          )}
         </div>
 
-        {mode === 'dm' ? (
-          <form className="grid gap-3" onSubmit={submitDm}>
-            <Field label="Table name">
-              <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" />
-            </Field>
-            <Field label="Passcode">
-              <Input
-                type="password"
-                value={passcode}
-                onChange={(e) => setPasscode(e.target.value)}
-                autoComplete="current-password"
-                minLength={usingSupabase ? 6 : 4}
-              />
-            </Field>
-            {usingSupabase && <p className="text-xs text-muted">Hosted tables need a passcode of at least 6 characters.</p>}
-            <label className="flex items-center gap-2 text-sm text-muted">
-              <input type="checkbox" checked={creating} onChange={(e) => setCreating(e.target.checked)} />
-              Claim a new table (seeds the SRD 5.1 bestiary)
-            </label>
-            {error && <p className="text-sm text-blood">{error}</p>}
-            <Button type="submit" disabled={busy}>
-              {busy ? 'Opening…' : creating ? 'Create table' : 'Open the table'}
-            </Button>
-          </form>
+        {usingSupabase ? (
+          <p className="mt-6 text-center text-sm text-muted">Share tonight’s join code with the phones at the table.</p>
+        ) : import.meta.env.PROD ? (
+          <p className="mt-6 text-center text-sm text-muted">
+            This GitHub Pages copy needs VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY as repository Actions secrets.
+          </p>
         ) : (
-          <form className="grid gap-3" onSubmit={submitJoin}>
-            <Field label="Tonight’s join code">
-              <Input value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} autoCapitalize="characters" />
-            </Field>
-            <Field label="Your personal character code">
-              <Input value={personal} onChange={(e) => setPersonal(e.target.value.toUpperCase())} autoCapitalize="characters" />
-            </Field>
-            {error && <p className="text-sm text-blood">{error}</p>}
-            <Button type="submit" disabled={busy}>
-              {busy ? 'Joining…' : 'Sit down'}
-            </Button>
-            <p className="text-xs text-muted">Need the campaign name first? Codes are case-insensitive.</p>
-          </form>
+          <p className="mt-6 text-center text-sm text-muted">
+            Sample table: Hearthkeeper / torch. Players join HEARTH with ELARA7K2 or BROK4M9X.
+          </p>
         )}
       </div>
-
-      {usingSupabase ? (
-        <p className="mt-8 text-center text-sm text-muted">
-          <Dices className="mr-1 inline h-4 w-4 text-gold" />
-          Connected to your Supabase project. Claim a table name to seed the SRD 5.1 bestiary, then share tonight’s join
-          code with the phones at the table.
-        </p>
-      ) : import.meta.env.PROD ? (
-        <p className="mt-8 text-center text-sm text-muted">
-          <Dices className="mr-1 inline h-4 w-4 text-gold" />
-          This GitHub Pages copy is the table UI only. Add repository Actions secrets{' '}
-          <span className="text-ink">VITE_SUPABASE_URL</span> and <span className="text-ink">VITE_SUPABASE_ANON_KEY</span>{' '}
-          (see the README), then re-run the Pages workflow so phones can join a hosted table.
-        </p>
-      ) : (
-        <p className="mt-8 text-center text-sm text-muted">
-          <Dices className="mr-1 inline h-4 w-4 text-gold" />
-          Sample table is already seated: DM <span className="text-ink">Hearthkeeper</span> / <span className="text-ink">torch</span>.
-          Players join <span className="text-ink">HEARTH</span> with <span className="text-ink">ELARA7K2</span> or{' '}
-          <span className="text-ink">BROK4M9X</span>. The Cragmaw Ambush is paused in round 2.
-        </p>
-      )}
     </div>
   )
 }

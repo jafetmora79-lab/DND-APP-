@@ -22,6 +22,7 @@ import {
   type TemplateMonster,
 } from '@/lib/types'
 import { cn, DEFAULT_SCRATCH_CELL, mapFeet, nearestWalkableCell, spreadCells, tokenSizeSquares } from '@/lib/utils'
+import { monsterTokenLook, playerTokenLook, templateReady } from '@/lib/token-look'
 import { copyText } from '@/lib/copy'
 
 const tabs = ['Maps', 'Bestiary', 'Encounters', 'Characters'] as const
@@ -89,6 +90,7 @@ function placementTokens(
     const src = bestiary.find((m) => m.id === spec.bestiaryMonsterId)
     const copies = monsterCopyCells(spec, map, occupied)
     copies.forEach((pos, copyIndex) => {
+      const look = monsterTokenLook(spec.name, src?.creatureType)
       tokens.push({
         id: `tpl:${specIndex}:${copyIndex}`,
         encounterInstanceId: '',
@@ -97,7 +99,8 @@ function placementTokens(
         refType: 'combatant',
         refId: `tpl:${specIndex}:${copyIndex}`,
         label: spec.quantity > 1 ? `${spec.name} ${copyIndex + 1}` : spec.name,
-        color: spec.color,
+        color: look.from,
+        color2: look.to,
         sizeSquares: tokenSizeSquares(src?.size ?? 'Medium'),
         visibleToPlayers: true,
         hpCurrent: src?.hpMax,
@@ -109,6 +112,7 @@ function placementTokens(
   })
   characters.forEach((ch) => {
     const pc = roster.find((c) => c.id === ch.characterId)
+    const look = playerTokenLook(ch.color || pc?.tokenColor || TOKEN_PALETTE[0])
     tokens.push({
       id: `pch:${ch.characterId}`,
       encounterInstanceId: '',
@@ -117,7 +121,8 @@ function placementTokens(
       refType: 'character',
       refId: ch.characterId,
       label: ch.name || pc?.name || 'Player',
-      color: ch.color || pc?.tokenColor || TOKEN_PALETTE[0],
+      color: look.from,
+      color2: look.to,
       sizeSquares: 1,
       visibleToPlayers: true,
       hpCurrent: pc?.sheet.hpCurrent,
@@ -502,7 +507,7 @@ export function Prep() {
                           quantity: qty,
                           startX: cells[0].col,
                           startY: cells[0].row,
-                          color: TOKEN_PALETTE[list.length % TOKEN_PALETTE.length],
+                          color: monsterTokenLook(hit.name, hit.creatureType).from,
                           positions: cells.map((c) => ({ x: c.col, y: c.row })),
                         } satisfies TemplateMonster)
                         setTpl({ ...tpl, monsters: list })
@@ -702,7 +707,14 @@ export function Prep() {
             <ul className="space-y-3">
               {templates.map((t) => (
                 <li key={t.id} className="rounded-xl border border-line bg-panel p-4">
-                  <div className="font-display text-lg text-gold">{t.name}</div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-display text-lg text-gold">{t.name}</div>
+                    {templateReady(t) && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-moss/20 px-2 py-0.5 text-xs uppercase tracking-wider text-moss">
+                        <Check className="h-3.5 w-3.5" /> Ready
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-muted">
                     {t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ') || 'No monsters yet'}
                     {(t.characters?.length ?? 0) > 0 ? ` · ${t.characters!.map((c) => c.name).join(', ')}` : ''}
