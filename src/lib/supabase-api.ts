@@ -1071,42 +1071,73 @@ export const supabaseApi: TableApi = {
   },
 
   async live(campaignId) {
-    const { data: campaign, error: cErr } = await db().from('campaigns').select('*').eq('id', campaignId).single()
-    throwIf(cErr)
-    const { data: session } = await db()
+    const userP = currentUserId()
+    const campP = db().from('campaigns').select('*').eq('id', campaignId).single()
+    const sessP = db()
       .from('live_sessions')
       .select('*')
       .eq('campaign_id', campaignId)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
+    const [user, campRes, sessRes] = await Promise.all([userP, campP, sessP])
+    throwIf(campRes.error)
+    const campaign = campRes.data
+    if (!campaign) throw new Error('Campaign not found')
+    const session = sessRes.data
     const instanceId = session?.encounter_instance_id as string | undefined
-    const { data: instance } = instanceId
-      ? await db().from('encounter_instances').select('*').eq('id', instanceId).maybeSingle()
-      : { data: null }
-    const { data: map } = instance?.map_id ? await db().from('maps').select('*').eq('id', instance.map_id).maybeSingle() : { data: null }
-    const { data: combatants } = instanceId
-      ? await db().from('combatants').select('*').eq('encounter_instance_id', instanceId).order('turn_order_position')
-      : { data: [] }
+
+    const instP = instanceId
+      ? db().from('encounter_instances').select('*').eq('id', instanceId).maybeSingle()
+      : Promise.resolve({ data: null as Record<string, unknown> | null })
+    const charsP = db().from('player_characters').select('*').eq('campaign_id', campaignId)
+    const dmP = db().from('dm_accounts').select('id').eq('id', user.id).maybeSingle()
+    const combP = instanceId
+      ? db().from('combatants').select('*').eq('encounter_instance_id', instanceId).order('turn_order_position')
+      : Promise.resolve({ data: [] as Record<string, unknown>[] })
+    const tokP = instanceId
+      ? db().from('tokens_on_map').select('*').eq('encounter_instance_id', instanceId)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] })
+    const [instRes, charsRes, dmRes, combRes, tokRes] = await Promise.all([instP, charsP, dmP, combP, tokP])
+    const instance = instRes.data
+    const combatants = combRes.data ?? []
+    const tokens = tokRes.data ?? []
+    const accessP = dmRes.data
+      ? Promise.resolve({ data: null as { character_id?: string } | null })
+      : db()
+          .from('character_access')
+          .select('character_id')
+          .eq('user_id', user.id)
+          .eq('campaign_id', campaignId)
+          .maybeSingle()
+    const mapP = instance?.map_id
+      ? db().from('maps').select('*').eq('id', instance.map_id).maybeSingle()
+      : Promise.resolve({ data: null as Record<string, unknown> | null })
     const missingBestiaryIds = [
       ...new Set(
-        (combatants ?? [])
+        combatants
           .filter((c) => c.source === 'bestiary' && !statsForLiveCombatant(c as { stats_json?: unknown; source?: unknown }, null))
           .map((c) => String(c.source_id ?? ''))
           .filter(Boolean),
       ),
     ]
+    const bestiaryP = missingBestiaryIds.length
+      ? db()
+          .from('bestiary_monsters')
+          .select('id, str, dex, con, int, wis, cha, saving_throws')
+          .in('id', missingBestiaryIds)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] })
+    const [mapRes, accessRes, bestiaryRes] = await Promise.all([mapP, accessP, bestiaryP])
+    const map = mapRes.data
     const bestiaryById = new Map<string, Record<string, unknown>>()
-    if (missingBestiaryIds.length) {
-      const { data: mons } = await db()
-        .from('bestiary_monsters')
-        .select('id, str, dex, con, int, wis, cha, saving_throws')
-        .in('id', missingBestiaryIds)
-      for (const m of mons ?? []) bestiaryById.set(String(m.id), m as Record<string, unknown>)
+    for (const m of bestiaryRes.data ?? []) bestiaryById.set(String((m as { id?: string }).id), m as Record<string, unknown>)
+    const chars = (charsRes.data ?? []).map((r) => characterFromRow(r as Record<string, unknown>))
+    if (!dmRes.data) {
+      const mine = accessRes.data?.character_id
+      for (const c of chars) {
+        if (c.id !== mine) c.personalCode = '••••••••'
+      }
     }
-    const { data: tokens } = instanceId ? await db().from('tokens_on_map').select('*').eq('encounter_instance_id', instanceId) : { data: [] }
-    const { data: characters } = await db().from('player_characters').select('*').eq('campaign_id', campaignId)
-    const chars = await hideCodes(campaignId, (characters ?? []).map((r) => characterFromRow(r as Record<string, unknown>)))
     const snap = {
       campaign: {
         id: String(campaign.id),
@@ -1163,16 +1194,8 @@ export const supabaseApi: TableApi = {
       })),
       characters: chars,
     }
-    const user = await currentUserId()
-    const { data: dm } = await db().from('dm_accounts').select('id').eq('id', user.id).maybeSingle()
-    if (dm) return snap
-    const { data: access } = await db()
-      .from('character_access')
-      .select('character_id')
-      .eq('user_id', user.id)
-      .eq('campaign_id', campaignId)
-      .maybeSingle()
-    return snapshotForPlayer(snap, access?.character_id as string | undefined)
+    if (dmRes.data) return snap
+    return snapshotForPlayer(snap, accessRes.data?.character_id as string | undefined)
   },
 
   async addCombatant(instanceId, body) {
@@ -1445,18 +1468,18 @@ export const supabaseApi: TableApi = {
     const bonus = Number(result.total) - used
     const mode = String(result.rollMode ?? body.rollMode ?? 'normal')
     const diceNote = formatDiceUsed(body.d20, mode === 'normal' ? null : (body.d20b ?? result.d20b ?? null), used)
-    for (const line of attackActivityLines({
-      attackerName,
-      targetName: result.targetName,
-      diceNote,
-      bonus,
-      total: result.total,
-      hit: result.hit,
-      fumble: result.fumble,
-      damage: result.damage,
-    })) {
-      await logFeed(instanceId, line)
-    }
+    void Promise.all(
+      attackActivityLines({
+        attackerName,
+        targetName: result.targetName,
+        diceNote,
+        bonus,
+        total: result.total,
+        hit: result.hit,
+        fumble: result.fumble,
+        damage: result.damage,
+      }).map((line) => logFeed(instanceId, line)),
+    )
     return result
   },
 

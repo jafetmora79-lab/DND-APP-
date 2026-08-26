@@ -38,6 +38,7 @@ type Props = {
   onMapPick: (mode: MapPickMode) => void
   launchAttack?: { attack: Attack; index: number } | null
   onLaunchHandled?: () => void
+  onSettled?: () => void
 }
 
 export function PlayerTurnPanel({
@@ -52,6 +53,7 @@ export function PlayerTurnPanel({
   onMapPick,
   launchAttack,
   onLaunchHandled,
+  onSettled,
 }: Props) {
   const myTurn = Boolean(combatant && whose && whose.id === combatant.id)
   const [menu, setMenu] = useState<Menu>(null)
@@ -126,6 +128,7 @@ export function PlayerTurnPanel({
       })
       setMsg(r.text)
       resetMenus()
+      onSettled?.()
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Could not declare')
     } finally {
@@ -189,6 +192,7 @@ export function PlayerTurnPanel({
       })
       setMsg(r.message)
       resetMenus()
+      onSettled?.()
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Attack failed')
     } finally {
@@ -214,6 +218,7 @@ export function PlayerTurnPanel({
       await api.nextTurn(instanceId)
       resetMenus()
       setMsg('')
+      onSettled?.()
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Could not end turn')
     } finally {
@@ -228,6 +233,7 @@ export function PlayerTurnPanel({
       const r = await api.answerPrompt(instanceId, { d20: roll })
       setMsg(r.message || '')
       setSaveD20('')
+      onSettled?.()
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Could not submit save')
     } finally {
@@ -241,6 +247,7 @@ export function PlayerTurnPanel({
       await api.answerPrompt(instanceId, { use, other: reactionNote })
       setReactionNote('')
       setMsg(use ? 'Reaction used.' : 'Reaction declined.')
+      onSettled?.()
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Could not answer')
     } finally {
