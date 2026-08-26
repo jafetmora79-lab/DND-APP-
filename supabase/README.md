@@ -15,11 +15,11 @@ Do not put the `service_role` key in the frontend.
 
 ## 2. Database
 
-Run `schema.sql` once in **SQL Editor**.
+Open **SQL Editor → New query**, paste the **entire** `schema.sql` file, and click **Run**.
 
-That creates tables, row-level security, the `join_table` / `peek_join` RPCs, realtime publication, and public `maps` + `pdfs` storage buckets.
+That creates every table (including `maps`), row-level security, the `join_table` / `peek_join` RPCs, realtime, and the `maps` + `pdfs` storage buckets.
 
-If the project already had `schema.sql` applied before the map maker shipped, also run `migrate-map-maker.sql` so maps can store blocked squares.
+Do **not** start with `migrate-map-maker.sql`. That file only adds `blocked_cells` to a `maps` table that already exists. On a new project it will do nothing useful and used to error with `relation "public.maps" does not exist`.
 
 ## 3. App env
 

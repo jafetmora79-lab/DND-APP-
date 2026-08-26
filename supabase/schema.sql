@@ -1,4 +1,5 @@
--- D&D Live Table — run this in the Supabase SQL editor (once).
+-- D&D Live Table — paste this entire file into the Supabase SQL editor and Run (once).
+-- New projects: this is the only SQL you need. Do not run migrate-map-maker.sql first.
 -- Then: Authentication → Providers → enable Anonymous
 --        Authentication → Providers → Email: turn OFF "Confirm email"
 
@@ -233,6 +234,26 @@ alter table public.combatants enable row level security;
 alter table public.tokens_on_map enable row level security;
 alter table public.live_sessions enable row level security;
 
+drop policy if exists dm_accounts_self on public.dm_accounts;
+drop policy if exists campaigns_dm on public.campaigns;
+drop policy if exists campaigns_player_read on public.campaigns;
+drop policy if exists bestiary_dm on public.bestiary_monsters;
+drop policy if exists characters_member on public.player_characters;
+drop policy if exists characters_dm_write on public.player_characters;
+drop policy if exists characters_owner_update on public.player_characters;
+drop policy if exists access_self on public.character_access;
+drop policy if exists maps_member on public.maps;
+drop policy if exists maps_dm_write on public.maps;
+drop policy if exists templates_dm on public.encounter_templates;
+drop policy if exists instances_member on public.encounter_instances;
+drop policy if exists instances_dm_write on public.encounter_instances;
+drop policy if exists combatants_member on public.combatants;
+drop policy if exists combatants_dm_write on public.combatants;
+drop policy if exists tokens_member on public.tokens_on_map;
+drop policy if exists tokens_dm_write on public.tokens_on_map;
+drop policy if exists sessions_member on public.live_sessions;
+drop policy if exists sessions_dm_write on public.live_sessions;
+
 create policy dm_accounts_self on public.dm_accounts
   for all using (id = auth.uid()) with check (id = auth.uid());
 
@@ -321,11 +342,31 @@ create policy sessions_member on public.live_sessions
 create policy sessions_dm_write on public.live_sessions
   for all using (public.is_dm_of_campaign(campaign_id)) with check (public.is_dm_of_campaign(campaign_id));
 
-alter publication supabase_realtime add table public.encounter_instances;
-alter publication supabase_realtime add table public.combatants;
-alter publication supabase_realtime add table public.tokens_on_map;
-alter publication supabase_realtime add table public.live_sessions;
-alter publication supabase_realtime add table public.player_characters;
+do $$
+begin
+  alter publication supabase_realtime add table public.encounter_instances;
+exception when duplicate_object then null;
+end $$;
+do $$
+begin
+  alter publication supabase_realtime add table public.combatants;
+exception when duplicate_object then null;
+end $$;
+do $$
+begin
+  alter publication supabase_realtime add table public.tokens_on_map;
+exception when duplicate_object then null;
+end $$;
+do $$
+begin
+  alter publication supabase_realtime add table public.live_sessions;
+exception when duplicate_object then null;
+end $$;
+do $$
+begin
+  alter publication supabase_realtime add table public.player_characters;
+exception when duplicate_object then null;
+end $$;
 
 insert into storage.buckets (id, name, public)
 values ('maps', 'maps', true)
@@ -335,6 +376,10 @@ insert into storage.buckets (id, name, public)
 values ('pdfs', 'pdfs', true)
 on conflict (id) do nothing;
 
+drop policy if exists maps_public_read on storage.objects;
+drop policy if exists maps_dm_write on storage.objects;
+drop policy if exists maps_dm_update on storage.objects;
+drop policy if exists maps_dm_delete on storage.objects;
 drop policy if exists pdfs_public_read on storage.objects;
 drop policy if exists pdfs_dm_write on storage.objects;
 drop policy if exists pdfs_dm_update on storage.objects;
