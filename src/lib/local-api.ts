@@ -48,8 +48,15 @@ export const localApi = {
       : req<{ monster: Monster }>('/api/bestiary', { method: 'POST', body: JSON.stringify(m) }),
   deleteMonster: (id: string) => req(`/api/bestiary/${id}`, { method: 'DELETE' }),
   maps: (campaignId: string) => req<{ maps: BattleMap[] }>(`/api/campaigns/${campaignId}/maps`),
+  createMap: (campaignId: string, body: { name: string; gridSize?: number; gridCols: number; gridRows: number; imageUrl?: string }) =>
+    req<{ map: BattleMap }>(`/api/campaigns/${campaignId}/maps`, { method: 'POST', body: JSON.stringify(body) }),
   uploadMap: (campaignId: string, form: FormData) => req<{ map: BattleMap }>(`/api/campaigns/${campaignId}/maps`, { method: 'POST', body: form }),
-  patchMap: (id: string, body: Partial<BattleMap>) => req(`/api/maps/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  uploadMapImage: (id: string, file: File) => {
+    const form = new FormData()
+    form.append('image', file)
+    return req<{ map: BattleMap }>(`/api/maps/${id}/image`, { method: 'POST', body: form })
+  },
+  patchMap: (id: string, body: Partial<BattleMap>) => req<{ map?: BattleMap }>(`/api/maps/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteMap: (id: string) => req(`/api/maps/${id}`, { method: 'DELETE' }),
   characters: (campaignId: string) => req<{ characters: PlayerCharacter[] }>(`/api/campaigns/${campaignId}/characters`),
   createCharacter: (campaignId: string, body: Record<string, unknown>) =>

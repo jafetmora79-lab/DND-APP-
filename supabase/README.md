@@ -19,6 +19,8 @@ Run `schema.sql` once in **SQL Editor**.
 
 That creates tables, row-level security, the `join_table` / `peek_join` RPCs, realtime publication, and public `maps` + `pdfs` storage buckets.
 
+If the project already had `schema.sql` applied before the map maker shipped, also run `migrate-map-maker.sql` so maps can store blocked squares.
+
 ## 3. App env
 
 ```bash

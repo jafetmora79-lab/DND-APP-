@@ -165,6 +165,8 @@ export type BattleMap = {
   gridCols: number
   gridRows: number
   gridType: 'square'
+  /** 1 = impassable (tokens cannot stop here), 0 = walkable. Length is cols * rows. */
+  blocked: number[]
 }
 
 export type TemplateMonster = {

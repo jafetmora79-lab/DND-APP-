@@ -6,9 +6,10 @@ import { CharacterSheet } from '@/components/CharacterSheet'
 import { MonsterForm } from '@/components/MonsterForm'
 import { StatBlock } from '@/components/StatBlock'
 import { MapBoard } from '@/components/map/MapBoard'
+import { MapMaker } from '@/components/map/MapMaker'
 import { api } from '@/lib/api'
 import { emptySheet, TOKEN_PALETTE, type BattleMap, type EncounterTemplate, type MapToken, type Monster, type PlayerCharacter, type TemplateMonster } from '@/lib/types'
-import { cn, tokenSizeSquares } from '@/lib/utils'
+import { cn, DEFAULT_SCRATCH_CELL, mapFeet, nearestWalkableCell, tokenSizeSquares } from '@/lib/utils'
 
 const tabs = ['Maps', 'Bestiary', 'Encounters', 'Characters'] as const
 
@@ -82,6 +83,10 @@ export function Prep() {
   const [selectedChar, setSelectedChar] = useState<PlayerCharacter | null>(null)
   const [tpl, setTpl] = useState<Partial<EncounterTemplate>>({ name: '', mapId: '', monsters: [] })
   const [msg, setMsg] = useState('')
+  const [editingMapId, setEditingMapId] = useState<string | null>(null)
+  const [newMapName, setNewMapName] = useState('New encounter map')
+  const [newMapCols, setNewMapCols] = useState(20)
+  const [newMapRows, setNewMapRows] = useState(15)
 
   async function reload() {
     if (!campaignId) return
@@ -110,11 +115,26 @@ export function Prep() {
     const form = new FormData()
     form.append('image', file)
     form.append('name', file.name.replace(/\.[^.]+$/, ''))
-    form.append('gridSize', '70')
-    form.append('gridCols', '20')
-    form.append('gridRows', '15')
-    await api.uploadMap(campaignId, form)
+    form.append('gridSize', String(DEFAULT_SCRATCH_CELL))
+    form.append('gridCols', String(newMapCols))
+    form.append('gridRows', String(newMapRows))
+    const r = await api.uploadMap(campaignId, form)
     await reload()
+    setEditingMapId(r.map.id)
+    setMsg('Picture attached as background. Paint blocked squares on the 5-ft grid.')
+  }
+
+  async function createBlankMap() {
+    if (!campaignId) return
+    const r = await api.createMap(campaignId, {
+      name: newMapName.trim() || 'Untitled map',
+      gridSize: DEFAULT_SCRATCH_CELL,
+      gridCols: newMapCols,
+      gridRows: newMapRows,
+    })
+    await reload()
+    setEditingMapId(r.map.id)
+    setMsg(`Blank ${newMapCols}×${newMapRows} grid created (${mapFeet(newMapCols, newMapRows)}). Paint blocked squares, then use it in an encounter.`)
   }
 
   async function saveMonster() {
@@ -161,53 +181,78 @@ export function Prep() {
       {msg && <p className="mt-3 text-sm text-moss">{msg}</p>}
 
       {tab === 'Maps' && (
-        <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <label className="flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-line bg-panel text-muted hover:text-ink">
-            <span>Upload a battle map</span>
-            <span className="mt-1 text-xs">PNG, JPG, WebP, or SVG</span>
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) uploadMap(f)
-              }}
-            />
-          </label>
-          {maps.map((m) => (
-            <article key={m.id} className="overflow-hidden rounded-xl border border-line bg-panel">
-              <div className="h-40 bg-bg">
-                <img src={m.imageUrl} alt="" className="h-full w-full object-cover" />
-              </div>
-              <div className="p-3">
-                <Input className="mb-2" value={m.name} onChange={(e) => setMaps((list) => list.map((x) => (x.id === m.id ? { ...x, name: e.target.value } : x)))} />
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <Field label="Cell px">
-                    <Input
-                      type="number"
-                      value={m.gridSize}
-                      onChange={(e) => setMaps((list) => list.map((x) => (x.id === m.id ? { ...x, gridSize: Number(e.target.value) } : x)))}
-                    />
+        editingMapId && maps.find((m) => m.id === editingMapId) ? (
+          <MapMaker
+            key={editingMapId}
+            map={maps.find((m) => m.id === editingMapId)!}
+            onChange={(next) => setMaps((list) => list.map((x) => (x.id === next.id ? next : x)))}
+            onClose={() => setEditingMapId(null)}
+            onDeleted={() => {
+              setEditingMapId(null)
+              reload()
+            }}
+          />
+        ) : (
+        <div className="mt-6 space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-line bg-panel p-4">
+              <h2 className="font-display text-xl text-gold">New 5-ft grid</h2>
+              <p className="mt-1 text-xs text-muted">Create a square battle map from scratch. Each square is 5 feet — the same scale used for movement and encounters.</p>
+              <div className="mt-3 grid gap-3">
+                <Field label="Name">
+                  <Input value={newMapName} onChange={(e) => setNewMapName(e.target.value)} />
+                </Field>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Squares wide">
+                    <Input type="number" min={1} max={80} value={newMapCols} onChange={(e) => setNewMapCols(Number(e.target.value) || 1)} />
                   </Field>
-                  <Field label="Cols">
-                    <Input
-                      type="number"
-                      value={m.gridCols}
-                      onChange={(e) => setMaps((list) => list.map((x) => (x.id === m.id ? { ...x, gridCols: Number(e.target.value) } : x)))}
-                    />
-                  </Field>
-                  <Field label="Rows">
-                    <Input
-                      type="number"
-                      value={m.gridRows}
-                      onChange={(e) => setMaps((list) => list.map((x) => (x.id === m.id ? { ...x, gridRows: Number(e.target.value) } : x)))}
-                    />
+                  <Field label="Squares high">
+                    <Input type="number" min={1} max={80} value={newMapRows} onChange={(e) => setNewMapRows(Number(e.target.value) || 1)} />
                   </Field>
                 </div>
+                <p className="text-sm text-gold">{mapFeet(newMapCols, newMapRows)}</p>
+                <Button onClick={() => createBlankMap().catch((e) => setMsg(e.message))}>Create blank map</Button>
+              </div>
+            </div>
+            <label className="flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-line bg-panel p-4 text-center text-muted hover:text-ink">
+              <span className="font-display text-xl text-gold">Optional background</span>
+              <span className="mt-2 max-w-xs text-sm">Upload a picture to start a map with scenery under the grid. You still paint blocked squares on the 5-ft grid itself.</span>
+              <span className="mt-1 text-xs">PNG, JPG, WebP, or SVG</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) uploadMap(f).catch((err) => setMsg(err.message))
+                }}
+              />
+            </label>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {maps.map((m) => (
+            <article key={m.id} className="overflow-hidden rounded-xl border border-line bg-panel">
+              <button type="button" className="h-40 w-full bg-bg" onClick={() => setEditingMapId(m.id)}>
+                {m.imageUrl ? (
+                  <img src={m.imageUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted">
+                    <span className="font-display text-lg text-gold-2">
+                      {m.gridCols}×{m.gridRows}
+                    </span>
+                    <span className="text-xs">{mapFeet(m.gridCols, m.gridRows)}</span>
+                  </div>
+                )}
+              </button>
+              <div className="p-3">
+                <div className="font-display text-lg text-gold">{m.name}</div>
+                <p className="text-xs text-muted">
+                  {m.gridCols}×{m.gridRows} squares · {mapFeet(m.gridCols, m.gridRows)}
+                  {m.blocked?.some((v) => v === 1) ? ' · blocked squares painted' : ''}
+                </p>
                 <div className="mt-2 flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => api.patchMap(m.id, m)}>
-                    Save grid
+                  <Button size="sm" onClick={() => setEditingMapId(m.id)}>
+                    Edit map
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => api.deleteMap(m.id).then(reload)}>
                     Delete
@@ -216,7 +261,9 @@ export function Prep() {
               </div>
             </article>
           ))}
+          </div>
         </div>
+        )
       )}
 
       {tab === 'Bestiary' && (
@@ -315,12 +362,21 @@ export function Prep() {
                     else {
                       const map = maps.find((m) => m.id === tpl.mapId)
                       const used = list.length
+                      let startX = Math.min(map ? map.gridCols - 1 : 8, 2 + (used % 8))
+                      let startY = Math.min(map ? map.gridRows - 1 : 8, 2 + Math.floor(used / 8))
+                      if (map) {
+                        const found = nearestWalkableCell(map.blocked, startX, startY, map.gridCols, map.gridRows)
+                        if (found) {
+                          startX = found.col
+                          startY = found.row
+                        }
+                      }
                       list.push({
                         bestiaryMonsterId: hit.id,
                         name: hit.name,
                         quantity: 1,
-                        startX: Math.min(map ? map.gridCols - 1 : 8, 2 + (used % 8)),
-                        startY: Math.min(map ? map.gridRows - 1 : 8, 2 + Math.floor(used / 8)),
+                        startX,
+                        startY,
                         color: TOKEN_PALETTE[list.length % TOKEN_PALETTE.length],
                       } satisfies TemplateMonster)
                     }

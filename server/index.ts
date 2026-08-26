@@ -9,12 +9,23 @@ import multer from 'multer'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { emptySheet, type AuthUser, type FogState, type NamedEntry } from '../src/lib/types.ts'
 import {
+    clampGridDim,
+    clampGridSize,
+    DEFAULT_SCRATCH_CELL,
+    parseBlockedCells,
+    pixelToCell,
+    remapBlocked,
+    tokenOccupiesBlocked,
+    walkablePixel,
+} from '../src/lib/utils.ts'
+import {
   addCharacterCombatant,
   characterFromRow,
   db,
   ids,
   insertMonster,
   jparse,
+  mapFromDb,
   monsterFromRow,
   now,
   seedBestiaryForDm,
@@ -149,18 +160,7 @@ function snapshot(campaignId: string) {
           mapId: instance.map_id,
         }
       : null,
-    map: map
-      ? {
-          id: map.id,
-          campaignId: map.campaign_id,
-          name: map.name,
-          imageUrl: map.image_url,
-          gridSize: map.grid_size,
-          gridCols: map.grid_cols,
-          gridRows: map.grid_rows,
-          gridType: 'square' as const,
-        }
-      : null,
+    map: map ? mapFromDb(map) : null,
     combatants: combatants.map((c) => ({
       id: c.id,
       encounterInstanceId: c.encounter_instance_id,
@@ -403,18 +403,7 @@ app.get('/api/campaigns/:id/maps', requireDm, (req, res) => {
     return
   }
   const rows = db.prepare('SELECT * FROM maps WHERE campaign_id = ?').all(param(req, 'id')) as Record<string, unknown>[]
-  res.json({
-    maps: rows.map((m) => ({
-      id: m.id,
-      campaignId: m.campaign_id,
-      name: m.name,
-      imageUrl: m.image_url,
-      gridSize: m.grid_size,
-      gridCols: m.grid_cols,
-      gridRows: m.grid_rows,
-      gridType: 'square',
-    })),
-  })
+  res.json({ maps: rows.map((m) => mapFromDb(m)) })
 })
 
 app.post('/api/campaigns/:id/maps', requireDm, upload.single('image'), (req, res) => {
@@ -424,32 +413,25 @@ app.post('/api/campaigns/:id/maps', requireDm, upload.single('image'), (req, res
   }
   const name = String(req.body?.name || req.file?.originalname || 'Untitled map')
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : String(req.body?.imageUrl || '')
-  if (!imageUrl) {
-    res.status(400).json({ error: 'Map image required' })
-    return
-  }
+  const gridSize = clampGridSize(req.body?.gridSize, req.file ? 70 : DEFAULT_SCRATCH_CELL)
+  const gridCols = clampGridDim(req.body?.gridCols, 20)
+  const gridRows = clampGridDim(req.body?.gridRows, 15)
+  const blocked = parseBlockedCells(req.body?.blocked, gridCols, gridRows)
   const id = ids.id()
-  db.prepare('INSERT INTO maps (id, campaign_id, name, image_url, grid_size, grid_cols, grid_rows, grid_type) VALUES (?,?,?,?,?,?,?,?)').run(
-    id,
-    param(req, 'id'),
-    name,
-    imageUrl,
-    Number(req.body?.gridSize ?? 70),
-    Number(req.body?.gridCols ?? 20),
-    Number(req.body?.gridRows ?? 15),
-    'square',
-  )
+  db.prepare(
+    'INSERT INTO maps (id, campaign_id, name, image_url, grid_size, grid_cols, grid_rows, grid_type, blocked_cells) VALUES (?,?,?,?,?,?,?,?,?)',
+  ).run(id, param(req, 'id'), name, imageUrl, gridSize, gridCols, gridRows, 'square', JSON.stringify(blocked))
   res.json({
-    map: {
+    map: mapFromDb({
       id,
-      campaignId: param(req, 'id'),
+      campaign_id: param(req, 'id'),
       name,
-      imageUrl,
-      gridSize: Number(req.body?.gridSize ?? 70),
-      gridCols: Number(req.body?.gridCols ?? 20),
-      gridRows: Number(req.body?.gridRows ?? 15),
-      gridType: 'square',
-    },
+      image_url: imageUrl,
+      grid_size: gridSize,
+      grid_cols: gridCols,
+      grid_rows: gridRows,
+      blocked_cells: JSON.stringify(blocked),
+    }),
   })
 })
 
@@ -459,14 +441,51 @@ app.patch('/api/maps/:id', requireDm, (req, res) => {
     res.status(404).json({ error: 'Not found' })
     return
   }
-  db.prepare('UPDATE maps SET name=?, grid_size=?, grid_cols=?, grid_rows=? WHERE id=?').run(
+  const oldCols = Number(map.grid_cols)
+  const oldRows = Number(map.grid_rows)
+  const gridCols = clampGridDim(req.body.gridCols ?? oldCols, oldCols)
+  const gridRows = clampGridDim(req.body.gridRows ?? oldRows, oldRows)
+  const gridSize = clampGridSize(req.body.gridSize ?? map.grid_size, Number(map.grid_size))
+  const imageUrl = req.body.imageUrl != null ? String(req.body.imageUrl) : String(map.image_url ?? '')
+  const blocked =
+    req.body.blocked != null
+      ? parseBlockedCells(req.body.blocked, gridCols, gridRows)
+      : remapBlocked(parseBlockedCells(map.blocked_cells, oldCols, oldRows), oldCols, oldRows, gridCols, gridRows)
+  db.prepare('UPDATE maps SET name=?, image_url=?, grid_size=?, grid_cols=?, grid_rows=?, blocked_cells=? WHERE id=?').run(
     req.body.name ?? map.name,
-    Number(req.body.gridSize ?? map.grid_size),
-    Number(req.body.gridCols ?? map.grid_cols),
-    Number(req.body.gridRows ?? map.grid_rows),
+    imageUrl,
+    gridSize,
+    gridCols,
+    gridRows,
+    JSON.stringify(blocked),
     map.id,
   )
-  res.json({ ok: true })
+  res.json({
+    map: mapFromDb({
+      ...map,
+      name: req.body.name ?? map.name,
+      image_url: imageUrl,
+      grid_size: gridSize,
+      grid_cols: gridCols,
+      grid_rows: gridRows,
+      blocked_cells: JSON.stringify(blocked),
+    }),
+  })
+})
+
+app.post('/api/maps/:id/image', requireDm, upload.single('image'), (req, res) => {
+  const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(param(req, 'id')) as Record<string, unknown> | undefined
+  if (!map || !campaignOwned(map.campaign_id as string, userOf(req).id)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  if (!req.file) {
+    res.status(400).json({ error: 'Background image required' })
+    return
+  }
+  const imageUrl = `/uploads/${req.file.filename}`
+  db.prepare('UPDATE maps SET image_url=? WHERE id=?').run(imageUrl, map.id)
+  res.json({ map: mapFromDb({ ...map, image_url: imageUrl }) })
 })
 
 app.delete('/api/maps/:id', requireDm, (req, res) => {
@@ -817,36 +836,40 @@ app.post('/api/instances/:id/combatants', requireDm, (req, res) => {
       m: number
     }
     const cid = ids.id()
-    const qty = Number(req.body.quantity ?? 1)
-    const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(inst.map_id) as Record<string, unknown>
-    const cell = Number(map?.grid_size ?? 70)
-    for (let i = 0; i < qty; i++) {
-      const id = i === 0 ? cid : ids.id()
-      const name = qty > 1 ? `${src.name} ${i + 1}` : String(src.name)
-      db.prepare(
-        `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      ).run(
-        id,
-        inst.id,
-        name,
-        'bestiary',
-        src.id,
-        0,
-        src.hp_max,
-        src.hp_max,
-        0,
-        src.ac_value,
-        '[]',
-        maxPos.m + 1 + i,
-        req.body.color || '#c4453c',
-        '',
-      )
-      db.prepare(
-        `INSERT INTO tokens_on_map (id, encounter_instance_id, x, y, ref_type, ref_id, label, color, size_squares, visible_to_players)
-         VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      ).run(ids.id(), inst.id, cell * (3 + i) + cell / 2, cell * 3 + cell / 2, 'combatant', id, name, req.body.color || '#c4453c', 1, 1)
-    }
+      const qty = Number(req.body.quantity ?? 1)
+      const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(inst.map_id) as Record<string, unknown> | undefined
+      const battle = map ? mapFromDb(map) : null
+      const cell = battle?.gridSize ?? 70
+      for (let i = 0; i < qty; i++) {
+        const id = i === 0 ? cid : ids.id()
+        const name = qty > 1 ? `${src.name} ${i + 1}` : String(src.name)
+        db.prepare(
+          `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        ).run(
+          id,
+          inst.id,
+          name,
+          'bestiary',
+          src.id,
+          0,
+          src.hp_max,
+          src.hp_max,
+          0,
+          src.ac_value,
+          '[]',
+          maxPos.m + 1 + i,
+          req.body.color || '#c4453c',
+          '',
+        )
+        const pos = battle
+          ? walkablePixel(battle, 3 + i, 3)
+          : { x: cell * (3 + i) + cell / 2, y: cell * 3 + cell / 2 }
+        db.prepare(
+          `INSERT INTO tokens_on_map (id, encounter_instance_id, x, y, ref_type, ref_id, label, color, size_squares, visible_to_players)
+           VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        ).run(ids.id(), inst.id, pos.x, pos.y, 'combatant', id, name, req.body.color || '#c4453c', 1, 1)
+      }
   }
   pushCampaign(inst.campaign_id as string)
   res.json({ ok: true })
@@ -939,6 +962,19 @@ app.patch('/api/tokens/:id', requireDm, (req, res) => {
   if (!inst || !campaignOwned(inst.campaign_id as string, userOf(req).id)) {
     res.status(404).json({ error: 'Not found' })
     return
+  }
+  const nextX = req.body.x ?? t.x
+  const nextY = req.body.y ?? t.y
+  if (inst.map_id && req.body.x != null && req.body.y != null) {
+    const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(inst.map_id) as Record<string, unknown> | undefined
+    if (map) {
+      const battle = mapFromDb(map)
+      const { col, row } = pixelToCell(Number(nextX), Number(nextY), battle.gridSize)
+      if (tokenOccupiesBlocked(battle.blocked, col, row, battle.gridCols, battle.gridRows, Number(t.size_squares ?? 1))) {
+        res.status(400).json({ error: 'That square is blocked' })
+        return
+      }
+    }
   }
   db.prepare('UPDATE tokens_on_map SET x=?, y=?, visible_to_players=?, size_squares=? WHERE id=?').run(
     req.body.x ?? t.x,

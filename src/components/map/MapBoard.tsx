@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Circle, Group, Layer, Line, Rect, Shape, Stage, Text, Image as KImage } from 'react-konva'
 import useImage from 'use-image'
 import type { BattleMap, FogState, MapToken } from '@/lib/types'
-import { initials } from '@/lib/utils'
+import { initials, pixelToCell, tokenOccupiesBlocked } from '@/lib/utils'
 
-type Tool = 'select' | 'reveal' | 'hide'
+export type MapTool = 'select' | 'reveal' | 'hide' | 'block' | 'open'
 
 type Props = {
   map: BattleMap
@@ -12,26 +12,33 @@ type Props = {
   fog: FogState
   isDm: boolean
   selectedId?: string | null
-  tool?: Tool
+  tool?: MapTool
   onSelect?: (id: string | null) => void
   onMove?: (id: string, x: number, y: number) => void
   onFog?: (fog: FogState) => void
+  onBlocked?: (blocked: number[]) => void
 }
 
 function MapImage({ url, width, height }: { url: string; width: number; height: number }) {
   const [img] = useImage(url, 'anonymous')
+  if (!img) return null
   return <KImage image={img} width={width} height={height} listening={false} />
 }
 
-export function MapBoard({ map, tokens, fog, isDm, selectedId, tool = 'select', onSelect, onMove, onFog }: Props) {
+export function MapBoard({ map, tokens, fog, isDm, selectedId, tool = 'select', onSelect, onMove, onFog, onBlocked }: Props) {
   const wrap = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 800, h: 600 })
   const [scale, setScale] = useState(0.7)
   const [pos, setPos] = useState({ x: 20, y: 20 })
   const painting = useRef(false)
+  const lastPaint = useRef(-1)
+  const dragOrigin = useRef<Record<string, { x: number; y: number }>>({})
 
   const worldW = map.gridCols * map.gridSize
   const worldH = map.gridRows * map.gridSize
+  const blocked = map.blocked ?? []
+  const paintingTerrain = tool === 'block' || tool === 'open'
+  const paintingFog = tool === 'reveal' || tool === 'hide'
 
   useEffect(() => {
     const el = wrap.current
@@ -49,8 +56,14 @@ export function MapBoard({ map, tokens, fog, isDm, selectedId, tool = 'select', 
     return r * map.gridCols + c
   }
 
-  function paint(x: number, y: number) {
-    if (!isDm || !fog.enabled || (tool !== 'reveal' && tool !== 'hide') || !onFog) return
+  function worldFromEvent(e: { target: { getStage: () => { getPointerPosition: () => { x: number; y: number } | null } | null } }) {
+    const p = e.target.getStage()?.getPointerPosition()
+    if (!p) return null
+    return { x: (p.x - pos.x) / scale, y: (p.y - pos.y) / scale }
+  }
+
+  function paintFog(x: number, y: number) {
+    if (!isDm || !fog.enabled || !paintingFog || !onFog) return
     const i = cellAt(x, y)
     if (i < 0) return
     const next = fog.revealed.slice()
@@ -60,6 +73,25 @@ export function MapBoard({ map, tokens, fog, isDm, selectedId, tool = 'select', 
     }
     next[i] = tool === 'reveal' ? 1 : 0
     onFog({ ...fog, revealed: next })
+  }
+
+  function paintTerrain(x: number, y: number) {
+    if (!isDm || !paintingTerrain || !onBlocked) return
+    const i = cellAt(x, y)
+    if (i < 0 || i === lastPaint.current) return
+    lastPaint.current = i
+    const next = blocked.slice()
+    if (next.length !== map.gridCols * map.gridRows) {
+      next.length = map.gridCols * map.gridRows
+      next.fill(0)
+    }
+    next[i] = tool === 'block' ? 1 : 0
+    onBlocked(next)
+  }
+
+  function paintAt(x: number, y: number) {
+    if (paintingFog) paintFog(x, y)
+    if (paintingTerrain) paintTerrain(x, y)
   }
 
   const gridLines: number[][] = []
@@ -93,31 +125,60 @@ export function MapBoard({ map, tokens, fog, isDm, selectedId, tool = 'select', 
           setPos({ x: ptr.x - mousePointTo.x * next, y: ptr.y - mousePointTo.y * next })
         }}
         onMouseDown={(e) => {
-          if (e.target !== e.target.getStage() && e.target.getClassName() !== 'Image' && e.target.getClassName() !== 'Shape') return
+          const cls = e.target.getClassName()
+          if (cls === 'Circle' || cls === 'Text' || cls === 'Group') return
           if (tool === 'select') onSelect?.(null)
-          if (tool === 'reveal' || tool === 'hide') {
+          if (paintingFog || paintingTerrain) {
             painting.current = true
-            const st = e.target.getStage()
-            const p = st?.getPointerPosition()
-            if (!p) return
-            paint((p.x - pos.x) / scale, (p.y - pos.y) / scale)
+            lastPaint.current = -1
+            const w = worldFromEvent(e)
+            if (w) paintAt(w.x, w.y)
           }
         }}
         onMouseMove={(e) => {
           if (!painting.current) return
-          const st = e.target.getStage()
-          const p = st?.getPointerPosition()
-          if (!p) return
-          paint((p.x - pos.x) / scale, (p.y - pos.y) / scale)
+          const w = worldFromEvent(e)
+          if (w) paintAt(w.x, w.y)
         }}
         onMouseUp={() => {
           painting.current = false
+          lastPaint.current = -1
+        }}
+        onMouseLeave={() => {
+          painting.current = false
+          lastPaint.current = -1
         }}
       >
         <Layer>
-          <MapImage url={map.imageUrl} width={worldW} height={worldH} />
+          <Rect x={0} y={0} width={worldW} height={worldH} fill="#16110c" listening={paintingFog || paintingTerrain} />
+          {map.imageUrl ? <MapImage url={map.imageUrl} width={worldW} height={worldH} /> : null}
+          <Shape
+            listening={false}
+            width={worldW}
+            height={worldH}
+            sceneFunc={(ctx, shape) => {
+              ctx.fillStyle = 'rgba(96, 28, 22, 0.48)'
+              ctx.strokeStyle = 'rgba(196, 69, 60, 0.85)'
+              ctx.lineWidth = 1.5
+              for (let i = 0; i < blocked.length; i++) {
+                if (blocked[i] !== 1) continue
+                const c = i % map.gridCols
+                const r = Math.floor(i / map.gridCols)
+                const x = c * map.gridSize
+                const y = r * map.gridSize
+                ctx.fillRect(x, y, map.gridSize, map.gridSize)
+                ctx.beginPath()
+                ctx.moveTo(x + 5, y + 5)
+                ctx.lineTo(x + map.gridSize - 5, y + map.gridSize - 5)
+                ctx.moveTo(x + map.gridSize - 5, y + 5)
+                ctx.lineTo(x + 5, y + map.gridSize - 5)
+                ctx.stroke()
+              }
+              ctx.fillStrokeShape(shape)
+            }}
+          />
           {gridLines.map((pts, i) => (
-            <Line key={i} points={pts} stroke="rgba(243,230,208,0.18)" strokeWidth={1} listening={false} />
+            <Line key={i} points={pts} stroke="rgba(243,230,208,0.22)" strokeWidth={1} listening={false} />
           ))}
         </Layer>
         <Layer listening={false}>
@@ -152,9 +213,18 @@ export function MapBoard({ map, tokens, fog, isDm, selectedId, tool = 'select', 
                 draggable={isDm && tool === 'select'}
                 onClick={() => onSelect?.(t.refId)}
                 onTap={() => onSelect?.(t.refId)}
+                onDragStart={() => {
+                  dragOrigin.current[t.id] = { x: t.x, y: t.y }
+                }}
                 onDragEnd={(e) => {
                   const gx = Math.round((e.target.x() - map.gridSize / 2) / map.gridSize) * map.gridSize + map.gridSize / 2
                   const gy = Math.round((e.target.y() - map.gridSize / 2) / map.gridSize) * map.gridSize + map.gridSize / 2
+                  const { col, row } = pixelToCell(gx, gy, map.gridSize)
+                  if (tokenOccupiesBlocked(blocked, col, row, map.gridCols, map.gridRows, t.sizeSquares)) {
+                    const origin = dragOrigin.current[t.id]
+                    if (origin) e.target.position(origin)
+                    return
+                  }
                   e.target.position({ x: gx, y: gy })
                   onMove?.(t.id, gx, gy)
                 }}

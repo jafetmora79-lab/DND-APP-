@@ -8,9 +8,9 @@ Monster stat blocks are seeded from the Systems Reference Document 5.1 (© Wizar
 
 - **Dungeon Master login** with a table name and passcode. Run as many campaigns as you want.
 - **Shared bestiary** across every campaign at that table (~300 SRD creatures, plus your own).
-- **Prep library** per campaign: battle maps, encounter templates, player characters with personal join codes.
+- **Prep library** per campaign: square 5-ft battle maps you draw from scratch (optional picture as background, blocked squares tokens cannot walk on), encounter templates, player characters with personal join codes.
 - **Live session**: start a new fight from a template or resume a paused one. Players enter tonight’s join code plus their personal character code.
-- **Map & tokens** (Konva): pan/zoom, drag tokens on a square grid, paint fog of war. Players watch; only the DM moves pieces.
+- **Map & tokens** (Konva): pan/zoom, drag tokens on a square grid (5 ft per square), paint fog of war. Tokens snap back if dropped on a blocked square. Players watch; only the DM moves pieces.
 - **Encounter tracker**: initiative, current/max/temp HP, conditions, next-turn. State hangs off the encounter instance, not the night’s join code.
 - **Character sheets** with Combat / Skills / Spells / Bio. Empty tabs hide. Ability modifiers, skill bonuses, and passive Perception calculate automatically. Visible to everyone; editable by the owner and the DM.
 - **Fillable PDF import** reads named form fields (no OCR). Manual entry remains as a fallback.
@@ -74,7 +74,7 @@ Do not put the Supabase `service_role` key in the client.
 
 Hex grids, dynamic lighting, animations, sound, multiple maps in one session, OCR for handwritten sheets, and importing from an external monster API.
 
-Drawing/annotation (walls, measurement) is phase 2.
+Measurement tools and freehand wall drawing are still out of scope; blocked squares on the 5-ft grid cover impassable terrain.
 
 ## Scripts
 
