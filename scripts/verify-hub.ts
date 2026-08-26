@@ -43,10 +43,12 @@ check('rewards on win', () => {
     encounterName: 'Cragmaw Ambush',
     templateId: 't1',
     brief: parseBrief({ xpAward: 150, lootNotes: 'Potion of healing' }),
+    lootHolder: 'Elara',
   })
   assert.equal(next.xp, 150)
   assert.equal(next.hub.beats[0].status, 'done')
   assert.equal(next.hub.loot[0].name, 'Potion of healing')
+  assert.equal(next.hub.loot[0].holder, 'Elara')
   assert.match(next.hub.recap, /victory/)
 })
 

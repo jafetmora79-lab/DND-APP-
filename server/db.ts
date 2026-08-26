@@ -5,12 +5,20 @@ import bcrypt from 'bcryptjs'
 import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
 import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type CombatDeclareKind, type CombatSpendSlot, type FogState, type NamedEntry } from '../src/lib/types.ts'
-import { cellCenter, parseBlockedCells, playerStartOrigin, proficiencyBonus, spreadCells, tokenCellKeys, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
-import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, characterSaveBonus, combatantStatsFromMonster, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, isAttackInRange, movementCostFeet, parseAttackBonus, parseCombatantStats, parseDeathState, parseRangeFeet, parseRollMode, parseSpeedFeet, parseTurnEconomy, pickUsedD20, resolveDeathSave, resolveSavingThrow, saveBonusForCombatant, spendMovement, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
+import { abilityMod, cellCenter, parseBlockedCells, playerStartOrigin, proficiencyBonus, spreadCells, tokenCellKeys, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
+import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, characterSaveBonus, combatantStatsFromMonster, combatantStatsFromSheet, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, isAttackInRange, movementCostFeet, parseAttackBonus, parseCombatantStats, parseDeathState, parseRangeFeet, parseRollMode, parseSpeedFeet, parseTurnEconomy, pickUsedD20, resolveDeathSave, resolveSavingThrow, saveBonusForCombatant, spendMovement, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { appendActivity, parseActivity, parsePrompt } from '../src/lib/combat-activity.ts'
 import { loadSrdMonsters } from './srd.ts'
 import { applyEncounterRewards, emptyBrief, parseHub } from '../src/lib/campaign-hub.ts'
 import { unpackTemplateJson } from '../src/lib/template-json.ts'
+import {
+  SURPRISED,
+  combatantLikeFromRow,
+  firstActingPosition,
+  nextActingPosition,
+  sortByInitiative,
+  type StartFightOpts,
+} from '../src/lib/turn-flow.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const dataDir = path.join(root, 'data')
@@ -426,16 +434,33 @@ export function seedBestiaryForDm(dmId: string) {
   return monsters.length
 }
 
-function defaultFog(cols: number, rows: number): FogState {
+function defaultFog(cols: number, rows: number, hidden = false): FogState {
   return {
     cols,
     rows,
-    enabled: false,
-    revealed: Array.from({ length: cols * rows }, () => 1),
+    enabled: hidden,
+    revealed: Array.from({ length: cols * rows }, () => (hidden ? 0 : 1)),
   }
 }
 
-export function spawnFromTemplate(campaignId: string, templateId: string, name?: string) {
+function applySurprise(instanceId: string, surpriseParty: boolean, surpriseMonsters: boolean) {
+  if (!surpriseParty && !surpriseMonsters) return
+  const rows = db.prepare('SELECT id, source, conditions_json FROM combatants WHERE encounter_instance_id = ?').all(instanceId) as {
+    id: string
+    source: string
+    conditions_json: string
+  }[]
+  for (const row of rows) {
+    const hit = (surpriseParty && row.source === 'character') || (surpriseMonsters && row.source === 'bestiary')
+    if (!hit) continue
+    const conditions = jparse<string[]>(row.conditions_json, [])
+    if (!conditions.some((x) => x.toLowerCase() === 'surprised')) conditions.push(SURPRISED)
+    db.prepare('UPDATE combatants SET conditions_json = ? WHERE id = ?').run(JSON.stringify(conditions), row.id)
+  }
+}
+
+export function spawnFromTemplate(campaignId: string, templateId: string, nameOrOpts?: string | StartFightOpts) {
+  const opts: StartFightOpts = typeof nameOrOpts === 'string' ? { name: nameOrOpts } : nameOrOpts ?? {}
   const template = db.prepare('SELECT * FROM encounter_templates WHERE id = ? AND campaign_id = ?').get(templateId, campaignId) as
     | Record<string, unknown>
     | undefined
@@ -453,11 +478,11 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
     instanceId,
     campaignId,
     templateId,
-    name || (template.name as string),
+    opts.name || (template.name as string),
     'active',
     1,
     0,
-    JSON.stringify(defaultFog(Number(map.grid_cols), Number(map.grid_rows))),
+    JSON.stringify(defaultFog(Number(map.grid_cols), Number(map.grid_rows), Boolean(opts.fog))),
     map.id,
   )
 
@@ -528,6 +553,7 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
   for (const spec of starters) {
     addCharacterCombatant(instanceId, spec.characterId, { col: spec.startX, row: spec.startY })
   }
+  applySurprise(instanceId, Boolean(opts.surpriseParty), Boolean(opts.surpriseMonsters))
   return instanceId
 }
 
@@ -586,8 +612,8 @@ export function addCharacterCombatant(instanceId: string, characterId: string, s
   }
   const cid = ids.id()
   db.prepare(
-    `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution, speed_feet, movement_remaining)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution, stats_json, speed_feet, movement_remaining)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     cid,
     instanceId,
@@ -604,6 +630,7 @@ export function addCharacterCombatant(instanceId: string, characterId: string, s
     ch.token_color,
     '',
     sheet.abilities.con,
+    JSON.stringify(combatantStatsFromSheet(sheet.abilities)),
     speed.speedFeet,
     speed.movementRemaining,
   )
@@ -1024,7 +1051,7 @@ function lookupAttack(attacker: Record<string, unknown>, attackIndex: number) {
   return attack
 }
 
-export function applyFinishRewards(campaignId: string, instanceId: unknown, outcome: 'won' | 'lost') {
+export function applyFinishRewards(campaignId: string, instanceId: unknown, outcome: 'won' | 'lost', lootHolder?: string) {
   const camp = db.prepare('SELECT hub_json FROM campaigns WHERE id = ?').get(campaignId) as { hub_json?: string } | undefined
   if (!camp) return
   let brief = emptyBrief()
@@ -1047,18 +1074,134 @@ export function applyFinishRewards(campaignId: string, instanceId: unknown, outc
     encounterName,
     templateId,
     brief,
+    lootHolder,
   })
   db.prepare('UPDATE campaigns SET hub_json = ? WHERE id = ?').run(JSON.stringify(next.hub), campaignId)
   if (next.xp <= 0) return
-  const chars = db.prepare('SELECT id, sheet_json FROM player_characters WHERE campaign_id = ?').all(campaignId) as {
-    id: string
-    sheet_json: string
-  }[]
+  const combatantIds = instanceId
+    ? (db
+        .prepare(`SELECT DISTINCT source_id FROM combatants WHERE encounter_instance_id = ? AND source = 'character'`)
+        .all(instanceId) as { source_id: string }[])
+        .map((r) => r.source_id)
+        .filter(Boolean)
+    : []
+  if (combatantIds.length === 0) return
+  const chars = db
+    .prepare(`SELECT id, sheet_json FROM player_characters WHERE campaign_id = ? AND id IN (${combatantIds.map(() => '?').join(',')})`)
+    .all(campaignId, ...combatantIds) as { id: string; sheet_json: string }[]
   for (const ch of chars) {
     const sheet = jparse(ch.sheet_json, {} as Record<string, unknown>)
     sheet.xp = Number(sheet.xp ?? 0) + next.xp
     db.prepare('UPDATE player_characters SET sheet_json = ? WHERE id = ?').run(JSON.stringify(sheet), ch.id)
   }
+}
+
+export function compactTurnOrder(instanceId: string) {
+  const rows = db
+    .prepare('SELECT id, turn_order_position FROM combatants WHERE encounter_instance_id = ? ORDER BY turn_order_position')
+    .all(instanceId) as { id: string; turn_order_position: number }[]
+  rows.forEach((r, i) => db.prepare('UPDATE combatants SET turn_order_position = ? WHERE id = ?').run(i, r.id))
+  const inst = db.prepare('SELECT current_turn_position FROM encounter_instances WHERE id = ?').get(instanceId) as
+    | { current_turn_position: number }
+    | undefined
+  if (!inst) return
+  const n = rows.length
+  let pos = Number(inst.current_turn_position)
+  if (n === 0) pos = 0
+  else if (pos >= n) pos = 0
+  db.prepare('UPDATE encounter_instances SET current_turn_position = ? WHERE id = ?').run(pos, instanceId)
+}
+
+export function removeCombatantFromFight(combatantId: string) {
+  const c = db.prepare('SELECT * FROM combatants WHERE id = ?').get(combatantId) as Record<string, unknown> | undefined
+  if (!c) throw new Error('Combatant not found')
+  const instanceId = String(c.encounter_instance_id)
+  db.prepare('DELETE FROM tokens_on_map WHERE encounter_instance_id = ? AND ref_id = ?').run(instanceId, combatantId)
+  db.prepare('DELETE FROM combatants WHERE id = ?').run(combatantId)
+  compactTurnOrder(instanceId)
+  return { instanceId }
+}
+
+export function setCombatantInitiativeFromD20(combatantId: string, d20: number) {
+  if (!Number.isInteger(d20) || d20 < 1 || d20 > 20) throw new Error('d20 must be between 1 and 20')
+  const c = db.prepare('SELECT * FROM combatants WHERE id = ?').get(combatantId) as Record<string, unknown> | undefined
+  if (!c) throw new Error('Combatant not found')
+  const stats = parseCombatantStats(c.stats_json)
+  let bonus = abilityMod(Number(stats?.dex ?? 10))
+  if (c.source === 'character') {
+    const ch = db.prepare('SELECT sheet_json FROM player_characters WHERE id = ?').get(c.source_id) as { sheet_json: string } | undefined
+    if (ch) {
+      const sheet = jparse<CharacterSheetData>(ch.sheet_json, emptySheet())
+      bonus = sheet.initiativeBonus ?? abilityMod(sheet.abilities.dex)
+    }
+  }
+  const total = d20 + bonus
+  db.prepare('UPDATE combatants SET initiative = ? WHERE id = ?').run(total, combatantId)
+  return { initiative: total }
+}
+
+export function sortInstanceInitiative(instanceId: string, keepCurrent: boolean) {
+  const inst = db.prepare('SELECT * FROM encounter_instances WHERE id = ?').get(instanceId) as Record<string, unknown> | undefined
+  if (!inst) throw new Error('Encounter not found')
+  const rows = db.prepare('SELECT * FROM combatants WHERE encounter_instance_id = ?').all(instanceId) as Record<string, unknown>[]
+  const current = rows.find((r) => Number(r.turn_order_position) === Number(inst.current_turn_position))
+  const sorted = sortByInitiative(rows.map(combatantLikeFromRow))
+  sorted.forEach((r, i) => db.prepare('UPDATE combatants SET turn_order_position = ? WHERE id = ?').run(i, r.id))
+  let pos = 0
+  if (keepCurrent && current) {
+    const idx = sorted.findIndex((r) => r.id === String(current.id))
+    if (idx >= 0) pos = idx
+  }
+  db.prepare('UPDATE encounter_instances SET current_turn_position = ? WHERE id = ?').run(pos, instanceId)
+  return { position: pos }
+}
+
+export function advanceInstanceTurn(instanceId: string, expectedTurnPosition?: number | null) {
+  const inst = db.prepare('SELECT * FROM encounter_instances WHERE id = ?').get(instanceId) as Record<string, unknown> | undefined
+  if (!inst) throw new Error('Encounter not found')
+  const currentPos = Number(inst.current_turn_position)
+  if (expectedTurnPosition != null && Number.isInteger(expectedTurnPosition) && expectedTurnPosition !== currentPos) {
+    return { ok: true as const, skipped: true, round: Number(inst.round_number), pos: currentPos }
+  }
+  const rows = db.prepare('SELECT * FROM combatants WHERE encounter_instance_id = ?').all(instanceId) as Record<string, unknown>[]
+  if (rows.length === 0) return { ok: true as const, skipped: false, round: Number(inst.round_number), pos: 0 }
+  const likes = rows.map(combatantLikeFromRow)
+  const next = nextActingPosition(likes, currentPos, Number(inst.round_number))
+  if (next.wrapped) {
+    for (const row of rows) {
+      const conditions = jparse<string[]>(String(row.conditions_json ?? '[]'), [])
+      const stripped = conditions.filter((x) => x.toLowerCase() !== 'surprised')
+      if (stripped.length !== conditions.length) {
+        db.prepare('UPDATE combatants SET conditions_json = ? WHERE id = ?').run(JSON.stringify(stripped), row.id)
+      }
+    }
+    appendInstanceActivity(instanceId, `Round ${next.round} begins.`)
+  } else {
+    for (const id of next.skippedIds) {
+      const row = rows.find((r) => String(r.id) === id)
+      if (!row) continue
+      const conditions = jparse<string[]>(String(row.conditions_json ?? '[]'), [])
+      const stripped = conditions.filter((x) => x.toLowerCase() !== 'surprised')
+      if (stripped.length !== conditions.length) {
+        db.prepare('UPDATE combatants SET conditions_json = ? WHERE id = ?').run(JSON.stringify(stripped), row.id)
+      }
+    }
+  }
+  db.prepare('UPDATE encounter_instances SET current_turn_position = ?, round_number = ? WHERE id = ?').run(next.position, next.round, instanceId)
+  resetTurnEconomyAt(instanceId, next.position)
+  return { ok: true as const, skipped: false, round: next.round, pos: next.position }
+}
+
+export function beginInstanceRound(instanceId: string) {
+  const inst = db.prepare('SELECT * FROM encounter_instances WHERE id = ?').get(instanceId) as Record<string, unknown> | undefined
+  if (!inst) throw new Error('Encounter not found')
+  const rows = db.prepare('SELECT * FROM combatants WHERE encounter_instance_id = ?').all(instanceId) as Record<string, unknown>[]
+  const likes = rows.map(combatantLikeFromRow)
+  const first = firstActingPosition(likes, Number(inst.round_number) || 1)
+  db.prepare('UPDATE encounter_instances SET current_turn_position = ?, round_number = ? WHERE id = ?').run(first.position, first.round, instanceId)
+  resetTurnEconomyAt(instanceId, first.position)
+  appendInstanceActivity(instanceId, `Round ${first.round} begins.`)
+  return { round: first.round, pos: first.position }
 }
 
 export function resolvePlayerAttack(opts: {

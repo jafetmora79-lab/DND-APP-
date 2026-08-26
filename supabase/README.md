@@ -31,6 +31,8 @@ If it was applied before the campaign hub (timeline, quests, NPCs, loot), also r
 
 If it was applied before player combat (activity feed, declare/prompt, player end-turn), also run `migrate-player-combat.sql`.
 
+If it was applied before campaign flow (skip dead on next turn, player initiative, join fight), also run `migrate-campaign-flow.sql`.
+
 ## 3. App env
 
 ```bash

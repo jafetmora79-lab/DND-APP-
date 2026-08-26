@@ -4,13 +4,21 @@ import { emptySheet, type AuthUser, type BattleMap, type EncounterInstance, type
 import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
-import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter } from './utils'
-import { afterHpChange, clampMovementRemaining, combatantStatsFromMonster, emptyTurnEconomy, formatDiceUsed, movementCostFeet, parseDeathState, parseSpeedFeet, parseTurnEconomy, resolveDeathSave, snapshotForPlayer, specCopyCell, spendMovement, statsForLiveCombatant, tokenCell } from './combat'
+import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter, abilityMod } from './utils'
+import { afterHpChange, clampMovementRemaining, combatantStatsFromMonster, combatantStatsFromSheet, emptyTurnEconomy, formatDiceUsed, movementCostFeet, parseCombatantStats, parseDeathState, parseSpeedFeet, parseTurnEconomy, resolveDeathSave, snapshotForPlayer, specCopyCell, spendMovement, statsForLiveCombatant, tokenCell } from './combat'
 import { attackActivityLines, parseActivity, parsePrompt } from './combat-activity'
 import { sessionFromRow } from './session'
 import { applyEncounterRewards, parseHub } from './campaign-hub'
 import { packTemplateBody, templateFromRow, unpackTemplateJson } from './template-json'
 import type { TableApi } from './local-api'
+import {
+  SURPRISED,
+  combatantLikeFromRow,
+  firstActingPosition,
+  nextActingPosition,
+  sortByInitiative,
+  withoutSurprised,
+} from './turn-flow'
 
 const joinCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6)
 const personalCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8)
@@ -198,7 +206,7 @@ function characterFromRow(row: Record<string, unknown>): PlayerCharacter {
   }
 }
 
-async function applyHostedFinishRewards(campaignId: string, instanceId: string, outcome: 'won' | 'lost') {
+async function applyHostedFinishRewards(campaignId: string, instanceId: string, outcome: 'won' | 'lost', lootHolder?: string) {
   const { data: camp } = await db().from('campaigns').select('*').eq('id', campaignId).maybeSingle()
   if (!camp) return
   const { data: inst } = await db().from('encounter_instances').select('*').eq('id', instanceId).maybeSingle()
@@ -215,12 +223,20 @@ async function applyHostedFinishRewards(campaignId: string, instanceId: string, 
     encounterName,
     templateId,
     brief,
+    lootHolder,
   })
   const { error: hubErr } = await db().from('campaigns').update({ hub_json: next.hub }).eq('id', campaignId)
   if (hubErr && /hub_json/.test(hubErr.message)) return
   throwIf(hubErr)
   if (next.xp <= 0) return
-  const { data: chars } = await db().from('player_characters').select('id, sheet_json').eq('campaign_id', campaignId)
+  const { data: fighters } = await db()
+    .from('combatants')
+    .select('source_id')
+    .eq('encounter_instance_id', instanceId)
+    .eq('source', 'character')
+  const ids = [...new Set((fighters ?? []).map((r) => String(r.source_id ?? '')).filter(Boolean))]
+  if (ids.length === 0) return
+  const { data: chars } = await db().from('player_characters').select('id, sheet_json').eq('campaign_id', campaignId).in('id', ids)
   for (const ch of chars ?? []) {
     const sheet = { ...emptySheet(), ...((ch.sheet_json as object) || {}) }
     sheet.xp = Number(sheet.xp ?? 0) + next.xp
@@ -355,6 +371,7 @@ async function insertCharacterCombatant(instanceId: string, characterId: string,
     color: mapped.tokenColor,
     notes: '',
     constitution: mapped.sheet.abilities.con,
+    stats_json: combatantStatsFromSheet(mapped.sheet.abilities),
     speed_feet: parseSpeedFeet(mapped.sheet.speed),
     movement_remaining: parseSpeedFeet(mapped.sheet.speed),
   })
@@ -818,23 +835,25 @@ export const supabaseApi: TableApi = {
     }
   },
 
-  async startInstance(campaignId, templateId, name) {
+  async startInstance(campaignId, templateId, opts) {
+    const start = opts ?? {}
     const { data: template, error: tErr } = await db().from('encounter_templates').select('*').eq('id', templateId).single()
     throwIf(tErr)
     const { data: map, error: mErr } = await db().from('maps').select('*').eq('id', template.map_id).single()
     throwIf(mErr)
+    const hidden = Boolean(start.fog)
     const fog: FogState = {
       cols: Number(map.grid_cols),
       rows: Number(map.grid_rows),
-      enabled: false,
-      revealed: Array.from({ length: Number(map.grid_cols) * Number(map.grid_rows) }, () => 1),
+      enabled: hidden,
+      revealed: Array.from({ length: Number(map.grid_cols) * Number(map.grid_rows) }, () => (hidden ? 0 : 1)),
     }
     const { data: inst, error: iErr } = await db()
       .from('encounter_instances')
       .insert({
         campaign_id: campaignId,
         encounter_template_id: templateId,
-        name: name || template.name,
+        name: start.name || template.name,
         status: 'active',
         round_number: 1,
         current_turn_position: 0,
@@ -895,6 +914,17 @@ export const supabaseApi: TableApi = {
     for (const spec of starters) {
       await insertCharacterCombatant(String(inst.id), spec.characterId, spec.startX, spec.startY, order++)
     }
+    if (start.surpriseParty || start.surpriseMonsters) {
+      const { data: spawned } = await db().from('combatants').select('id, source, conditions_json').eq('encounter_instance_id', inst.id)
+      for (const row of spawned ?? []) {
+        const hit =
+          (start.surpriseParty && row.source === 'character') || (start.surpriseMonsters && row.source === 'bestiary')
+        if (!hit) continue
+        const conditions = Array.isArray(row.conditions_json) ? [...(row.conditions_json as string[])] : []
+        if (!conditions.some((x) => x.toLowerCase() === 'surprised')) conditions.push(SURPRISED)
+        await db().from('combatants').update({ conditions_json: conditions }).eq('id', row.id)
+      }
+    }
     return { instanceId: String(inst.id) }
   },
 
@@ -921,7 +951,7 @@ export const supabaseApi: TableApi = {
         join_code: code,
         campaign_id: campaignId,
         encounter_instance_id: encounterInstanceId,
-        table_phase: encounterInstanceId ? 'combat' : 'table',
+        table_phase: opts?.tablePhase === 'setup' ? 'setup' : encounterInstanceId ? 'combat' : 'table',
         ...(encounterInstanceId ? { last_outcome: null } : {}),
       })
       return { session: { joinCode: String(data.join_code) } }
@@ -929,7 +959,12 @@ export const supabaseApi: TableApi = {
     const patch: Record<string, unknown> = {}
     if (opts?.rotateJoinCode) patch.join_code = joinCode()
     patch.encounter_instance_id = encounterInstanceId
-    patch.table_phase = encounterInstanceId ? 'combat' : 'table'
+    patch.table_phase =
+      opts?.tablePhase === 'setup' || opts?.tablePhase === 'combat' || opts?.tablePhase === 'table'
+        ? opts.tablePhase
+        : encounterInstanceId
+          ? 'combat'
+          : 'table'
     if (encounterInstanceId) patch.last_outcome = null
     const data = await updateLiveSession(String(existing.id), patch)
     return { session: { joinCode: String(data.join_code ?? existing.join_code) } }
@@ -967,6 +1002,7 @@ export const supabaseApi: TableApi = {
     const patch: Record<string, unknown> = {}
     if (body.ambianceCaption != null) patch.ambiance_caption = body.ambianceCaption
     if (body.ambianceImageUrl !== undefined) patch.ambiance_image_url = body.ambianceImageUrl
+    if (body.tablePhase) patch.table_phase = body.tablePhase
     if (Object.keys(patch).length === 0) return {}
     await updateLiveSession(String(existing.id), patch)
     return {}
@@ -997,7 +1033,7 @@ export const supabaseApi: TableApi = {
     return {}
   },
 
-  async finishEncounter(campaignId, outcome) {
+  async finishEncounter(campaignId, outcome, opts) {
     const { data: existing, error: loadErr } = await db()
       .from('live_sessions')
       .select('*')
@@ -1020,7 +1056,7 @@ export const supabaseApi: TableApi = {
         .update({ status: 'completed' })
         .eq('id', existing.encounter_instance_id)
       throwIf(stErr)
-      if (firstFinish) await applyHostedFinishRewards(campaignId, String(existing.encounter_instance_id), outcome)
+      if (firstFinish) await applyHostedFinishRewards(campaignId, String(existing.encounter_instance_id), outcome, opts?.lootHolder)
     }
     await updateLiveSession(String(existing.id), {
       table_phase: outcome === 'won' ? 'victory' : 'defeat',
@@ -1040,6 +1076,41 @@ export const supabaseApi: TableApi = {
     throwIf(loadErr)
     if (!existing) throw new Error('No live session')
     await updateLiveSession(String(existing.id), { encounter_instance_id: null, table_phase: 'table' })
+    return {}
+  },
+
+  async beginRound(campaignId) {
+    const { data: existing, error: loadErr } = await db()
+      .from('live_sessions')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    throwIf(loadErr)
+    if (!existing?.encounter_instance_id) throw new Error('No fight on the table')
+    const instanceId = String(existing.encounter_instance_id)
+    const { data: inst, error: iErr } = await db().from('encounter_instances').select('*').eq('id', instanceId).single()
+    throwIf(iErr)
+    const { data: rows, error: cErr } = await db().from('combatants').select('*').eq('encounter_instance_id', instanceId)
+    throwIf(cErr)
+    const likes = (rows ?? []).map((r) => combatantLikeFromRow(r as Record<string, unknown>))
+    const first = firstActingPosition(likes, Number(inst?.round_number) || 1)
+    const { error: uErr } = await db()
+      .from('encounter_instances')
+      .update({ current_turn_position: first.position, round_number: first.round })
+      .eq('id', instanceId)
+    throwIf(uErr)
+    const nxt = likes.find((c) => c.turnOrderPosition === first.position) ?? likes[first.position]
+    if (nxt) {
+      const { data: row } = await db().from('combatants').select('speed_feet').eq('id', nxt.id).maybeSingle()
+      await db()
+        .from('combatants')
+        .update({ turn_economy_json: emptyTurnEconomy(), movement_remaining: parseSpeedFeet(row?.speed_feet ?? 30) })
+        .eq('id', nxt.id)
+    }
+    await logFeed(instanceId, `Round ${first.round} begins.`)
+    await updateLiveSession(String(existing.id), { table_phase: 'combat' })
     return {}
   },
 
@@ -1264,6 +1335,70 @@ export const supabaseApi: TableApi = {
     return {}
   },
 
+  async joinFight(instanceId) {
+    const rpc = await db().rpc('player_join_fight', { p_instance: instanceId })
+    if (!rpc.error) return {}
+    if (!missingRpc(rpc.error.message, 'player_join_fight')) throwIf(rpc.error)
+    const user = await currentUserId()
+    const { data: inst, error: iErr } = await db().from('encounter_instances').select('campaign_id').eq('id', instanceId).single()
+    throwIf(iErr)
+    if (!inst) throw new Error('Encounter not found')
+    const { data: access } = await db()
+      .from('character_access')
+      .select('character_id')
+      .eq('user_id', user.id)
+      .eq('campaign_id', inst.campaign_id)
+      .maybeSingle()
+    if (!access?.character_id) throw new Error('You are not at this table.')
+    await insertCharacterCombatant(instanceId, String(access.character_id))
+    return {}
+  },
+
+  async removeCombatant(id) {
+    const { data: c, error } = await db().from('combatants').select('*').eq('id', id).single()
+    throwIf(error)
+    await db().from('tokens_on_map').delete().eq('encounter_instance_id', c.encounter_instance_id).eq('ref_id', id)
+    await db().from('combatants').delete().eq('id', id)
+    const { data: rows } = await db()
+      .from('combatants')
+      .select('id, turn_order_position')
+      .eq('encounter_instance_id', c.encounter_instance_id)
+      .order('turn_order_position', { ascending: true })
+    await Promise.all((rows ?? []).map((r, i) => db().from('combatants').update({ turn_order_position: i }).eq('id', r.id)))
+    const { data: inst } = await db()
+      .from('encounter_instances')
+      .select('current_turn_position')
+      .eq('id', c.encounter_instance_id)
+      .maybeSingle()
+    const n = rows?.length ?? 0
+    let pos = Number(inst?.current_turn_position ?? 0)
+    if (n === 0 || pos >= n) pos = 0
+    await db().from('encounter_instances').update({ current_turn_position: pos }).eq('id', c.encounter_instance_id)
+    return {}
+  },
+
+  async setInitiative(id, body) {
+    const rpc = await db().rpc('player_set_initiative', { p_combatant: id, p_d20: body.d20 })
+    if (!rpc.error) return { initiative: Number((rpc.data as { initiative?: number } | null)?.initiative ?? 0) }
+    if (!missingRpc(rpc.error.message, 'player_set_initiative')) throwIf(rpc.error)
+    if (!Number.isInteger(body.d20) || body.d20 < 1 || body.d20 > 20) throw new Error('d20 must be between 1 and 20')
+    const { data: c, error } = await db().from('combatants').select('*').eq('id', id).single()
+    throwIf(error)
+    const stats = parseCombatantStats(c.stats_json)
+    let bonus = abilityMod(Number(stats?.dex ?? 10))
+    if (c.source === 'character' && c.source_id) {
+      const { data: ch } = await db().from('player_characters').select('sheet_json').eq('id', c.source_id).maybeSingle()
+      if (ch) {
+        const sheet = { ...emptySheet(), ...((ch.sheet_json as object) || {}) }
+        bonus = sheet.initiativeBonus ?? abilityMod(sheet.abilities.dex)
+      }
+    }
+    const total = body.d20 + bonus
+    const { error: uErr } = await db().from('combatants').update({ initiative: total }).eq('id', id)
+    throwIf(uErr)
+    return { initiative: total }
+  },
+
   async patchCombatant(id, body) {
     const patch: Record<string, unknown> = {}
     if (body.name != null) patch.name = body.name
@@ -1317,28 +1452,40 @@ export const supabaseApi: TableApi = {
     return {}
   },
 
-  async nextTurn(id) {
-    const rpc = await db().rpc('player_advance_turn', { p_instance: id })
+  async nextTurn(id, opts) {
+    const expected = opts?.expectedTurnPosition
+    const rpc = await db().rpc('player_advance_turn', { p_instance: id, p_expected_pos: expected ?? null })
     if (!rpc.error) return {}
     if (!missingRpc(rpc.error.message, 'player_advance_turn')) throwIf(rpc.error)
     const { data: inst, error } = await db().from('encounter_instances').select('*').eq('id', id).single()
     throwIf(error)
-    const { count } = await db().from('combatants').select('id', { count: 'exact', head: true }).eq('encounter_instance_id', id)
-    const n = count ?? 0
-    if (n === 0) return {}
-    let pos = Number(inst.current_turn_position) + 1
-    let round = Number(inst.round_number)
-    if (pos >= n) {
-      pos = 0
-      round += 1
+    const currentPos = Number(inst.current_turn_position)
+    if (expected != null && Number.isInteger(expected) && expected !== currentPos) return {}
+    const { data: rows, error: cErr } = await db().from('combatants').select('*').eq('encounter_instance_id', id)
+    throwIf(cErr)
+    const likes = (rows ?? []).map((r) => combatantLikeFromRow(r as Record<string, unknown>))
+    if (likes.length === 0) return {}
+    const next = nextActingPosition(likes, currentPos, Number(inst.round_number))
+    if (next.wrapped) {
+      for (const row of rows ?? []) {
+        const conditions = Array.isArray(row.conditions_json) ? (row.conditions_json as string[]) : []
+        const stripped = withoutSurprised(conditions)
+        if (stripped.length !== conditions.length) {
+          await db().from('combatants').update({ conditions_json: stripped }).eq('id', row.id)
+        }
+      }
+      await logFeed(id, `Round ${next.round} begins.`)
     }
-    const { error: uErr } = await db().from('encounter_instances').update({ current_turn_position: pos, round_number: round }).eq('id', id)
+    const { error: uErr } = await db()
+      .from('encounter_instances')
+      .update({ current_turn_position: next.position, round_number: next.round })
+      .eq('id', id)
     throwIf(uErr)
     const { data: up } = await db()
       .from('combatants')
       .select('id, speed_feet')
       .eq('encounter_instance_id', id)
-      .eq('turn_order_position', pos)
+      .eq('turn_order_position', next.position)
       .maybeSingle()
     if (up) {
       await db()
@@ -1349,20 +1496,29 @@ export const supabaseApi: TableApi = {
     return {}
   },
 
-  async sortInit(id) {
-    const { data, error } = await db().from('combatants').select('id, initiative').eq('encounter_instance_id', id)
+  async sortInit(id, opts) {
+    const { data, error } = await db()
+      .from('combatants')
+      .select('id, name, initiative, stats_json, turn_order_position')
+      .eq('encounter_instance_id', id)
     throwIf(error)
-    const rows = [...(data ?? [])].sort((a, b) => Number(b.initiative) - Number(a.initiative))
+    const { data: inst } = await db().from('encounter_instances').select('current_turn_position').eq('id', id).maybeSingle()
+    const currentId = (data ?? []).find((r) => Number(r.turn_order_position) === Number(inst?.current_turn_position))?.id
+    const rows = sortByInitiative(
+      (data ?? []).map((r) => ({
+        id: String(r.id),
+        name: String(r.name ?? ''),
+        initiative: Number(r.initiative),
+        stats: parseCombatantStats(r.stats_json),
+      })),
+    )
     await Promise.all(rows.map((r, i) => db().from('combatants').update({ turn_order_position: i }).eq('id', r.id)))
-    await db().from('encounter_instances').update({ current_turn_position: 0 }).eq('id', id)
-    const first = rows[0]
-    if (first) {
-      const { data: row } = await db().from('combatants').select('speed_feet').eq('id', first.id).maybeSingle()
-      await db()
-        .from('combatants')
-        .update({ turn_economy_json: emptyTurnEconomy(), movement_remaining: parseSpeedFeet(row?.speed_feet ?? 30) })
-        .eq('id', first.id)
+    let pos = 0
+    if (opts?.keepCurrent && currentId) {
+      const idx = rows.findIndex((r) => r.id === String(currentId))
+      if (idx >= 0) pos = idx
     }
+    await db().from('encounter_instances').update({ current_turn_position: pos }).eq('id', id)
     return {}
   },
 

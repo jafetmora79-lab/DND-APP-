@@ -167,7 +167,7 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
                 </div>
               ))}
             </div>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
               <Field label="Armor class">
                 <Input type="number" disabled={!canEdit} value={sheet.ac} onChange={(e) => patchSheet({ ac: Number(e.target.value) })} />
               </Field>
@@ -179,6 +179,9 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
               </Field>
               <Field label="Temp HP">
                 <Input type="number" disabled={!canEdit} value={sheet.hpTemp} onChange={(e) => patchSheet({ hpTemp: Number(e.target.value) })} />
+              </Field>
+              <Field label="Hit dice">
+                <Input disabled={!canEdit} value={sheet.hitDice} onChange={(e) => patchSheet({ hitDice: e.target.value })} />
               </Field>
               <Field label="Speed">
                 <Input disabled={!canEdit} value={sheet.speed} onChange={(e) => patchSheet({ speed: e.target.value })} />

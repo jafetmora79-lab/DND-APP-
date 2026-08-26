@@ -75,19 +75,33 @@ a personal code from Prep.
 
   Live hub (no fight)
     Same join code. Scene image + caption (default tavern hearth). Character
-    sheets stay visible. DM can:
-      - Start the next ready encounter template
+    sheets stay visible. Optional short rest: type the HP recovered from hit
+    dice (the app never rolls). DM can:
+      - Start the next ready encounter template (checklist: who is placed,
+        fog, surprise)
       - Resume a paused fight
       - Upload a new scene picture and caption
     Ready templates show a check when they have a map and at least one monster.
 
+  Setup (after Start, before round 1)
+    The map and tracker open. Monster inits are typed by the DM. Players
+    submit their d20; Dex (or the sheet initiative bonus) is added. Sort
+    breaks ties by Dex then name. Begin round 1 starts combat. Corpses and
+    surprised creatures are skipped. Dying PCs still get a turn for death
+    saves.
+
   Combat
     Map (Konva, 5-ft squares), initiative tracker, attacks, fog of war.
-    Header: Finalize Won/Lost, Next encounter, Table (pause and return to the
-    hub), Pause.
+    Header: Finalize Won/Lost, Next encounter (blocked until this fight is
+    paused or finalized), Table (pause and return to the hub), Pause.
+    Next turn skips the dead and dropped monsters. Skip is the same advance
+    for a living creature you want to pass. Players can Join this fight if
+    they were not placed on the template.
 
   After the fight
-    DM finalizes Won or Lost. Everyone sees the overlay, then the table returns
+    When no enemies are standing, the DM is nudged to Finalize. Won or Lost
+    shows the overlay. XP from the template goes only to characters who were
+    combatants in that fight. Optional loot holder. Then the table returns
     to the hub. Next encounter loads the next template on the same join code.
 
 
@@ -152,12 +166,15 @@ A) PREP — starting squares on the template (recommended)
   a combatant AND a token at that square. They show up in the tracker with HP
   and AC from their sheet.
 
-B) LIVE COMBAT — + Name buttons during a fight
+B) LIVE COMBAT — + Name buttons during a fight, or Join this fight on a phone
 
   During combat, under the tracker, each campaign character has a button:
 
     + Elara     → adds Elara to this fight and puts a token on the map
     Elara on map → already in this fight; the button is disabled
+
+  Players who joined the table but are not on this map see Join this fight
+  on their phone. That is the same add as + Name.
 
   Use this when:
     - You started a template that did not include player starts
@@ -188,7 +205,11 @@ MAP
     is on. The DM still sees dimmed hidden squares.
 
 TRACKER
-  - Initiative, current / max / temp HP, conditions, next turn, reorder.
+  - Initiative, current / max / temp HP, conditions, next turn, Skip, Sort,
+    remove from fight, reorder.
+  - Sort is initiative desc, then Dex, then name. Mid-fight Sort keeps the
+    current creature; setup Sort jumps to the top.
+  - Next turn skips corpses and monsters at 0 HP. Dying PCs still act.
   - State hangs off the encounter instance, not the night’s join code, so you
     can pause and resume next week.
 
@@ -201,9 +222,9 @@ ATTACKS
     on their next attack against them. Same rule for PCs and monsters.
 
 HEADER
-  - Finalize Won / Lost
-  - Next encounter (next template, same join code)
-  - Table (pause the fight, return to the hub)
+  - Finalize Won / Lost (XP to combatants in that fight; optional loot holder)
+  - Next encounter (next template, same join code — not while a fight is active)
+  - Table (pause the fight, return to the hub — the fight is not over)
   - Pause
 
 PLAYERS IN COMBAT
@@ -251,7 +272,9 @@ missing from older projects. The app still saves player starts in that case
 place players.
 
 If you want the extra columns anyway, supabase/migrate-encounter-play.sql
-and migrate-campaign-table.sql are still there, followed by:
+and migrate-campaign-table.sql are still there. For skip-dead turns, player
+initiative, and Join this fight on existing hosted projects, also run
+migrate-campaign-flow.sql, then:
 
   notify pgrst, 'reload schema';
 
@@ -269,12 +292,16 @@ Local SQLite adds missing columns automatically on boot.
      player, drag them, SAVE.
   5. Open Live. Copy the join code. Players join with that code + personal
      code. You are all at the tavern table.
-  6. Start the ready encounter. Tokens appear where you placed them.
-     Missing someone? Use + Name under the tracker.
-  7. Roll initiative at the real table, type it in, Sort.
+  6. Start the ready encounter. Checklist: who is placed, fog, surprise.
+     Tokens appear where you placed them. Missing someone? Use + Name or
+     Join this fight.
+  7. Roll initiative at the real table. Players submit their d20. DM types
+     monster totals, Sort, Begin round 1.
   8. Fight: move tokens, attack with d20 + damage, paint fog if you want.
-  9. Finalize Won or Lost. Back at the tavern. Next encounter when ready,
-     or Pause / Table to pick up later.
+     Next turn skips the dead.
+  9. Finalize Won or Lost (loot holder optional). Back at the tavern. Short
+     rest HP is typed on the hub. Next encounter when ready, or Pause / Table
+     to pick up later.
 
 If a player token never appears, check in this order:
   - Was the character created in this campaign?
