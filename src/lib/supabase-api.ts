@@ -5,7 +5,7 @@ import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
 import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter } from './utils'
-import { afterHpChange, clampMovementRemaining, combatantStatsFromMonster, emptyTurnEconomy, movementCostFeet, parseDeathState, parseSpeedFeet, parseTurnEconomy, resolveDeathSave, specCopyCell, spendMovement, statsForLiveCombatant, tokenCell } from './combat'
+import { afterHpChange, clampMovementRemaining, combatantStatsFromMonster, emptyTurnEconomy, movementCostFeet, parseDeathState, parseSpeedFeet, parseTurnEconomy, resolveDeathSave, snapshotForPlayer, specCopyCell, spendMovement, statsForLiveCombatant, tokenCell } from './combat'
 import { sessionFromRow } from './session'
 import { applyEncounterRewards, parseHub } from './campaign-hub'
 import { packTemplateBody, templateFromRow, unpackTemplateJson } from './template-json'
@@ -1091,7 +1091,7 @@ export const supabaseApi: TableApi = {
     const { data: tokens } = instanceId ? await db().from('tokens_on_map').select('*').eq('encounter_instance_id', instanceId) : { data: [] }
     const { data: characters } = await db().from('player_characters').select('*').eq('campaign_id', campaignId)
     const chars = await hideCodes(campaignId, (characters ?? []).map((r) => characterFromRow(r as Record<string, unknown>)))
-    return {
+    const snap = {
       campaign: {
         id: String(campaign.id),
         dmAccountId: String(campaign.dm_account_id),
@@ -1159,6 +1159,16 @@ export const supabaseApi: TableApi = {
       })),
       characters: chars,
     }
+    const user = await currentUserId()
+    const { data: dm } = await db().from('dm_accounts').select('id').eq('id', user.id).maybeSingle()
+    if (dm) return snap
+    const { data: access } = await db()
+      .from('character_access')
+      .select('character_id')
+      .eq('user_id', user.id)
+      .eq('campaign_id', campaignId)
+      .maybeSingle()
+    return snapshotForPlayer(snap, access?.character_id as string | undefined)
   },
 
   async addCombatant(instanceId, body) {

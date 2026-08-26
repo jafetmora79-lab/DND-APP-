@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Circle, Group, Layer, Rect, Shape, Stage, Text, Image as KImage } from 'react-konva'
 import useImage from 'use-image'
 import { conditionRingColor, type BattleMap, type FogState, type MapToken } from '@/lib/types'
+import { tokenHiddenFromPlayers } from '@/lib/combat'
 import { hpBarFill, initials, pixelToCell, tokenOccupiesBlocked } from '@/lib/utils'
 import { inkOnToken } from '@/lib/token-look'
 
@@ -143,16 +144,24 @@ export function MapBoard({
         onMouseDown={(e) => {
           const ptr = e.target.getStage()?.getPointerPosition()
           pointerDown.current = ptr ? { x: ptr.x, y: ptr.y } : null
-          if (e.target.findAncestor('.token')) return
-          const cls = e.target.getClassName()
-          if (cls === 'Circle' || cls === 'Text' || cls === 'Group') return
-          if (tool === 'select' && !onCellClick) onSelect?.(null)
           if (paintingFog || paintingTerrain) {
             painting.current = true
             lastPaint.current = -1
             const w = worldFromEvent(e)
             if (w) paintAt(w.x, w.y)
+            return
           }
+          if (e.target.findAncestor('.token')) return
+          const cls = e.target.getClassName()
+          if (cls === 'Circle' || cls === 'Text' || cls === 'Group') return
+          if (tool === 'select' && !onCellClick) onSelect?.(null)
+        }}
+        onTouchStart={(e) => {
+          if (!(paintingFog || paintingTerrain)) return
+          painting.current = true
+          lastPaint.current = -1
+          const w = worldFromEvent(e)
+          if (w) paintAt(w.x, w.y)
         }}
         onClick={(e) => {
           if (!onCellClick || tool !== 'select') return
@@ -174,7 +183,16 @@ export function MapBoard({
           const w = worldFromEvent(e)
           if (w) paintAt(w.x, w.y)
         }}
+        onTouchMove={(e) => {
+          if (!painting.current) return
+          const w = worldFromEvent(e)
+          if (w) paintAt(w.x, w.y)
+        }}
         onMouseUp={() => {
+          painting.current = false
+          lastPaint.current = -1
+        }}
+        onTouchEnd={() => {
           painting.current = false
           lastPaint.current = -1
         }}
@@ -264,8 +282,7 @@ export function MapBoard({
         <Layer>
           {tokens.map((t) => {
             const r = (t.sizeSquares * map.gridSize) / 2 - 4
-            const hidden = fog.enabled && !isDm && !fog.revealed[cellAt(t.x, t.y)]
-            if (hidden || (!isDm && !t.visibleToPlayers)) return null
+            if (tokenHiddenFromPlayers(t, fog, map.gridSize, isDm)) return null
             const selected = selectedId === t.refId
             const highlighted = highlightIds.includes(t.refId)
             const hpMax = t.hpMax ?? 0
@@ -283,6 +300,7 @@ export function MapBoard({
                 x={t.x}
                 y={t.y}
                 opacity={downed ? 0.82 : 1}
+                listening={!paintingFog && !paintingTerrain}
                 draggable={canDrag}
                 onClick={() => onSelect?.(t.refId)}
                 onTap={() => onSelect?.(t.refId)}

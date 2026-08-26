@@ -6,6 +6,8 @@ import {
   type Combatant,
   type CombatantStats,
   type DeathState,
+  type EncounterSnapshot,
+  type FogState,
   type MapToken,
   type RollMode,
   type TemplateMonster,
@@ -356,12 +358,41 @@ export function attacksFromMonster(monster: { actions?: { name: string; desc: st
   const parsed = (monster.actions ?? [])
     .map((a) => {
       const bonus = a.desc.match(/([+-]\d+)\s*to hit/i)?.[1] ?? '+0'
-      const rangeN = a.desc.match(/(?:reach|range)\s+(\d+)\s*ft/i)?.[1]
+      // 5e writes "range 80/320 ft." — take the normal (first) number, not melee default.
+      const rangeN = a.desc.match(/(?:reach|range)\s+(\d+)(?:\s*\/\s*\d+)?\s*ft/i)?.[1]
       const dmg = a.desc.match(/Hit:\s*([^.]*)/i)?.[1]?.trim() ?? ''
       return { name: a.name, bonus, damage: dmg, range: rangeN ? `${rangeN} ft.` : '5 ft.' } satisfies Attack
     })
     .filter((a) => a.name.trim())
   return parsed.length ? parsed : [{ name: 'Strike', bonus: '+0', damage: '', range: '5 ft.' }]
+}
+
+/** Player map: hide tokens the DM marked invisible, or that sit in unrevealed fog. */
+export function tokenHiddenFromPlayers(
+  token: Pick<MapToken, 'x' | 'y' | 'visibleToPlayers'>,
+  fog: FogState | null | undefined,
+  gridSize: number,
+  isDm: boolean,
+) {
+  if (isDm) return false
+  if (!token.visibleToPlayers) return true
+  if (!fog?.enabled) return false
+  const cell = Math.max(1, gridSize)
+  const c = Math.floor(token.x / cell)
+  const r = Math.floor(token.y / cell)
+  if (c < 0 || r < 0 || c >= fog.cols || r >= fog.rows) return true
+  return !fog.revealed[r * fog.cols + c]
+}
+
+/** Same payload GET /live already sent to players — also used for WebSocket pushes. */
+export function snapshotForPlayer(snap: EncounterSnapshot, characterId?: string | null): EncounterSnapshot {
+  const gridSize = snap.map?.gridSize ?? 70
+  const fog = snap.instance?.fogState
+  return {
+    ...snap,
+    characters: snap.characters.map((c) => (c.id === characterId ? c : { ...c, personalCode: '••••••••' })),
+    tokens: snap.tokens.filter((t) => !tokenHiddenFromPlayers(t, fog, gridSize, false)),
+  }
 }
 
 export function applyDamage(hpCurrent: number, hpTemp: number, damage: number) {
