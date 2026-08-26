@@ -48,7 +48,7 @@ Do this once:
 
 After that you only wait when that **GitHub Pages** workflow actually ran (green check). A push to `main` from a cloud agent often does **not** start it. If the live site looks old or shows the `/docs` setup page, click **Run workflow** once — do not touch secrets.
 
-If those two secrets are missing the Pages workflow **fails** instead of publishing a UI that cannot sign anyone in. Hosted passcodes must be **at least 6 characters** (Supabase Auth). The local sample passcode `torch` only works on `npm run dev`.
+If those two secrets are missing the Pages workflow **fails** instead of publishing a UI that cannot sign anyone in. Passcodes must be **at least 6 characters** (Supabase Auth, and the local sample).
 
 ### Sample table
 
@@ -56,7 +56,7 @@ A seeded campaign is ready on first boot:
 
 | Role | How to enter |
 | --- | --- |
-| Dungeon Master | Table **Hearthkeeper**, passcode **torch** |
+| Dungeon Master | Table **Hearthkeeper**, passcode **hearth** |
 | Player (Elara) | Join code **HEARTH**, personal code **ELARA7K2** |
 | Player (Brok) | Join code **HEARTH**, personal code **BROK4M9X** |
 
