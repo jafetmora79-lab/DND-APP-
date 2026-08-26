@@ -32,6 +32,7 @@ type Props = {
   selectedId: string | null
   onSelectCharacter: (id: string) => void
   sheet: ReactNode
+  playerView?: boolean
   dm?: DmProps
 }
 
@@ -45,6 +46,7 @@ export function TableHub({
   selectedId,
   onSelectCharacter,
   sheet,
+  playerView,
   dm,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
@@ -171,7 +173,7 @@ export function TableHub({
         </div>
         {hub && (
           <div className="max-h-64 overflow-y-auto border-b border-line p-3">
-            <CampaignHubPanel hub={hub} characters={characters} templates={dm?.templates} canEdit={false} compact />
+            <CampaignHubPanel hub={hub} characters={characters} templates={dm?.templates} canEdit={false} compact playerView={playerView} />
           </div>
         )}
         <div className="min-h-0 flex-1 overflow-y-auto p-3">{sheet}</div>

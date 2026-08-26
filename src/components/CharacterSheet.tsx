@@ -136,6 +136,14 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
                   onChange={(e) => patchSheet({ level: Number(e.target.value) })}
                 />
               </Field>
+              <Field label="XP">
+                <Input
+                  type="number"
+                  disabled={!canEdit}
+                  value={sheet.xp ?? 0}
+                  onChange={(e) => patchSheet({ xp: Number(e.target.value) || 0 })}
+                />
+              </Field>
               <Field label="Race">
                 <Input disabled={!canEdit} value={sheet.race} onChange={(e) => patchSheet({ race: e.target.value })} />
               </Field>

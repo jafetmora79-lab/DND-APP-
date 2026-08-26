@@ -6,7 +6,7 @@ import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
 import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type FogState, type NamedEntry } from '../src/lib/types.ts'
 import { cellCenter, parseBlockedCells, playerStartOrigin, spreadCells, tokenCellKeys, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
-import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, isAttackInRange, parseAttackBonus, parseDeathState, parseRangeFeet, parseRollMode, parseTurnEconomy, pickUsedD20, resolveDeathSave, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
+import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, combatantStatsFromMonster, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, isAttackInRange, parseAttackBonus, parseDeathState, parseRangeFeet, parseRollMode, parseTurnEconomy, pickUsedD20, resolveDeathSave, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { loadSrdMonsters } from './srd.ts'
 import { applyEncounterRewards, emptyBrief, parseHub } from '../src/lib/campaign-hub.ts'
 import { unpackTemplateJson } from '../src/lib/template-json.ts'
@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS combatants (
   death_success INTEGER NOT NULL DEFAULT 0,
   death_fail INTEGER NOT NULL DEFAULT 0,
   turn_economy_json TEXT NOT NULL DEFAULT '{"action":false,"bonus":false,"reaction":false,"movement":false}',
+  stats_json TEXT,
   FOREIGN KEY (encounter_instance_id) REFERENCES encounter_instances(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS tokens_on_map (
@@ -217,6 +218,11 @@ try {
 }
 try {
   db.exec(`ALTER TABLE combatants ADD COLUMN turn_economy_json TEXT NOT NULL DEFAULT '{"action":false,"bonus":false,"reaction":false,"movement":false}'`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE combatants ADD COLUMN stats_json TEXT`)
 } catch {
   /* already present */
 }
@@ -434,8 +440,8 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
       const cid = ids.id()
       const label = spec.quantity > 1 ? `${spec.name} ${i + 1}` : spec.name
       db.prepare(
-        `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution, stats_json)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).run(
         cid,
         instanceId,
@@ -452,6 +458,7 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
         spec.color,
         '',
         Number(src.con ?? 10),
+        JSON.stringify(combatantStatsFromMonster(src)),
       )
       const { col, row } = specCopyCell(spec, i, placed)
       const size = tokenSizeSquares(String(src.size ?? 'Medium'))

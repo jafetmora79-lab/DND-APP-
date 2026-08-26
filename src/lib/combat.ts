@@ -4,6 +4,7 @@ import {
   type Attack,
   type BattleMap,
   type Combatant,
+  type CombatantStats,
   type DeathState,
   type MapToken,
   type RollMode,
@@ -129,6 +130,83 @@ export function monsterSaveBonus(savingThrows: string, ability: Ability, ability
   const m = String(savingThrows ?? '').match(new RegExp(`${label}\\s*([+-]\\d+)`, 'i'))
   if (m) return Number(m[1])
   return abilityMod(abilityScore)
+}
+
+function abilityScore(raw: unknown, fallback = 10) {
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : fallback
+}
+
+/** Copy the minimum save math off a bestiary row or Monster (camel or snake case). */
+export function combatantStatsFromMonster(src: {
+  str?: unknown
+  dex?: unknown
+  con?: unknown
+  int?: unknown
+  wis?: unknown
+  cha?: unknown
+  savingThrows?: unknown
+  saving_throws?: unknown
+} | null | undefined): CombatantStats {
+  const row = src ?? {}
+  return {
+    str: abilityScore(row.str),
+    dex: abilityScore(row.dex),
+    con: abilityScore(row.con),
+    int: abilityScore(row.int),
+    wis: abilityScore(row.wis),
+    cha: abilityScore(row.cha),
+    savingThrows: String(row.savingThrows ?? row.saving_throws ?? ''),
+  }
+}
+
+export function parseCombatantStats(raw: unknown): CombatantStats | null {
+  if (raw == null || raw === '') return null
+  let value: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      value = JSON.parse(raw)
+    } catch {
+      return null
+    }
+  }
+  if (!value || typeof value !== 'object') return null
+  const o = value as Record<string, unknown>
+  if (
+    o.str == null &&
+    o.dex == null &&
+    o.con == null &&
+    o.int == null &&
+    o.wis == null &&
+    o.cha == null &&
+    o.savingThrows == null &&
+    o.saving_throws == null
+  ) {
+    return null
+  }
+  return combatantStatsFromMonster(o)
+}
+
+export function statsForLiveCombatant(
+  row: { stats_json?: unknown; source?: unknown },
+  bestiary?: Parameters<typeof combatantStatsFromMonster>[0] | null,
+): CombatantStats | null {
+  const stored = parseCombatantStats(row.stats_json)
+  if (stored) return stored
+  if (row.source === 'bestiary' && bestiary) return combatantStatsFromMonster(bestiary)
+  return null
+}
+
+export function saveBonusForCombatant(
+  combatant: Pick<Combatant, 'stats' | 'constitution' | 'source'>,
+  ability: Ability,
+  monster?: Parameters<typeof combatantStatsFromMonster>[0] | null,
+): number {
+  const stats =
+    combatant.stats ??
+    (monster && combatant.source === 'bestiary' ? combatantStatsFromMonster(monster) : null)
+  const score = stats ? stats[ability] : ability === 'con' ? Number(combatant.constitution ?? 10) : 10
+  return monsterSaveBonus(stats?.savingThrows ?? '', ability, score)
 }
 
 export function resolveSavingThrow(opts: { d20: number; modifier: number; dc: number }) {

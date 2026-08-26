@@ -121,7 +121,8 @@ create table if not exists public.combatants (
   death_state text not null default 'ok',
   death_success int not null default 0,
   death_fail int not null default 0,
-  turn_economy_json jsonb not null default '{"action":false,"bonus":false,"reaction":false,"movement":false}'::jsonb
+  turn_economy_json jsonb not null default '{"action":false,"bonus":false,"reaction":false,"movement":false}'::jsonb,
+  stats_json jsonb
 );
 
 create table if not exists public.tokens_on_map (
@@ -241,6 +242,7 @@ alter table public.combatants add column if not exists death_state text not null
 alter table public.combatants add column if not exists death_success int not null default 0;
 alter table public.combatants add column if not exists death_fail int not null default 0;
 alter table public.combatants add column if not exists turn_economy_json jsonb not null default '{"action":false,"bonus":false,"reaction":false,"movement":false}'::jsonb;
+alter table public.combatants add column if not exists stats_json jsonb;
 
 drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int);
 drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int, uuid);

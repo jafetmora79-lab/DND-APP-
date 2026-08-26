@@ -10,6 +10,8 @@ type Props = {
   templates?: EncounterTemplate[]
   canEdit: boolean
   compact?: boolean
+  /** Hide DM notes; keep titles, status, roles, loot, and recap. */
+  playerView?: boolean
   onChange?: (hub: CampaignHub) => void
 }
 
@@ -17,7 +19,7 @@ function nid() {
   return crypto.randomUUID().slice(0, 8)
 }
 
-export function CampaignHubPanel({ hub, characters, templates = [], canEdit, compact, onChange }: Props) {
+export function CampaignHubPanel({ hub, characters, templates = [], canEdit, compact, playerView, onChange }: Props) {
   const data = parseHub(hub ?? emptyHub())
   function patch(next: CampaignHub) {
     onChange?.(next)
@@ -39,7 +41,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
         ) : (
           <div className="mt-1">
             <div className="font-display text-lg text-gold">{data.sessionTitle || 'At the table'}</div>
-            {data.sessionNotes && <p className="text-sm text-muted">{data.sessionNotes}</p>}
+            {!playerView && data.sessionNotes && <p className="text-sm text-muted">{data.sessionNotes}</p>}
           </div>
         )}
       </section>
@@ -132,7 +134,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                     <span>{b.title}</span>
                     <span className="text-[10px] uppercase tracking-wide text-muted">{b.status}</span>
                   </div>
-                  <div className="text-xs text-muted">{b.kind}{b.notes ? ` · ${b.notes}` : ''}</div>
+                  <div className="text-xs text-muted">{b.kind}{!playerView && b.notes ? ` · ${b.notes}` : ''}</div>
                 </div>
               )}
             </li>
@@ -186,7 +188,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                 <div className="text-sm">
                   <span className="font-medium">{q.name}</span>
                   <span className="ml-2 text-[10px] uppercase tracking-wide text-muted">{q.status}</span>
-                  {q.notes && <p className="text-xs text-muted">{q.notes}</p>}
+                  {!playerView && q.notes && <p className="text-xs text-muted">{q.notes}</p>}
                 </div>
               )}
             </li>
@@ -232,7 +234,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                 <div className="text-sm">
                   <span className="font-medium">{n.name}</span>
                   {n.role && <span className="text-muted"> · {n.role}</span>}
-                  {n.notes && <p className="text-xs text-muted">{n.notes}</p>}
+                  {!playerView && n.notes && <p className="text-xs text-muted">{n.notes}</p>}
                 </div>
               )}
             </li>
@@ -296,7 +298,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                 <div className="text-sm">
                   {item.qty}× {item.name}
                   <span className="text-muted"> · {item.holder ? characters.find((c) => c.id === item.holder)?.name ?? 'carried' : 'party'}</span>
-                  {item.notes && <p className="text-xs text-muted">{item.notes}</p>}
+                  {!playerView && item.notes && <p className="text-xs text-muted">{item.notes}</p>}
                 </div>
               )}
             </li>

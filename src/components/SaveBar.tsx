@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { characterSaveBonus, monsterSaveBonus, resolveSavingThrow } from '@/lib/combat'
+import { characterSaveBonus, resolveSavingThrow, saveBonusForCombatant } from '@/lib/combat'
 import { ABILITIES, ABILITY_LABELS, type Ability, type Combatant, type Monster, type PlayerCharacter } from '@/lib/types'
 import { proficiencyBonus } from '@/lib/utils'
 
@@ -25,11 +25,7 @@ export function SaveBar({ combatants, selectedId, characters, monster, compact }
     if (pc) {
       return characterSaveBonus(pc.sheet.abilities[ability], Boolean(pc.sheet.savingThrowProf[ability]), proficiencyBonus(pc.sheet.level))
     }
-    const score =
-      monster && target.source === 'bestiary'
-        ? ({ str: monster.str, dex: monster.dex, con: monster.con, int: monster.int, wis: monster.wis, cha: monster.cha }[ability] ?? 10)
-        : 10
-    return monsterSaveBonus(monster?.savingThrows ?? '', ability, score)
+    return saveBonusForCombatant(target, ability, monster)
   }, [ability, monster, pc, target])
 
   if (!target) return null
