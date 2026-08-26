@@ -6,8 +6,8 @@ how a night at the table flows. Written from the running code, not a roadmap.
 
 This is a campaign companion for Dungeons & Dragons 5e at a REAL table. Dice
 are rolled in person. The app tracks the map, tokens, HP, turns, sheets, and
-the campaign notebook. It is not a VTT with lighting, sound, or a rules engine
-that rolls for you.
+the campaign notebook. It is not a VTT with hex grids, sound, or a rules engine
+that rolls attacks for you. Fog uses day/night/inside plus darkvision and walls.
 
 
 WHAT YOU SEE (SCREENS)
@@ -89,7 +89,8 @@ PREP LIBRARY
 MAPS
   Square grid. One square = 5 feet. Typical 20×15, size is editable.
   Blank grid or a background picture.
-  Paint blocked squares (walls, pits). Tokens cannot stop there.
+  Paint walls (block walking and sight), holes, difficult, ice, fire, water.
+  Tokens cannot stop on walls or holes. Difficult/ice/fire/water cost 10 ft.
   Map maker is on the 5-ft grid only (no hex, no freehand walls).
 
 BESTIARY
@@ -187,12 +188,14 @@ MAP
   DM can drag any token. Off-turn DM nudges do not spend movement.
 
 FOG
-  Tools: Move, Reveal, Hide, Fog on/off.
-  Reveal with fog off blacks the map and turns fog on.
-  Hide turns fog on without blacking everything; paint squares to hide.
-  Hide/Reveal paint through tokens (click the goblin to hide that square).
+  Tools: Move, Day, Night, Inside, Reveal, Hide, Fog on/off.
+  Day turns fog off. Night turns fog on and each player sees out to their
+  character's darkvision (sheet field, race, or "Darkvision 60 ft" in notes).
+  Inside uses a long range so walls/rooms matter more than darkness.
+  Walls block line of sight; you cannot see through a blocked square unless
+  you walk around it. Reveal/Hide still paint extra hidden squares.
   When fog is on, players do not see unrevealed squares (solid black).
-  DM still sees dimmed hidden squares.
+  DM overlay shows the party's combined vision.
   Player live payloads omit tokens in unrevealed fog and tokens marked
   not visible to players. Tracker still lists combatants.
 
@@ -322,6 +325,7 @@ HOSTED SQL CHEAT SHEET (EXISTING PROJECTS)
   migrate-combat-completeness.sql advantage, death saves, turn economy
   migrate-campaign-mvp.sql        hub_json, combatant stats_json
   migrate-per-turn-movement.sql   speed_feet, movement_remaining
+  migrate-vision-terrain.sql      player read of fight bestiary rows
 
 Then: notify pgrst, 'reload schema';
 

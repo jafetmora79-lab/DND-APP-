@@ -156,7 +156,7 @@ function snapshot(campaignId: string) {
   const missingBestiaryIds = [
     ...new Set(
       combatants
-        .filter((c) => c.source === 'bestiary' && !statsForLiveCombatant(c, null))
+        .filter((c) => c.source === 'bestiary')
         .map((c) => String(c.source_id ?? ''))
         .filter(Boolean),
     ),
@@ -235,6 +235,7 @@ function snapshot(campaignId: string) {
       visibleToPlayers: Boolean(t.visible_to_players),
     })),
     characters: characters.map((c) => characterFromRow(c)),
+    monsters: [...bestiaryById.values()].map(monsterFromRow),
   }
 }
 
@@ -812,6 +813,7 @@ app.post('/api/campaigns/:id/instances', requireDm, (req, res) => {
   const instanceId = spawnFromTemplate(param(req, 'id'), req.body.templateId, {
     name: req.body.name,
     fog: Boolean(req.body.fog),
+    lighting: req.body.lighting,
     surpriseParty: Boolean(req.body.surpriseParty),
     surpriseMonsters: Boolean(req.body.surpriseMonsters),
   })
@@ -1601,10 +1603,11 @@ app.patch('/api/tokens/:id', requireUser, (req, res) => {
   const nextY = req.body.y ?? t.y
   const moving = req.body.x != null && req.body.y != null
   let gridSize = 70
+  let battle: ReturnType<typeof mapFromDb> | undefined
   if (inst.map_id && moving) {
     const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(inst.map_id) as Record<string, unknown> | undefined
     if (map) {
-      const battle = mapFromDb(map)
+      battle = mapFromDb(map)
       gridSize = battle.gridSize
       const { col, row } = pixelToCell(Number(nextX), Number(nextY), battle.gridSize)
       if (tokenOccupiesBlocked(battle.blocked, col, row, battle.gridCols, battle.gridRows, Number(t.size_squares ?? 1))) {
@@ -1621,6 +1624,9 @@ app.patch('/api/tokens/:id', requireUser, (req, res) => {
         { x: Number(t.x), y: Number(t.y) },
         { x: Number(nextX), y: Number(nextY) },
         gridSize,
+        battle?.blocked,
+        battle?.gridCols,
+        battle?.gridRows,
       )
     }
   } catch (err) {

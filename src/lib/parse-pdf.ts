@@ -2,6 +2,7 @@ import { PDFDocument, PDFCheckBox, PDFDropdown, PDFRadioGroup, PDFTextField } fr
 import { extractPdfWidgetFields, indexPdfFields } from './extract-pdf-fields.ts'
 import { abilityMod } from './utils.ts'
 import { emptySheet, type Ability, type CharacterSheetData } from './types.ts'
+import { parseDarkvisionFt } from './vision.ts'
 
 function text(fields: Record<string, string>, ...names: string[]) {
   for (const n of names) {
@@ -198,6 +199,8 @@ export async function parseCharacterPdf(buffer: ArrayBuffer | Uint8Array) {
   sheet.notes = [text(fields, 'AdditionalNotes', 'Notes'), text(fields, 'ProficienciesLang'), text(fields, 'SaveModifiers')]
     .filter(Boolean)
     .join('\n')
+  const dv = parseDarkvisionFt(sheet.features, sheet.notes, sheet.race)
+  if (dv > 0) sheet.darkvisionFt = dv
 
   for (const ab of Object.keys(ABILITY_FIELDS) as Ability[]) {
     sheet.abilities[ab] = num(fields, ...ABILITY_FIELDS[ab]) ?? 10

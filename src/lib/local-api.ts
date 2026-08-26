@@ -83,7 +83,7 @@ export const localApi = {
   startInstance: (campaignId: string, templateId: string, opts?: StartFightOpts) =>
     req<{ instanceId: string }>(`/api/campaigns/${campaignId}/instances`, {
       method: 'POST',
-      body: JSON.stringify({ templateId, name: opts?.name, fog: opts?.fog, surpriseParty: opts?.surpriseParty, surpriseMonsters: opts?.surpriseMonsters }),
+      body: JSON.stringify({ templateId, name: opts?.name, fog: opts?.fog, lighting: opts?.lighting, surpriseParty: opts?.surpriseParty, surpriseMonsters: opts?.surpriseMonsters }),
     }),
   setStatus: (id: string, status: string) => req(`/api/instances/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
   openSession: (campaignId: string, encounterInstanceId: string | null, opts?: { rotateJoinCode?: boolean; tablePhase?: TablePhase }) =>

@@ -24,6 +24,7 @@ import {
 import { cn, DEFAULT_SCRATCH_CELL, mapFeet, nearestWalkableCell, playerStartOrigin, spreadCells, tokenOccupiesBlocked, tokenSizeSquares } from '@/lib/utils'
 import { monsterTokenLook, playerTokenLook, templateReady } from '@/lib/token-look'
 import { copyText } from '@/lib/copy'
+import { LanguageToggle } from '@/lib/i18n'
 import { CampaignHubPanel } from '@/components/CampaignHubPanel'
 import { emptyHub, parseHub, sortTemplates } from '@/lib/campaign-hub'
 
@@ -223,7 +224,7 @@ export function Prep() {
     const r = await api.uploadMap(campaignId, form)
     await reload()
     setEditingMapId(r.map.id)
-    setMsg('Picture attached as background. Paint blocked squares on the 5-ft grid.')
+    setMsg('Picture attached as background. Paint walls and terrain on the 5-ft grid.')
   }
 
   async function createBlankMap() {
@@ -236,7 +237,7 @@ export function Prep() {
     })
     await reload()
     setEditingMapId(r.map.id)
-    setMsg(`Blank ${newMapCols}×${newMapRows} grid created (${mapFeet(newMapCols, newMapRows)}). Paint blocked squares, then use it in an encounter.`)
+    setMsg(`Blank ${newMapCols}×${newMapRows} grid created (${mapFeet(newMapCols, newMapRows)}). Paint walls and terrain, then use it in an encounter.`)
   }
 
   async function saveMonster() {
@@ -294,9 +295,12 @@ export function Prep() {
           </Link>
           <h1 className="font-display text-3xl text-gold-2">Prep library</h1>
         </div>
-        <Button asChild>
-          <Link to={`/dm/${campaignId}/live`}>Open live session</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <LanguageToggle />
+          <Button asChild>
+            <Link to={`/dm/${campaignId}/live`}>Open live session</Link>
+          </Button>
+        </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-1">
         {tabs.map((t) => (
@@ -376,7 +380,7 @@ export function Prep() {
             </div>
             <label className="flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-line bg-panel p-4 text-center text-muted hover:text-ink">
               <span className="font-display text-xl text-gold">Optional background</span>
-              <span className="mt-2 max-w-xs text-sm">Upload a picture to start a map with scenery under the grid. You still paint blocked squares on the 5-ft grid itself.</span>
+              <span className="mt-2 max-w-xs text-sm">Upload a picture to start a map with scenery under the grid. You still paint walls and terrain on the 5-ft grid itself.</span>
               <span className="mt-1 text-xs">PNG, JPG, WebP, or SVG</span>
               <input
                 type="file"
@@ -408,7 +412,7 @@ export function Prep() {
                 <div className="font-display text-lg text-gold">{m.name}</div>
                 <p className="text-xs text-muted">
                   {m.gridCols}×{m.gridRows} squares · {mapFeet(m.gridCols, m.gridRows)}
-                  {m.blocked?.some((v) => v === 1) ? ' · blocked squares painted' : ''}
+                  {m.blocked?.some((v) => v > 0) ? ' · terrain painted' : ''}
                 </p>
                 <div className="mt-2 flex gap-2">
                   <Button size="sm" onClick={() => setEditingMapId(m.id)}>

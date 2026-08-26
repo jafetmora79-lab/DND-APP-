@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { LanguageToggle } from '@/lib/i18n'
 import type { Campaign } from '@/lib/types'
 
 export function Campaigns() {
@@ -41,9 +42,12 @@ export function Campaigns() {
           <p className="text-xs uppercase tracking-[0.3em] text-gold">{user && 'name' in user ? user.name : 'Dungeon Master'}</p>
           <h1 className="font-display text-3xl text-gold-2">Campaigns</h1>
         </div>
-        <Button variant="ghost" onClick={() => { logout(); nav('/') }}>
-          Sign out
-        </Button>
+        <div className="flex items-center gap-2">
+          <LanguageToggle />
+          <Button variant="ghost" onClick={() => { logout(); nav('/') }}>
+            Sign out
+          </Button>
+        </div>
       </div>
       <p className="mt-2 text-sm text-muted">
         Each campaign has a hub (timeline, quests, NPCs, loot), maps, encounter templates, and characters. Your monster bestiary is shared across all of them.

@@ -133,18 +133,83 @@ export function mapFeet(cols: number, rows: number) {
   return `${cols * FEET_PER_SQUARE} ft × ${rows * FEET_PER_SQUARE} ft`
 }
 
+/** Terrain codes stored in map.blocked / blocked_cells. Old maps used only 0|1. */
+export const TERRAIN = {
+  OPEN: 0,
+  WALL: 1,
+  HOLE: 2,
+  DIFFICULT: 3,
+  SLIPPERY: 4,
+  FIRE: 5,
+  WATER: 6,
+} as const
+
+export type TerrainCode = (typeof TERRAIN)[keyof typeof TERRAIN]
+
+export const TERRAIN_LABEL: Record<number, string> = {
+  [TERRAIN.OPEN]: 'Open',
+  [TERRAIN.WALL]: 'Wall',
+  [TERRAIN.HOLE]: 'Hole',
+  [TERRAIN.DIFFICULT]: 'Difficult',
+  [TERRAIN.SLIPPERY]: 'Slippery',
+  [TERRAIN.FIRE]: 'Fire',
+  [TERRAIN.WATER]: 'Water',
+}
+
 export function emptyBlocked(cols: number, rows: number): number[] {
   return Array.from({ length: Math.max(0, cols) * Math.max(0, rows) }, () => 0)
+}
+
+export function normalizeTerrainCode(raw: unknown): number {
+  if (raw === true || raw === '1') return TERRAIN.WALL
+  const n = Math.round(Number(raw))
+  if (!Number.isFinite(n) || n <= 0) return TERRAIN.OPEN
+  if (n > TERRAIN.WATER) return TERRAIN.OPEN
+  return n
 }
 
 export function normalizeBlocked(raw: unknown, cols: number, rows: number): number[] {
   const out = emptyBlocked(cols, rows)
   if (!Array.isArray(raw) || out.length === 0) return out
-  for (let i = 0; i < out.length; i++) {
-    const v = raw[i]
-    out[i] = v === 1 || v === true || v === '1' ? 1 : 0
-  }
+  for (let i = 0; i < out.length; i++) out[i] = normalizeTerrainCode(raw[i])
   return out
+}
+
+export function terrainAt(blocked: number[] | undefined, col: number, row: number, cols: number, rows: number) {
+  if (col < 0 || row < 0 || col >= cols || row >= rows) return TERRAIN.WALL
+  if (!blocked || blocked.length === 0) return TERRAIN.OPEN
+  return normalizeTerrainCode(blocked[row * cols + col])
+}
+
+export function isImpassableTerrain(code: number) {
+  return code === TERRAIN.WALL || code === TERRAIN.HOLE
+}
+
+export function isOpaqueTerrain(code: number) {
+  return code === TERRAIN.WALL
+}
+
+/** Feet spent to enter this square. Walls and holes are not walkable. */
+export function terrainEnterCostFeet(code: number) {
+  if (isImpassableTerrain(code)) return Infinity
+  if (code === TERRAIN.DIFFICULT || code === TERRAIN.SLIPPERY || code === TERRAIN.FIRE || code === TERRAIN.WATER) {
+    return FEET_PER_SQUARE * 2
+  }
+  return FEET_PER_SQUARE
+}
+
+export function chebyshevPath(from: { col: number; row: number }, to: { col: number; row: number }) {
+  const cells: { col: number; row: number }[] = []
+  let c = from.col
+  let r = from.row
+  while (c !== to.col || r !== to.row) {
+    if (c < to.col) c++
+    else if (c > to.col) c--
+    if (r < to.row) r++
+    else if (r > to.row) r--
+    cells.push({ col: c, row: r })
+  }
+  return cells
 }
 
 export function parseBlockedCells(raw: unknown, cols: number, rows: number): number[] {
@@ -186,7 +251,7 @@ export function isCellBlocked(
 ) {
   if (col < 0 || row < 0 || col >= cols || row >= rows) return true
   if (!blocked || blocked.length === 0) return false
-  return blocked[row * cols + col] === 1
+  return isImpassableTerrain(terrainAt(blocked, col, row, cols, rows))
 }
 
 export function tokenOccupiesBlocked(

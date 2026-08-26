@@ -4,9 +4,11 @@ import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth'
 import { publicAsset, usingSupabase } from '@/lib/config'
+import { LanguageToggle, useT } from '@/lib/i18n'
 
 export function Landing() {
   const { user, loading, loginDm, registerDm, joinPlayer } = useAuth()
+  const { t } = useT()
   const nav = useNavigate()
   const [mode, setMode] = useState<'dm' | 'join'>('dm')
   const [creating, setCreating] = useState(false)
@@ -58,20 +60,23 @@ export function Landing() {
       <div className="absolute inset-0 bg-[#11100E]/60" />
       <div className="relative z-10 mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4 py-10">
         <header className="text-center">
-          <p className="text-xs font-medium uppercase tracking-[0.4em] text-gold">Campaign companion</p>
-          <h1 className="title-gold mt-3 font-display text-4xl font-bold md:text-6xl">D&D LIVE TABLE</h1>
+          <div className="mb-3 flex justify-center">
+            <LanguageToggle />
+          </div>
+          <p className="text-xs font-medium uppercase tracking-[0.4em] text-gold">{t('landing.kicker')}</p>
+          <h1 className="title-gold mt-3 font-display text-4xl font-bold md:text-6xl">{t('landing.title')}</h1>
           <p className="mx-auto mt-4 max-w-md text-sm text-ink/85">
-            Prep the campaign, open the live table, and keep every phone on the same map, tracker, and character sheet.
+            {t('landing.blurb')}
           </p>
         </header>
 
         <div className="mt-8 rounded-xl border border-line bg-hud/90 p-6 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm">
           <div className="mb-4 flex gap-2">
             <Button variant={mode === 'dm' ? 'default' : 'ghost'} className="flex-1" type="button" onClick={() => setMode('dm')}>
-              Dungeon Master
+              {t('landing.dm')}
             </Button>
             <Button variant={mode === 'join' ? 'default' : 'ghost'} className="flex-1" type="button" onClick={() => setMode('join')}>
-              Join as player
+              {t('landing.join')}
             </Button>
           </div>
 

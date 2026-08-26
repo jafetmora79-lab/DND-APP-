@@ -4,13 +4,16 @@ import { BookOpen, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CharacterSheet } from '@/components/CharacterSheet'
 import { EncounterOutcomeOverlay } from '@/components/EncounterOutcome'
+import { InitiativePopup } from '@/components/InitiativePopup'
 import { MapBoard } from '@/components/map/MapBoard'
 import { PlayerTurnPanel, type MapPickMode } from '@/components/PlayerTurnPanel'
+import { StatBlock } from '@/components/StatBlock'
 import { TableHub } from '@/components/TableHub'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { decorateTokens } from '@/lib/combat'
+import { decorateTokens, monsterForCombatant } from '@/lib/combat'
+import { LanguageToggle } from '@/lib/i18n'
 import { useLive } from '@/lib/realtime'
 import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
 import type { Attack, EncounterSnapshot, PlayerCharacter } from '@/lib/types'
@@ -30,6 +33,8 @@ export function Player() {
   const [focusId, setFocusId] = useState<string | null>(null)
   const [mapPick, setMapPick] = useState<MapPickMode>('select')
   const [launchAttack, setLaunchAttack] = useState<{ attack: Attack; index: number } | null>(null)
+  const [initOpen, setInitOpen] = useState(true)
+  const [statOpen, setStatOpen] = useState(false)
 
   const load = useCallback(() => {
     if (!campaignId) return
@@ -56,6 +61,9 @@ export function Player() {
   const tokens = snap ? decorateTokens(snap.tokens, snap.combatants) : []
   const combat = showCombatStage(snap?.session ?? null, snap?.instance ?? null, snap?.map ?? null)
   const outcome = showOutcome(snap?.session ?? null)
+  const setup = isFightSetup(snap?.session ?? null, snap?.instance ?? null)
+  const focusedCombatant = snap?.combatants.find((c) => c.id === focusId)
+  const focusedMonster = monsterForCombatant(focusedCombatant, snap?.monsters)
 
   const onUseAttack = useCallback((attack: Attack, index: number) => {
     setLaunchAttack({ attack, index })
@@ -101,6 +109,7 @@ export function Player() {
           >
             Leave
           </Button>
+          <LanguageToggle />
         </header>
         {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
         <TableHub
@@ -145,6 +154,11 @@ export function Player() {
             {me.sheet.hpCurrent}/{me.sheet.hpMax} HP
           </div>
         )}
+        {setup && (
+          <Button size="sm" variant="outline" onClick={() => setInitOpen(true)}>
+            Initiative
+          </Button>
+        )}
         <Button size="sm" variant="outline" onClick={() => setDrawer(true)}>
           <BookOpen className="h-4 w-4" /> Sheets
         </Button>
@@ -158,6 +172,7 @@ export function Player() {
         >
           Leave
         </Button>
+        <LanguageToggle />
       </header>
       {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
 
@@ -187,6 +202,8 @@ export function Player() {
                 return
               }
               setFocusId(id)
+              const c = snap.combatants.find((row) => row.id === id)
+              setStatOpen(Boolean(c && c.source === 'bestiary'))
             }}
             onMove={
               myCombatant
@@ -323,6 +340,35 @@ export function Player() {
               ))}
             </div>
             <div className="min-h-0 flex-1 overflow-hidden pt-2">{sheet}</div>
+          </div>
+        </div>
+      )}
+
+      {setup && initOpen && campaignId && (
+        <InitiativePopup
+          instanceId={snap.instance.id}
+          campaignId={campaignId}
+          combatants={snap.combatants}
+          characters={snap.characters}
+          isDm={false}
+          myCombatantId={myCombatant?.id}
+          onSettled={refreshLive}
+          onClose={() => setInitOpen(false)}
+        />
+      )}
+
+      {statOpen && focusedMonster && (
+        <div className="fixed inset-0 z-40 flex items-end bg-black/60 md:items-stretch md:justify-end">
+          <div className="flex h-[80dvh] w-full flex-col rounded-t-2xl border border-line bg-panel p-4 md:h-full md:max-w-lg md:rounded-none">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-lg text-gold">Stat block</h2>
+              <button type="button" onClick={() => setStatOpen(false)} aria-label="Close">
+                <X />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+              <StatBlock monster={focusedMonster} />
+            </div>
           </div>
         </div>
       )}

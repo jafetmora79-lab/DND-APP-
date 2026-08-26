@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Ban, Footprints, ImagePlus, Move } from 'lucide-react'
+import { Ban, CircleDot, Droplets, Flame, Footprints, ImagePlus, Move, Snowflake } from 'lucide-react'
 import { MapBoard, type MapTool } from '@/components/map/MapBoard'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
+import { useT } from '@/lib/i18n'
 import type { BattleMap } from '@/lib/types'
-import { clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, FEET_PER_SQUARE, mapFeet, remapBlocked } from '@/lib/utils'
+import { clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, mapFeet, remapBlocked } from '@/lib/utils'
 
 type Props = {
   map: BattleMap
@@ -15,6 +16,7 @@ type Props = {
 }
 
 export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
+  const { t } = useT()
   const [draft, setDraft] = useState(map)
   const [tool, setTool] = useState<MapTool>('block')
   const [msg, setMsg] = useState('')
@@ -105,7 +107,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
           All maps
         </button>
         <h2 className="font-display text-xl text-gold-2">Map maker</h2>
-        <p className="mt-1 text-xs text-muted">Each square is {FEET_PER_SQUARE} feet. Paint walls and pits so tokens cannot stop there.</p>
+        <p className="mt-1 text-xs text-muted">{t('map.maker.blurb')}</p>
         <div className="mt-3 grid gap-3">
           <Field label="Name">
             <Input
@@ -162,14 +164,31 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
             <Button size="sm" variant={tool === 'select' ? 'default' : 'outline'} onClick={() => setTool('select')}>
               <Move className="h-4 w-4" /> Pan
             </Button>
-            <Button size="sm" variant={tool === 'block' ? 'default' : 'outline'} onClick={() => setTool('block')}>
-              <Ban className="h-4 w-4" /> Block
-            </Button>
             <Button size="sm" variant={tool === 'open' ? 'default' : 'outline'} onClick={() => setTool('open')}>
-              <Footprints className="h-4 w-4" /> Walkable
+              <Footprints className="h-4 w-4" /> {t('map.terrain.open')}
+            </Button>
+            <Button size="sm" variant={tool === 'block' ? 'default' : 'outline'} onClick={() => setTool('block')}>
+              <Ban className="h-4 w-4" /> {t('map.terrain.wall')}
+            </Button>
+            <Button size="sm" variant={tool === 'hole' ? 'default' : 'outline'} onClick={() => setTool('hole')}>
+              <CircleDot className="h-4 w-4" /> {t('map.terrain.hole')}
+            </Button>
+            <Button size="sm" variant={tool === 'difficult' ? 'default' : 'outline'} onClick={() => setTool('difficult')}>
+              {t('map.terrain.difficult')}
+            </Button>
+            <Button size="sm" variant={tool === 'slippery' ? 'default' : 'outline'} onClick={() => setTool('slippery')}>
+              <Snowflake className="h-4 w-4" /> {t('map.terrain.slippery')}
+            </Button>
+            <Button size="sm" variant={tool === 'fire' ? 'default' : 'outline'} onClick={() => setTool('fire')}>
+              <Flame className="h-4 w-4" /> {t('map.terrain.fire')}
+            </Button>
+            <Button size="sm" variant={tool === 'water' ? 'default' : 'outline'} onClick={() => setTool('water')}>
+              <Droplets className="h-4 w-4" /> {t('map.terrain.water')}
             </Button>
           </div>
-          <p className="text-xs text-muted">Blocked squares (red X) cannot be walked on. Use Walkable to clear them.</p>
+          <p className="text-xs text-muted">
+            Walls block walking and sight. Holes cannot be walked but you can see across them. Difficult, ice, fire, and water cost 10 ft per square.
+          </p>
           <div className="rounded-md border border-line p-2">
             <div className="flex items-center gap-2 text-sm">
               <ImagePlus className="h-4 w-4 text-gold" />

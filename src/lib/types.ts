@@ -202,6 +202,8 @@ export type CharacterSheetData = {
   equipment: string
   notes: string
   features: string
+  /** null = guess from race/features. 0 = none even if the race usually has it. */
+  darkvisionFt: number | null
 }
 
 export type PlayerCharacter = {
@@ -224,7 +226,10 @@ export type BattleMap = {
   gridCols: number
   gridRows: number
   gridType: 'square'
-  /** 1 = impassable (tokens cannot stop here), 0 = walkable. Length is cols * rows. */
+  /**
+   * Terrain per square (length cols * rows). 0 open, 1 wall, 2 hole, 3 difficult,
+   * 4 slippery, 5 fire, 6 water. Older maps used only 0|1.
+   */
   blocked: number[]
 }
 
@@ -391,6 +396,8 @@ export type FogState = {
   rows: number
   enabled: boolean
   revealed: number[]
+  /** day = no fog. night = darkvision range + walls. interior = rooms (walls block LOS). */
+  lighting?: 'day' | 'night' | 'interior'
 }
 
 export type CombatActivity = {
@@ -445,6 +452,8 @@ export type EncounterSnapshot = {
   combatants: Combatant[]
   tokens: MapToken[]
   characters: PlayerCharacter[]
+  /** Bestiary rows for monsters in this fight (player-safe). */
+  monsters?: Monster[]
 }
 
 export type AuthUser =
@@ -489,6 +498,7 @@ export function emptySheet(): CharacterSheetData {
     notes: '',
     features: '',
     resources: [],
+    darkvisionFt: null,
   }
 }
 

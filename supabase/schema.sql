@@ -771,6 +771,7 @@ drop policy if exists dm_accounts_self on public.dm_accounts;
 drop policy if exists campaigns_dm on public.campaigns;
 drop policy if exists campaigns_player_read on public.campaigns;
 drop policy if exists bestiary_dm on public.bestiary_monsters;
+drop policy if exists bestiary_player_fight on public.bestiary_monsters;
 drop policy if exists characters_member on public.player_characters;
 drop policy if exists characters_dm_write on public.player_characters;
 drop policy if exists characters_owner_update on public.player_characters;
@@ -797,6 +798,17 @@ create policy campaigns_player_read on public.campaigns
 
 create policy bestiary_dm on public.bestiary_monsters
   for all using (dm_account_id = auth.uid()) with check (dm_account_id = auth.uid());
+create policy bestiary_player_fight on public.bestiary_monsters
+  for select using (
+    exists (
+      select 1
+      from public.combatants c
+      join public.encounter_instances i on i.id = c.encounter_instance_id
+      where c.source = 'bestiary'
+        and c.source_id = bestiary_monsters.id::text
+        and public.plays_in_campaign(i.campaign_id)
+    )
+  );
 
 create policy characters_member on public.player_characters
   for select using (public.is_dm_of_campaign(campaign_id) or public.plays_in_campaign(campaign_id));

@@ -21,8 +21,9 @@ physical.
 2. VTT EXTRAS
 -------------
 
-No hex grids, dynamic lighting, token animation, sound, multiple maps in
-one fight, OCR of photos, or an external monster API.
+No hex grids, token animation, sound, multiple maps in
+one fight, OCR of photos, or an external monster API. Fog is day/night/inside
+with darkvision range and walls blocking sight — not a full lighting engine.
 
 
 3. CHARACTER BUILDING
@@ -38,6 +39,7 @@ feat picker, or automatic class features.
 Existing Supabase projects that predate this flow also need:
 
   supabase/migrate-campaign-flow.sql
+  supabase/migrate-vision-terrain.sql
   then:  notify pgrst, 'reload schema';
 
 New projects that ran the current schema.sql already have the RPCs.
