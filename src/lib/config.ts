@@ -7,5 +7,5 @@ export function tableEmail(name: string) {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'table'
-  return `${slug}@tables.dndlivetable.local`
+  return `${slug}@dndlivetable.app`
 }

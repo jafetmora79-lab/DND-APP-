@@ -9,6 +9,7 @@ In the Supabase dashboard:
 1. **Authentication → Providers → Email** — turn **off** “Confirm email” (table-name + passcode login has no inbox).
 2. **Authentication → Providers → Anonymous** — **enable** (players join with a personal code, not an email).
 3. Copy **Project URL** and **anon public** key from **Settings → API**.
+4. **Storage → New bucket** named `maps`, set to **public** (or run `storage-bucket.sql`).
 
 Do not put the `service_role` key in the frontend.
 
