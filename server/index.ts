@@ -8,7 +8,7 @@ import express from 'express'
 import multer from 'multer'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { sessionFromRow } from '../src/lib/session.ts'
-import { combatantStatsFromMonster, parseDeathState, parseTurnEconomy, statsForLiveCombatant } from '../src/lib/combat.ts'
+import { clampMovementRemaining, combatantStatsFromMonster, parseDeathState, parseSpeedFeet, parseTurnEconomy, statsForLiveCombatant } from '../src/lib/combat.ts'
 import { emptySheet, type AuthUser, type FogState, type NamedEntry } from '../src/lib/types.ts'
 import {
     clampGridDim,
@@ -42,6 +42,7 @@ import {
   resetTurnEconomyAt,
   setCombatTurnEconomy,
   applyHpKnockout,
+  consumeTurnMovement,
 } from './db.ts'
 import { parseCharacterPdf } from './pdf.ts'
 
@@ -214,6 +215,8 @@ function snapshot(campaignId: string) {
       deathSuccess: Number(c.death_success ?? 0),
       deathFail: Number(c.death_fail ?? 0),
       turnEconomy: parseTurnEconomy(jparse((c.turn_economy_json as string) || '{}', {})),
+      speedFeet: parseSpeedFeet(c.speed_feet ?? 30),
+      movementRemaining: Number.isFinite(Number(c.movement_remaining)) ? Math.max(0, Number(c.movement_remaining)) : parseSpeedFeet(c.speed_feet ?? 30),
     })),
     tokens: tokens.map((t) => ({
       id: t.id,
@@ -1052,9 +1055,10 @@ app.post('/api/instances/:id/combatants', requireDm, (req, res) => {
       for (let i = 0; i < qty; i++) {
         const id = i === 0 ? cid : ids.id()
         const name = qty > 1 ? `${src.name} ${i + 1}` : String(src.name)
+        const speedFeet = parseSpeedFeet(src.speed)
         db.prepare(
-          `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution, stats_json)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution, stats_json, speed_feet, movement_remaining)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         ).run(
           id,
           inst.id,
@@ -1072,6 +1076,8 @@ app.post('/api/instances/:id/combatants', requireDm, (req, res) => {
           '',
           Number(src.con ?? 10),
           JSON.stringify(combatantStatsFromMonster(src)),
+          speedFeet,
+          speedFeet,
         )
         const pos = battle
           ? walkablePixel(battle, 3 + i, 3)
@@ -1149,8 +1155,13 @@ app.patch('/api/combatants/:id', requireDm, (req, res) => {
       db.prepare('UPDATE combatants SET conditions_json = ? WHERE id = ?').run(JSON.stringify(v), c.id)
       continue
     }
-    if (k === 'turnEconomy') {
-      setCombatTurnEconomy(String(c.id), v)
+    if (k === 'speedFeet') {
+      const speed = parseSpeedFeet(v)
+      db.prepare('UPDATE combatants SET speed_feet = ? WHERE id = ?').run(speed, c.id)
+      continue
+    }
+    if (k === 'movementRemaining') {
+      db.prepare('UPDATE combatants SET movement_remaining = ? WHERE id = ?').run(clampMovementRemaining(v), c.id)
       continue
     }
     if (k === 'deathState' || k === 'deathSuccess' || k === 'deathFail') {
@@ -1281,29 +1292,64 @@ app.post('/api/instances/:id/sort-initiative', requireDm, (req, res) => {
   res.json({ ok: true })
 })
 
-app.patch('/api/tokens/:id', requireDm, (req, res) => {
+app.patch('/api/tokens/:id', requireUser, (req, res) => {
   const t = db.prepare('SELECT * FROM tokens_on_map WHERE id = ?').get(param(req, 'id')) as Record<string, unknown> | undefined
   if (!t) {
     res.status(404).json({ error: 'Not found' })
     return
   }
   const inst = instanceRow(t.encounter_instance_id as string)
-  if (!inst || !campaignOwned(inst.campaign_id as string, userOf(req).id)) {
+  if (!inst) {
     res.status(404).json({ error: 'Not found' })
     return
   }
+  const user = userOf(req)
+  const combatant = db.prepare('SELECT * FROM combatants WHERE id = ?').get(t.ref_id) as Record<string, unknown> | undefined
+  const asDm = user.role === 'dm' && campaignOwned(inst.campaign_id as string, user.id)
+  const asPlayer = Boolean(combatant && canActAsCombatant(user, combatant, inst))
+  if (!asDm && !asPlayer) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  if (asPlayer && !asDm) {
+    if (Number(combatant?.turn_order_position) !== Number(inst.current_turn_position)) {
+      res.status(400).json({ error: 'Wait for your turn to move.' })
+      return
+    }
+    if (req.body.visibleToPlayers != null || req.body.sizeSquares != null) {
+      res.status(400).json({ error: 'Only the DM can change that' })
+      return
+    }
+  }
   const nextX = req.body.x ?? t.x
   const nextY = req.body.y ?? t.y
-  if (inst.map_id && req.body.x != null && req.body.y != null) {
+  const moving = req.body.x != null && req.body.y != null
+  let gridSize = 70
+  if (inst.map_id && moving) {
     const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(inst.map_id) as Record<string, unknown> | undefined
     if (map) {
       const battle = mapFromDb(map)
+      gridSize = battle.gridSize
       const { col, row } = pixelToCell(Number(nextX), Number(nextY), battle.gridSize)
       if (tokenOccupiesBlocked(battle.blocked, col, row, battle.gridCols, battle.gridRows, Number(t.size_squares ?? 1))) {
         res.status(400).json({ error: 'That square is blocked' })
         return
       }
     }
+  }
+  try {
+    if (moving && combatant && (asPlayer || Number(combatant.turn_order_position) === Number(inst.current_turn_position))) {
+      consumeTurnMovement(
+        String(inst.id),
+        String(combatant.id),
+        { x: Number(t.x), y: Number(t.y) },
+        { x: Number(nextX), y: Number(nextY) },
+        gridSize,
+      )
+    }
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not move' })
+    return
   }
   db.prepare('UPDATE tokens_on_map SET x=?, y=?, visible_to_players=?, size_squares=? WHERE id=?').run(
     req.body.x ?? t.x,

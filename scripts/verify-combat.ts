@@ -8,14 +8,17 @@ import {
   emptyTurnEconomy,
   formatDiceUsed,
   monsterSaveBonus,
+  movementCostFeet,
   parseCombatantStats,
   parseDeathState,
   parseRollMode,
+  parseSpeedFeet,
   parseTurnEconomy,
   pickUsedD20,
   resolveDeathSave,
   resolveSavingThrow,
   saveBonusForCombatant,
+  spendMovement,
 } from '../src/lib/combat.ts'
 
 function check(name: string, fn: () => void) {
@@ -157,6 +160,24 @@ check('turn economy parse and attack block', () => {
   assert.equal(canTakeAttacks({ conditions: ['Unconscious'], deathState: 'ok' }), false)
   assert.equal(canTakeAttacks({ conditions: [], deathState: 'dying' }), false)
   assert.equal(canTakeAttacks({ conditions: [], deathState: 'ok' }), true)
+})
+
+check('per-turn movement uses the 5-ft Chebyshev grid', () => {
+  assert.equal(parseSpeedFeet('30 ft.'), 30)
+  assert.equal(parseSpeedFeet('25 ft., fly 60 ft.'), 25)
+  assert.equal(parseSpeedFeet(''), 30)
+  assert.equal(movementCostFeet({ col: 0, row: 0 }, { col: 1, row: 0 }), 5)
+  assert.equal(movementCostFeet({ col: 0, row: 0 }, { col: 2, row: 1 }), 10)
+  assert.equal(movementCostFeet({ col: 3, row: 3 }, { col: 4, row: 4 }), 5)
+  let remaining = 30
+  remaining = spendMovement(remaining, 5).remaining
+  remaining = spendMovement(remaining, 10).remaining
+  assert.equal(remaining, 15)
+  const blocked = spendMovement(remaining, 20)
+  assert.equal(blocked.ok, false)
+  assert.match(blocked.error ?? '', /Not enough movement/)
+  assert.equal(blocked.remaining, 15)
+  assert.equal(spendMovement(30, 0).remaining, 30)
 })
 
 console.log('all combat checks passed')

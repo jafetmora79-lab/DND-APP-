@@ -427,6 +427,7 @@ export function Live() {
           )}
         </div>
       </header>
+      {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <aside className="w-full shrink-0 border-b border-line p-3 lg:w-80 lg:border-b-0 lg:border-r">
@@ -524,7 +525,16 @@ export function Live() {
               }
               setSelected(id)
             }}
-            onMove={(id, x, y) => api.moveToken(id, { x, y })}
+            onMove={async (id, x, y) => {
+              try {
+                await api.moveToken(id, { x, y })
+                setError('')
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : 'Could not move'
+                setError(msg)
+                throw e instanceof Error ? e : new Error(msg)
+              }
+            }}
             onFog={onFog}
           />
           <div className="absolute left-3 top-3 flex gap-1">
