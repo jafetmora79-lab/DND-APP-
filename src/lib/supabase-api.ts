@@ -4,7 +4,7 @@ import { emptySheet, type AuthUser, type BattleMap, type FogState, type Monster,
 import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
-import { parseBlockedCells, tokenSizeSquares, templateTokenCell, walkablePixel, emptyBlocked, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked } from './utils'
+import { parseBlockedCells, tokenSizeSquares, templateTokenCell, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked } from './utils'
 import type { TableApi } from './local-api'
 
 const joinCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6)
@@ -260,7 +260,6 @@ export const supabaseApi: TableApi = {
       grid_cols: 20,
       grid_rows: 15,
       grid_type: 'square',
-      blocked_cells: emptyBlocked(20, 15),
     })
     throwIf(mapErr)
     return { campaign: { id: String(data.id), dmAccountId: user.id, name: String(data.name) } }
@@ -326,7 +325,6 @@ export const supabaseApi: TableApi = {
         grid_cols: gridCols,
         grid_rows: gridRows,
         grid_type: 'square',
-        blocked_cells: emptyBlocked(gridCols, gridRows),
       })
       .select()
       .single()
@@ -360,7 +358,6 @@ export const supabaseApi: TableApi = {
         grid_cols: gridCols,
         grid_rows: gridRows,
         grid_type: 'square',
-        blocked_cells: emptyBlocked(gridCols, gridRows),
       })
       .select()
       .single()
