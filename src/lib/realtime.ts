@@ -25,6 +25,7 @@ export function useLive(campaignId: string | undefined, onSnap: (s: EncounterSna
         .on('postgres_changes', { event: '*', schema: 'public', table: 'encounter_instances', filter: `campaign_id=eq.${campaignId}` }, reload)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'live_sessions', filter: `campaign_id=eq.${campaignId}` }, reload)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'player_characters', filter: `campaign_id=eq.${campaignId}` }, reload)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns', filter: `id=eq.${campaignId}` }, reload)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'combatants' }, reload)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'tokens_on_map' }, reload)
         .subscribe()

@@ -46,7 +46,7 @@ export function Campaigns() {
         </Button>
       </div>
       <p className="mt-2 text-sm text-muted">
-        Each campaign has its own maps, encounter templates, and characters. Your monster bestiary is shared across all of them.
+        Each campaign has a hub (timeline, quests, NPCs, loot), maps, encounter templates, and characters. Your monster bestiary is shared across all of them.
       </p>
       {error && <p className="mt-3 text-blood">{error}</p>}
       <form className="mt-6 flex gap-2" onSubmit={create}>
@@ -63,7 +63,12 @@ export function Campaigns() {
           <li key={c.id} className="flex items-center justify-between rounded-xl border border-line bg-panel px-4 py-4">
             <div>
               <div className="font-display text-xl text-gold">{c.name}</div>
-              <div className="text-sm text-muted">Prep library and live session</div>
+              <div className="text-sm text-muted">
+                {c.hub?.sessionTitle || 'Prep library and live session'}
+                {c.hub?.quests?.some((q) => q.status === 'open')
+                  ? ` · ${c.hub.quests.filter((q) => q.status === 'open').length} open quests`
+                  : ''}
+              </div>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" asChild>

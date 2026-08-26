@@ -22,7 +22,7 @@ export function EncounterOutcomeOverlay({ outcome, encounterName, isDm, busy, on
         <h2 className="font-display text-5xl md:text-7xl">{won ? 'Victory' : 'Defeat'}</h2>
         <p className="mx-auto mt-3 max-w-md text-muted">
           {won
-            ? 'The party holds the field. Catch your breath at the table, then take the road to whatever comes next.'
+            ? 'The party holds the field. XP and loot from the encounter template, if you set them, are on the campaign hub and character sheets.'
             : 'The field is lost. Fall back to the table, bind wounds, and decide how the campaign continues.'}
         </p>
         {isDm ? (

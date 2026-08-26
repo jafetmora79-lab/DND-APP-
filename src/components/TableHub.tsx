@@ -3,8 +3,10 @@ import { Check, ImagePlus, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AmbianceStage } from '@/components/AmbianceStage'
-import type { EncounterInstance, EncounterOutcome, EncounterTemplate, PlayerCharacter } from '@/lib/types'
+import type { CampaignHub, EncounterInstance, EncounterOutcome, EncounterTemplate, PlayerCharacter } from '@/lib/types'
 import { templateReady } from '@/lib/token-look'
+import { sortTemplates } from '@/lib/campaign-hub'
+import { CampaignHubPanel } from '@/components/CampaignHubPanel'
 import { cn } from '@/lib/utils'
 
 type DmProps = {
@@ -25,6 +27,7 @@ type Props = {
   imageUrl: string | null
   caption: string
   lastOutcome: EncounterOutcome | null
+  hub?: CampaignHub | null
   characters: PlayerCharacter[]
   selectedId: string | null
   onSelectCharacter: (id: string) => void
@@ -37,6 +40,7 @@ export function TableHub({
   imageUrl,
   caption,
   lastOutcome,
+  hub,
   characters,
   selectedId,
   onSelectCharacter,
@@ -126,14 +130,16 @@ export function TableHub({
             )}
             <h3 className="text-xs uppercase tracking-wider text-muted">Next encounter</h3>
             <ul className="mt-2 space-y-2">
-              {dm.templates.map((t) => (
+              {sortTemplates(dm.templates).map((t) => (
                 <li key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 truncate">
                       {templateReady(t) && <Check className="h-4 w-4 shrink-0 text-moss" aria-label="Ready" />}
                       <span className="truncate">{t.name}</span>
                     </div>
-                    <div className="truncate text-xs text-muted">{t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')}</div>
+                    <div className="truncate text-xs text-muted">
+                      {[t.difficulty, t.objective, t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')}
+                    </div>
                   </div>
                   <Button size="sm" variant="ember" disabled={dm.busy} onClick={() => dm.onStart(t.id)}>
                     Start
@@ -163,6 +169,11 @@ export function TableHub({
           ))}
           {characters.length === 0 && <p className="text-sm text-muted">No characters in this campaign yet.</p>}
         </div>
+        {hub && (
+          <div className="max-h-64 overflow-y-auto border-b border-line p-3">
+            <CampaignHubPanel hub={hub} characters={characters} templates={dm?.templates} canEdit={false} compact />
+          </div>
+        )}
         <div className="min-h-0 flex-1 overflow-y-auto p-3">{sheet}</div>
       </aside>
     </div>

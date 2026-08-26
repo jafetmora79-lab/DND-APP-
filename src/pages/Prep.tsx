@@ -24,8 +24,10 @@ import {
 import { cn, DEFAULT_SCRATCH_CELL, mapFeet, nearestWalkableCell, playerStartOrigin, spreadCells, tokenOccupiesBlocked, tokenSizeSquares } from '@/lib/utils'
 import { monsterTokenLook, playerTokenLook, templateReady } from '@/lib/token-look'
 import { copyText } from '@/lib/copy'
+import { CampaignHubPanel } from '@/components/CampaignHubPanel'
+import { emptyHub, parseHub, sortTemplates } from '@/lib/campaign-hub'
 
-const tabs = ['Maps', 'Bestiary', 'Encounters', 'Characters'] as const
+const tabs = ['Campaign', 'Maps', 'Bestiary', 'Encounters', 'Characters'] as const
 
 function blankMonster(): Partial<Monster> {
   return {
@@ -175,14 +177,23 @@ export function Prep() {
   const [beastFilter, setBeastFilter] = useState('')
   const [copied, setCopied] = useState('')
   const [placingCharacterId, setPlacingCharacterId] = useState<string | null>(null)
+  const [hub, setHub] = useState(emptyHub())
 
   async function reload() {
     if (!campaignId) return
-    const [m, b, t, c] = await Promise.all([api.maps(campaignId), api.bestiary(), api.templates(campaignId), api.characters(campaignId)])
+    const [m, b, t, c, camps] = await Promise.all([
+      api.maps(campaignId),
+      api.bestiary(),
+      api.templates(campaignId),
+      api.characters(campaignId),
+      api.campaigns(),
+    ])
     setMaps(m.maps)
     setMonsters(b.monsters)
     setTemplates(t.templates)
     setCharacters(c.characters)
+    const mine = camps.campaigns.find((x) => x.id === campaignId)
+    if (mine?.hub) setHub(parseHub(mine.hub))
   }
 
   useEffect(() => {
@@ -303,6 +314,30 @@ export function Prep() {
         <p className={cn('mt-3 text-sm', /could not|before saving|run migrate/i.test(msg) ? 'text-blood' : 'text-moss')}>
           {msg}
         </p>
+      )}
+
+      {tab === 'Campaign' && (
+        <div className="mt-6 rounded-xl border border-line bg-panel p-4">
+          <h2 className="font-display text-xl text-gold">Campaign hub</h2>
+          <p className="mt-1 text-sm text-muted">
+            Session timeline, quests, NPCs, and party loot. The live table shows this to everyone between fights.
+          </p>
+          <div className="mt-4">
+            <CampaignHubPanel hub={hub} characters={characters} templates={templates} canEdit onChange={setHub} />
+          </div>
+          <Button
+            className="mt-4"
+            onClick={() => {
+              if (!campaignId) return
+              api
+                .patchCampaign(campaignId, { hub })
+                .then(() => setMsg('Campaign hub saved.'))
+                .catch((e) => setMsg(e instanceof Error ? e.message : 'Could not save the hub.'))
+            }}
+          >
+            Save campaign hub
+          </Button>
+        </div>
       )}
 
       {tab === 'Maps' && (
@@ -459,6 +494,26 @@ export function Prep() {
             <div className="mt-3 grid gap-3">
               <Field label="Name">
                 <Input value={tpl.name ?? ''} onChange={(e) => setTpl({ ...tpl, name: e.target.value })} />
+              </Field>
+              <Field label="Objective">
+                <Input value={tpl.objective ?? ''} onChange={(e) => setTpl({ ...tpl, objective: e.target.value })} placeholder="Hold the bridge / rescue Sildar" />
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Difficulty">
+                  <Input value={tpl.difficulty ?? ''} onChange={(e) => setTpl({ ...tpl, difficulty: e.target.value })} placeholder="Easy / Deadly" />
+                </Field>
+                <Field label="XP award">
+                  <Input type="number" min={0} value={tpl.xpAward ?? 0} onChange={(e) => setTpl({ ...tpl, xpAward: Number(e.target.value) || 0 })} />
+                </Field>
+              </div>
+              <Field label="Notes">
+                <Input value={tpl.notes ?? ''} onChange={(e) => setTpl({ ...tpl, notes: e.target.value })} placeholder="Tactics, terrain, secrets…" />
+              </Field>
+              <Field label="Loot on win">
+                <Input value={tpl.lootNotes ?? ''} onChange={(e) => setTpl({ ...tpl, lootNotes: e.target.value })} placeholder="Bag of 15 gp, potion of healing" />
+              </Field>
+              <Field label="Play order">
+                <Input type="number" value={tpl.sortOrder ?? 0} onChange={(e) => setTpl({ ...tpl, sortOrder: Number(e.target.value) || 0 })} />
               </Field>
               <Field label="Map">
                 <select
@@ -691,10 +746,27 @@ export function Prep() {
                     variant="ghost"
                     onClick={() => {
                       setPlacingCharacterId(null)
-                      setTpl({ name: '', mapId: '', monsters: [], characters: [] })
+                      setTpl({ name: '', mapId: '', monsters: [], characters: [], notes: '', objective: '', difficulty: '', xpAward: 0, lootNotes: '', sortOrder: templates.length })
                     }}
                   >
                     New template
+                  </Button>
+                )}
+                {tpl.id && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setPlacingCharacterId(null)
+                      setTpl({
+                        ...tpl,
+                        id: undefined,
+                        name: `${tpl.name ?? 'Encounter'} (copy)`,
+                        sortOrder: (tpl.sortOrder ?? 0) + 1,
+                      })
+                      setMsg('Duplicated locally — save to keep the copy.')
+                    }}
+                  >
+                    Duplicate
                   </Button>
                 )}
               </div>
@@ -782,7 +854,7 @@ export function Prep() {
               <p className="rounded-xl border border-dashed border-line p-6 text-sm text-muted">Choose a map to place starting tokens.</p>
             )}
             <ul className="space-y-3">
-              {templates.map((t) => (
+              {sortTemplates(templates).map((t) => (
                 <li key={t.id} className="rounded-xl border border-line bg-panel p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-display text-lg text-gold">{t.name}</div>
@@ -796,6 +868,11 @@ export function Prep() {
                     {t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ') || 'No monsters yet'}
                     {(t.characters?.length ?? 0) > 0 ? ` · ${t.characters!.map((c) => c.name).join(', ')}` : ''}
                   </p>
+                  {(t.difficulty || t.objective || t.xpAward) && (
+                    <p className="text-xs text-gold">
+                      {[t.difficulty, t.objective, t.xpAward ? `${t.xpAward} XP` : ''].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
                   <div className="mt-2 flex gap-2">
                     <Button
                       size="sm"

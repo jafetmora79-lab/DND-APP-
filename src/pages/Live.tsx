@@ -18,6 +18,7 @@ import { showCombatStage, showOutcome } from '@/lib/session'
 import type { Attack, EncounterInstance, EncounterSnapshot, EncounterTemplate, FogState, Monster, RollMode } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
+import { markBeatForTemplate, parseHub, sortTemplates } from '@/lib/campaign-hub'
 
 export function Live() {
   const { campaignId } = useParams()
@@ -153,6 +154,10 @@ export function Live() {
       }
       const r = await api.startInstance(campaignId, templateId)
       await api.openSession(campaignId, r.instanceId)
+      const hub = parseHub(snap?.campaign.hub)
+      if (hub.beats.some((b) => b.templateId === templateId)) {
+        await api.patchCampaign(campaignId, { hub: markBeatForTemplate(hub, templateId, 'active') })
+      }
       setPickerOpen(false)
       setFinalizeOpen(false)
       setPending(null)
@@ -361,6 +366,7 @@ export function Live() {
           imageUrl={snap.session?.ambianceImageUrl ?? null}
           caption={snap.session?.ambianceCaption ?? ''}
           lastOutcome={snap.session?.lastOutcome ?? null}
+          hub={snap.campaign.hub}
           characters={snap.characters}
           selectedId={hubCharacter?.id ?? null}
           onSelectCharacter={setSheetId}
@@ -681,7 +687,7 @@ export function Live() {
               </section>
             )}
             <ul className="mt-4 space-y-2">
-              {templates.map((t) => (
+              {sortTemplates(templates).map((t) => (
                 <li key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2">
                   <div className="min-w-0">
                     <div className="truncate">{t.name}</div>

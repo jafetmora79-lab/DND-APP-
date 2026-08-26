@@ -13,7 +13,8 @@ create table if not exists public.dm_accounts (
 create table if not exists public.campaigns (
   id uuid primary key default gen_random_uuid(),
   dm_account_id uuid not null references public.dm_accounts (id) on delete cascade,
-  name text not null
+  name text not null,
+  hub_json jsonb not null default '{}'::jsonb
 );
 
 create table if not exists public.bestiary_monsters (
@@ -232,6 +233,7 @@ grant execute on function public.join_table(text, text) to authenticated;
 grant execute on function public.is_dm_of_campaign(uuid) to authenticated;
 grant execute on function public.plays_in_campaign(uuid) to authenticated;
 
+alter table public.campaigns add column if not exists hub_json jsonb not null default '{}'::jsonb;
 alter table public.encounter_templates add column if not exists characters_json jsonb not null default '[]'::jsonb;
 alter table public.combatants add column if not exists constitution int not null default 10;
 alter table public.combatants add column if not exists advantage_against_json jsonb not null default '[]'::jsonb;
@@ -745,6 +747,7 @@ alter publication supabase_realtime add table public.combatants;
 alter publication supabase_realtime add table public.tokens_on_map;
 alter publication supabase_realtime add table public.live_sessions;
 alter publication supabase_realtime add table public.player_characters;
+alter publication supabase_realtime add table public.campaigns;
 
 insert into storage.buckets (id, name, public)
 values ('maps', 'maps', true)

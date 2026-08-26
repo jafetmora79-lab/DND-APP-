@@ -4,10 +4,12 @@ import { fileURLToPath } from 'node:url'
 import bcrypt from 'bcryptjs'
 import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
-import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type FogState, type NamedEntry, type TemplateCharacter, type TemplateMonster } from '../src/lib/types.ts'
+import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type FogState, type NamedEntry } from '../src/lib/types.ts'
 import { cellCenter, parseBlockedCells, playerStartOrigin, spreadCells, tokenCellKeys, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
 import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, isAttackInRange, parseAttackBonus, parseDeathState, parseRangeFeet, parseRollMode, parseTurnEconomy, pickUsedD20, resolveDeathSave, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { loadSrdMonsters } from './srd.ts'
+import { applyEncounterRewards, emptyBrief, parseHub } from '../src/lib/campaign-hub.ts'
+import { unpackTemplateJson } from '../src/lib/template-json.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const dataDir = path.join(root, 'data')
@@ -43,6 +45,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
   id TEXT PRIMARY KEY,
   dm_account_id TEXT NOT NULL,
   name TEXT NOT NULL,
+  hub_json TEXT NOT NULL DEFAULT '{}',
   FOREIGN KEY (dm_account_id) REFERENCES dm_accounts(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS bestiary_monsters (
@@ -172,6 +175,11 @@ CREATE TABLE IF NOT EXISTS live_sessions (
 );
 `)
 
+try {
+  db.exec(`ALTER TABLE campaigns ADD COLUMN hub_json TEXT NOT NULL DEFAULT '{}'`)
+} catch {
+  /* already present */
+}
 try {
   db.exec(`ALTER TABLE maps ADD COLUMN blocked_cells TEXT NOT NULL DEFAULT '[]'`)
 } catch {
@@ -397,8 +405,9 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
     | undefined
   if (!template) throw new Error('Template not found')
   const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(template.map_id) as Record<string, unknown>
-  const monsters = jparse<TemplateMonster[]>(template.monsters_json as string, [])
-  const starters = jparse<TemplateCharacter[]>((template.characters_json as string) || '[]', [])
+  const packed = unpackTemplateJson(template)
+  const monsters = packed.monsters
+  const starters = packed.characters
   const instanceId = ids.id()
   const cell = Number(map.grid_size)
   db.prepare(
@@ -812,6 +821,43 @@ function lookupAttack(attacker: Record<string, unknown>, attackIndex: number) {
   return attack
 }
 
+export function applyFinishRewards(campaignId: string, instanceId: unknown, outcome: 'won' | 'lost') {
+  const camp = db.prepare('SELECT hub_json FROM campaigns WHERE id = ?').get(campaignId) as { hub_json?: string } | undefined
+  if (!camp) return
+  let brief = emptyBrief()
+  let encounterName = 'Encounter'
+  let templateId: string | null = null
+  if (instanceId) {
+    const inst = db.prepare('SELECT * FROM encounter_instances WHERE id = ?').get(instanceId) as Record<string, unknown> | undefined
+    if (inst) {
+      encounterName = String(inst.name ?? 'Encounter')
+      templateId = inst.encounter_template_id ? String(inst.encounter_template_id) : null
+      if (templateId) {
+        const t = db.prepare('SELECT * FROM encounter_templates WHERE id = ?').get(templateId) as Record<string, unknown> | undefined
+        if (t) brief = unpackTemplateJson(t).brief
+      }
+    }
+  }
+  const next = applyEncounterRewards({
+    hub: parseHub(jparse(camp.hub_json as string, {})),
+    outcome,
+    encounterName,
+    templateId,
+    brief,
+  })
+  db.prepare('UPDATE campaigns SET hub_json = ? WHERE id = ?').run(JSON.stringify(next.hub), campaignId)
+  if (next.xp <= 0) return
+  const chars = db.prepare('SELECT id, sheet_json FROM player_characters WHERE campaign_id = ?').all(campaignId) as {
+    id: string
+    sheet_json: string
+  }[]
+  for (const ch of chars) {
+    const sheet = jparse(ch.sheet_json, {} as Record<string, unknown>)
+    sheet.xp = Number(sheet.xp ?? 0) + next.xp
+    db.prepare('UPDATE player_characters SET sheet_json = ? WHERE id = ?').run(JSON.stringify(sheet), ch.id)
+  }
+}
+
 export function resolvePlayerAttack(opts: {
   campaignId: string
   characterId: string
@@ -929,6 +975,24 @@ function seedDemo() {
       { characterId: elaraId, name: 'Elara Voss', startX: 3, startY: 12, color: TOKEN_PALETTE[4] },
       { characterId: brokId, name: 'Brok Ironvein', startX: 4, startY: 12, color: TOKEN_PALETTE[2] },
     ]),
+  )
+  db.prepare('UPDATE campaigns SET hub_json = ? WHERE id = ?').run(
+    JSON.stringify({
+      recap: 'Gundren hired the party to escort supplies to Phandalin.',
+      sessionTitle: 'Night of the Cragmaw',
+      sessionNotes: 'Ambush on the Triboar Trail, then rumors in town.',
+      beats: [
+        { id: 'b1', kind: 'combat', title: 'Cragmaw Ambush', notes: 'Goblins on the trail.', templateId, status: 'active' },
+        { id: 'b2', kind: 'social', title: 'Stonehill Inn', notes: 'Ask about Gundren.', templateId: '', status: 'upcoming' },
+      ],
+      quests: [{ id: 'q1', name: 'Find Gundren', status: 'open', notes: 'Taken east by the Cragmaw.', npcIds: ['n1'] }],
+      npcs: [
+        { id: 'n1', name: 'Gundren Rockseeker', role: 'Patron', notes: 'Dwarf who hired the party.' },
+        { id: 'n2', name: 'Sildar Hallwinter', role: 'Ally', notes: 'Lords’ Alliance agent, missing with Gundren.' },
+      ],
+      loot: [],
+    }),
+    campaignId,
   )
 
   const instanceId = spawnFromTemplate(campaignId, templateId, 'Cragmaw Ambush')
