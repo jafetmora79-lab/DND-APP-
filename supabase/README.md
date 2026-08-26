@@ -21,7 +21,7 @@ That creates tables, row-level security, the `join_table` / `peek_join` RPCs, re
 
 If the project already had `schema.sql` applied before the map maker shipped, also run `migrate-map-maker.sql` so maps can store blocked squares.
 
-If it was applied before encounter play (one token per monster copy, player start squares, player attacks), also run `migrate-encounter-play.sql`.
+If it was applied before encounter play (one token per monster copy, player start squares, player attacks), also run `migrate-encounter-play.sql`. The app can still save player starting squares without that column (it stores them with the monster JSON); the migrate is optional for this feature.
 
 If it was applied before the campaign table (scene image between fights, next encounter, won/lost), also run `migrate-campaign-table.sql`.
 
