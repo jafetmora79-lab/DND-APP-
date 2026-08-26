@@ -83,13 +83,13 @@ export function Landing() {
           {mode === 'dm' ? (
             <form className="grid gap-3" onSubmit={submitDm}>
               {user?.role === 'dm' ? (
-                <p className="text-sm text-muted">Signed in as {user.name}. Start to open your campaigns.</p>
+                <p className="text-sm text-muted">{t('landing.signedIn', { name: user.name })}</p>
               ) : (
                 <>
-                  <Field label="Table name">
+                  <Field label={t('landing.tableName')}>
                     <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" required />
                   </Field>
-                  <Field label="Passcode">
+                  <Field label={t('landing.passcode')}>
                     <Input
                       type="password"
                       value={passcode}
@@ -99,44 +99,40 @@ export function Landing() {
                       required
                     />
                   </Field>
-                  {usingSupabase && <p className="text-xs text-muted">Hosted tables need a passcode of at least 6 characters.</p>}
+                  {usingSupabase && <p className="text-xs text-muted">{t('landing.hostedPass')}</p>}
                   <label className="flex items-center gap-2 text-sm text-muted">
                     <input type="checkbox" checked={creating} onChange={(e) => setCreating(e.target.checked)} />
-                    Claim a new table
+                    {t('landing.claim')}
                   </label>
                 </>
               )}
               {error && <p className="text-sm text-blood">{error}</p>}
               <Button type="submit" size="lg" disabled={busy || loading}>
-                {busy ? 'Opening…' : 'Start'}
+                {busy ? t('landing.opening') : t('landing.start')}
               </Button>
             </form>
           ) : (
             <form className="grid gap-3" onSubmit={submitJoin}>
-              <Field label="Tonight’s join code">
+              <Field label={t('landing.joinCode')}>
                 <Input value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} autoCapitalize="characters" required />
               </Field>
-              <Field label="Your personal character code">
+              <Field label={t('landing.personalCode')}>
                 <Input value={personal} onChange={(e) => setPersonal(e.target.value.toUpperCase())} autoCapitalize="characters" required />
               </Field>
               {error && <p className="text-sm text-blood">{error}</p>}
               <Button type="submit" size="lg" disabled={busy || loading}>
-                {busy ? 'Joining…' : 'Start'}
+                {busy ? t('landing.joining') : t('landing.start')}
               </Button>
             </form>
           )}
         </div>
 
         {usingSupabase ? (
-          <p className="mt-6 text-center text-sm text-muted">Share tonight’s join code with the phones at the table.</p>
+          <p className="mt-6 text-center text-sm text-muted">{t('landing.share')}</p>
         ) : import.meta.env.PROD ? (
-          <p className="mt-6 text-center text-sm text-muted">
-            This published copy was built without Supabase keys. Secrets are one-time. Switch Pages source to GitHub Actions, then re-run the GitHub Pages workflow.
-          </p>
+          <p className="mt-6 text-center text-sm text-muted">{t('landing.pagesHint')}</p>
         ) : (
-          <p className="mt-6 text-center text-sm text-muted">
-            Sample table: Hearthkeeper / torch. Players join HEARTH with ELARA7K2 or BROK4M9X.
-          </p>
+          <p className="mt-6 text-center text-sm text-muted">{t('landing.sample')}</p>
         )}
       </div>
     </div>

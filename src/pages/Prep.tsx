@@ -24,7 +24,7 @@ import {
 import { cn, DEFAULT_SCRATCH_CELL, mapFeet, nearestWalkableCell, playerStartOrigin, spreadCells, tokenOccupiesBlocked, tokenSizeSquares } from '@/lib/utils'
 import { monsterTokenLook, playerTokenLook, templateReady } from '@/lib/token-look'
 import { copyText } from '@/lib/copy'
-import { LanguageToggle } from '@/lib/i18n'
+import { LanguageToggle, useT } from '@/lib/i18n'
 import { CampaignHubPanel } from '@/components/CampaignHubPanel'
 import { emptyHub, parseHub, sortTemplates } from '@/lib/campaign-hub'
 
@@ -158,6 +158,7 @@ function placeCharacterOnTemplate(
 
 export function Prep() {
   const { campaignId } = useParams()
+  const { t } = useT()
   const [tab, setTab] = useState<(typeof tabs)[number]>('Maps')
   const [maps, setMaps] = useState<BattleMap[]>([])
   const [monsters, setMonsters] = useState<Monster[]>([])
@@ -291,26 +292,26 @@ export function Prep() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <Link to="/dm" className="text-xs uppercase tracking-[0.3em] text-gold">
-            All campaigns
+            {t('prep.allCampaigns')}
           </Link>
-          <h1 className="font-display text-3xl text-gold-2">Prep library</h1>
+          <h1 className="font-display text-3xl text-gold-2">{t('prep.title')}</h1>
         </div>
         <div className="flex items-center gap-2">
           <LanguageToggle />
           <Button asChild>
-            <Link to={`/dm/${campaignId}/live`}>Open live session</Link>
+            <Link to={`/dm/${campaignId}/live`}>{t('prep.openLive')}</Link>
           </Button>
         </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-1">
-        {tabs.map((t) => (
+        {tabs.map((name) => (
           <button
-            key={t}
+            key={name}
             type="button"
-            className={cn('rounded-md px-3 py-1.5 text-sm', tab === t ? 'bg-gold text-bg' : 'text-muted hover:bg-panel-2')}
-            onClick={() => setTab(t)}
+            className={cn('rounded-md px-3 py-1.5 text-sm', tab === name ? 'bg-gold text-bg' : 'text-muted hover:bg-panel-2')}
+            onClick={() => setTab(name)}
           >
-            {t}
+            {t(`prep.tab.${name.toLowerCase()}`)}
           </button>
         ))}
       </div>
@@ -920,7 +921,7 @@ export function Prep() {
                 setSelectedChar(r.character)
               }}
             >
-              Create character
+              {t('prep.createCharacter')}
             </Button>
             <ul className="mt-3 space-y-1">
               {characters.map((c) => (
@@ -980,7 +981,7 @@ export function Prep() {
               />
             </div>
           ) : (
-            <p className="text-muted">Create a character to mint a personal code. Players use that code plus tonight’s join code from any device, any week.</p>
+            <p className="text-muted">{t('prep.characterHint')}</p>
           )}
         </div>
       )}

@@ -809,7 +809,7 @@ export function Live() {
                 className={cn('rounded px-2 py-1 text-xs uppercase', panel === p ? 'bg-gold text-bg' : 'text-muted')}
                 onClick={() => setPanel(p)}
               >
-                {p}
+                {t(`live.${p}`)}
               </button>
             ))}
           </div>
@@ -822,15 +822,12 @@ export function Live() {
             />
           )}
           {panel === 'sheet' && !selectedCharacter && (
-            <p className="text-sm text-muted">Select a player token or combatant to open their sheet. Every sheet is visible to the table.</p>
+            <p className="text-sm text-muted">{t('live.selectSheet')}</p>
           )}
           {panel === 'stat' && selectedMonster && <StatBlock monster={selectedMonster} />}
-          {panel === 'stat' && !selectedMonster && <p className="text-sm text-muted">Select a monster token to open its stat block.</p>}
+          {panel === 'stat' && !selectedMonster && <p className="text-sm text-muted">{t('live.selectStat')}</p>}
           {panel === 'tracker' && (
-            <p className="text-sm text-muted">
-              HP, conditions, and turn order persist with this encounter instance. Pause whenever you want — next session resumes the same fight.
-              Condition colors on the tracker match the rings around tokens. Attacks must roll higher than Armor Class; a natural 1 gives the target advantage against the attacker next turn.
-            </p>
+            <p className="text-sm text-muted">{t('live.trackerHint')}</p>
           )}
         </aside>
       </div>
