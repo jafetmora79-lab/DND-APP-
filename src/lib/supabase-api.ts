@@ -4,7 +4,7 @@ import { emptySheet, type AuthUser, type BattleMap, type FogState, type Monster,
 import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
-import { tokenSizeSquares, templateTokenCell } from './utils'
+import { parseBlockedCells, tokenSizeSquares, templateTokenCell, walkablePixel, emptyBlocked, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked } from './utils'
 import type { TableApi } from './local-api'
 
 const joinCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6)
@@ -112,15 +112,18 @@ function characterFromRow(row: Record<string, unknown>): PlayerCharacter {
 }
 
 function mapFromRow(row: Record<string, unknown>): BattleMap {
+  const gridCols = Number(row.grid_cols)
+  const gridRows = Number(row.grid_rows)
   return {
     id: String(row.id),
     campaignId: String(row.campaign_id),
     name: String(row.name),
-    imageUrl: String(row.image_url),
+    imageUrl: String(row.image_url ?? ''),
     gridSize: Number(row.grid_size),
-    gridCols: Number(row.grid_cols),
-    gridRows: Number(row.grid_rows),
+    gridCols,
+    gridRows,
     gridType: 'square',
+    blocked: parseBlockedCells(row.blocked_cells, gridCols, gridRows),
   }
 }
 
@@ -257,6 +260,7 @@ export const supabaseApi: TableApi = {
       grid_cols: 20,
       grid_rows: 15,
       grid_type: 'square',
+      blocked_cells: emptyBlocked(20, 15),
     })
     throwIf(mapErr)
     return { campaign: { id: String(data.id), dmAccountId: user.id, name: String(data.name) } }
@@ -308,6 +312,28 @@ export const supabaseApi: TableApi = {
     return { maps: (data ?? []).map((r) => mapFromRow(r as Record<string, unknown>)) }
   },
 
+  async createMap(campaignId, body) {
+    const gridCols = clampGridDim(body.gridCols, 20)
+    const gridRows = clampGridDim(body.gridRows, 15)
+    const gridSize = clampGridSize(body.gridSize, DEFAULT_SCRATCH_CELL)
+    const { data, error } = await db()
+      .from('maps')
+      .insert({
+        campaign_id: campaignId,
+        name: body.name || 'Untitled map',
+        image_url: body.imageUrl || '',
+        grid_size: gridSize,
+        grid_cols: gridCols,
+        grid_rows: gridRows,
+        grid_type: 'square',
+        blocked_cells: emptyBlocked(gridCols, gridRows),
+      })
+      .select()
+      .single()
+    throwIf(error)
+    return { map: mapFromRow(data as Record<string, unknown>) }
+  },
+
   async uploadMap(campaignId, form) {
     const file = form.get('image') as File | null
     const name = String(form.get('name') || file?.name || 'Untitled map')
@@ -322,16 +348,19 @@ export const supabaseApi: TableApi = {
       )
     }
     const { data: pub } = db().storage.from('maps').getPublicUrl(path)
+    const gridCols = clampGridDim(form.get('gridCols'), 20)
+    const gridRows = clampGridDim(form.get('gridRows'), 15)
     const { data, error } = await db()
       .from('maps')
       .insert({
         campaign_id: campaignId,
         name,
         image_url: pub.publicUrl,
-        grid_size: Number(form.get('gridSize') ?? 70),
-        grid_cols: Number(form.get('gridCols') ?? 20),
-        grid_rows: Number(form.get('gridRows') ?? 15),
+        grid_size: clampGridSize(form.get('gridSize'), 70),
+        grid_cols: gridCols,
+        grid_rows: gridRows,
         grid_type: 'square',
+        blocked_cells: emptyBlocked(gridCols, gridRows),
       })
       .select()
       .single()
@@ -339,18 +368,52 @@ export const supabaseApi: TableApi = {
     return { map: mapFromRow(data as Record<string, unknown>) }
   },
 
-  async patchMap(id, body) {
-    const { error } = await db()
-      .from('maps')
-      .update({
-        name: body.name,
-        grid_size: body.gridSize,
-        grid_cols: body.gridCols,
-        grid_rows: body.gridRows,
-      })
-      .eq('id', id)
+  async uploadMapImage(id, file) {
+    const { data: row, error: loadErr } = await db().from('maps').select('*').eq('id', id).single()
+    throwIf(loadErr)
+    const campaignId = String(row.campaign_id)
+    const path = `${campaignId}/${crypto.randomUUID()}-${file.name}`
+    const { error: upErr } = await db().storage.from('maps').upload(path, file, { upsert: true })
+    if (upErr) {
+      throw new Error(
+        upErr.message.includes('Bucket not found') || upErr.message.includes('not found')
+          ? 'Create a public Storage bucket named "maps" in Supabase, then try the upload again.'
+          : upErr.message,
+      )
+    }
+    const { data: pub } = db().storage.from('maps').getPublicUrl(path)
+    const { data, error } = await db().from('maps').update({ image_url: pub.publicUrl }).eq('id', id).select().single()
     throwIf(error)
-    return {}
+    return { map: mapFromRow(data as Record<string, unknown>) }
+  },
+
+  async patchMap(id, body) {
+    const { data: current, error: loadErr } = await db().from('maps').select('*').eq('id', id).single()
+    throwIf(loadErr)
+    const oldCols = Number(current.grid_cols)
+    const oldRows = Number(current.grid_rows)
+    const patch: Record<string, unknown> = {}
+    if (body.name != null) patch.name = body.name
+    if (body.gridSize != null) patch.grid_size = clampGridSize(body.gridSize, Number(current.grid_size))
+    if (body.gridCols != null) patch.grid_cols = clampGridDim(body.gridCols, oldCols)
+    if (body.gridRows != null) patch.grid_rows = clampGridDim(body.gridRows, oldRows)
+    if (body.imageUrl != null) patch.image_url = body.imageUrl
+    const nextCols = Number(patch.grid_cols ?? oldCols)
+    const nextRows = Number(patch.grid_rows ?? oldRows)
+    if (body.blocked != null) {
+      patch.blocked_cells = parseBlockedCells(body.blocked, nextCols, nextRows)
+    } else if (nextCols !== oldCols || nextRows !== oldRows) {
+      patch.blocked_cells = remapBlocked(
+        parseBlockedCells(current.blocked_cells, oldCols, oldRows),
+        oldCols,
+        oldRows,
+        nextCols,
+        nextRows,
+      )
+    }
+    const { data, error } = await db().from('maps').update(patch).eq('id', id).select().single()
+    throwIf(error)
+    return { map: mapFromRow(data as Record<string, unknown>) }
   },
 
   async deleteMap(id) {
@@ -527,7 +590,6 @@ export const supabaseApi: TableApi = {
       .select()
       .single()
     throwIf(iErr)
-    const cell = Number(map.grid_size)
     const specs = (template.monsters_json ?? []) as {
       bestiaryMonsterId: string
       name: string
@@ -564,15 +626,17 @@ export const supabaseApi: TableApi = {
           .single()
         throwIf(cErr)
         const { col, row } = templateTokenCell(spec, i, placed)
+        const size = tokenSizeSquares(String(src.size ?? 'Medium'))
+        const pos = walkablePixel(mapFromRow(map as Record<string, unknown>), col, row, size)
         const { error: tokErr } = await db().from('tokens_on_map').insert({
           encounter_instance_id: inst.id,
-          x: col * cell + cell / 2,
-          y: row * cell + cell / 2,
+          x: pos.x,
+          y: pos.y,
           ref_type: 'combatant',
           ref_id: comb.id,
           label,
           color: spec.color || '#c4453c',
-          size_squares: tokenSizeSquares(String(src.size ?? 'Medium')),
+          size_squares: size,
           visible_to_players: true,
         })
         throwIf(tokErr)
@@ -711,7 +775,8 @@ export const supabaseApi: TableApi = {
     const { data: inst, error: iErr } = await db().from('encounter_instances').select('*').eq('id', instanceId).single()
     throwIf(iErr)
     const { data: map } = inst.map_id ? await db().from('maps').select('*').eq('id', inst.map_id).maybeSingle() : { data: null }
-    const cell = Number(map?.grid_size ?? 70)
+    const battle = map ? mapFromRow(map as Record<string, unknown>) : null
+    const cell = battle?.gridSize ?? 70
     const { data: maxRow } = await db()
       .from('combatants')
       .select('turn_order_position')
@@ -753,10 +818,13 @@ export const supabaseApi: TableApi = {
         .single()
       throwIf(cErr)
       const { count } = await db().from('tokens_on_map').select('id', { count: 'exact', head: true }).eq('encounter_instance_id', instanceId)
+      const pos = battle
+        ? walkablePixel(battle, 2 + ((count ?? 0) % 6), 10)
+        : { x: cell * (2 + ((count ?? 0) % 6)) + cell / 2, y: cell * 10 + cell / 2 }
       await db().from('tokens_on_map').insert({
         encounter_instance_id: instanceId,
-        x: cell * (2 + ((count ?? 0) % 6)) + cell / 2,
-        y: cell * 10 + cell / 2,
+        x: pos.x,
+        y: pos.y,
         ref_type: 'combatant',
         ref_id: comb.id,
         label: mapped.name,
@@ -792,10 +860,11 @@ export const supabaseApi: TableApi = {
           .select()
           .single()
         throwIf(cErr)
+        const pos = battle ? walkablePixel(battle, 3 + i, 3) : { x: cell * (3 + i) + cell / 2, y: cell * 3 + cell / 2 }
         await db().from('tokens_on_map').insert({
           encounter_instance_id: instanceId,
-          x: cell * (3 + i) + cell / 2,
-          y: cell * 3 + cell / 2,
+          x: pos.x,
+          y: pos.y,
           ref_type: 'combatant',
           ref_id: comb.id,
           label,
@@ -866,6 +935,21 @@ export const supabaseApi: TableApi = {
   },
 
   async moveToken(id, body) {
+    if (body.x != null && body.y != null) {
+      const { data: token, error: tErr } = await db().from('tokens_on_map').select('*').eq('id', id).single()
+      throwIf(tErr)
+      const { data: inst } = await db().from('encounter_instances').select('map_id').eq('id', token.encounter_instance_id).maybeSingle()
+      if (inst?.map_id) {
+        const { data: map } = await db().from('maps').select('*').eq('id', inst.map_id).maybeSingle()
+        if (map) {
+          const battle = mapFromRow(map as Record<string, unknown>)
+          const { col, row } = pixelToCell(Number(body.x), Number(body.y), battle.gridSize)
+          if (tokenOccupiesBlocked(battle.blocked, col, row, battle.gridCols, battle.gridRows, Number(token.size_squares ?? 1))) {
+            throw new Error('That square is blocked')
+          }
+        }
+      }
+    }
     const { error } = await db()
       .from('tokens_on_map')
       .update({

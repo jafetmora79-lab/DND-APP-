@@ -78,6 +78,143 @@ export function templateTokenCell(
   return { col: baseCol + (copyIndex % 4), row: baseRow + Math.floor(copyIndex / 4) }
 }
 
+/** D&D tactical scale: one square is 5 feet. */
+export const FEET_PER_SQUARE = 5
+export const DEFAULT_SCRATCH_CELL = 48
+export const MAX_GRID_DIM = 80
+
+export function clampGridDim(n: unknown, fallback: number) {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return fallback
+  return Math.max(1, Math.min(MAX_GRID_DIM, Math.round(v)))
+}
+
+export function clampGridSize(n: unknown, fallback = DEFAULT_SCRATCH_CELL) {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return fallback
+  return Math.max(16, Math.min(128, Math.round(v)))
+}
+
+export function mapFeet(cols: number, rows: number) {
+  return `${cols * FEET_PER_SQUARE} ft × ${rows * FEET_PER_SQUARE} ft`
+}
+
+export function emptyBlocked(cols: number, rows: number): number[] {
+  return Array.from({ length: Math.max(0, cols) * Math.max(0, rows) }, () => 0)
+}
+
+export function normalizeBlocked(raw: unknown, cols: number, rows: number): number[] {
+  const out = emptyBlocked(cols, rows)
+  if (!Array.isArray(raw) || out.length === 0) return out
+  for (let i = 0; i < out.length; i++) {
+    const v = raw[i]
+    out[i] = v === 1 || v === true || v === '1' ? 1 : 0
+  }
+  return out
+}
+
+export function parseBlockedCells(raw: unknown, cols: number, rows: number): number[] {
+  if (typeof raw === 'string') {
+    try {
+      return normalizeBlocked(JSON.parse(raw), cols, rows)
+    } catch {
+      return emptyBlocked(cols, rows)
+    }
+  }
+  return normalizeBlocked(raw, cols, rows)
+}
+
+export function remapBlocked(
+  old: number[] | undefined,
+  oldCols: number,
+  oldRows: number,
+  newCols: number,
+  newRows: number,
+) {
+  const next = emptyBlocked(newCols, newRows)
+  const src = normalizeBlocked(old, oldCols, oldRows)
+  const copyCols = Math.min(oldCols, newCols)
+  const copyRows = Math.min(oldRows, newRows)
+  for (let r = 0; r < copyRows; r++) {
+    for (let c = 0; c < copyCols; c++) {
+      next[r * newCols + c] = src[r * oldCols + c]
+    }
+  }
+  return next
+}
+
+export function isCellBlocked(
+  blocked: number[] | undefined,
+  col: number,
+  row: number,
+  cols: number,
+  rows: number,
+) {
+  if (col < 0 || row < 0 || col >= cols || row >= rows) return true
+  if (!blocked || blocked.length === 0) return false
+  return blocked[row * cols + col] === 1
+}
+
+export function tokenOccupiesBlocked(
+  blocked: number[] | undefined,
+  col: number,
+  row: number,
+  cols: number,
+  rows: number,
+  sizeSquares = 1,
+) {
+  const size = Math.max(1, sizeSquares)
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (isCellBlocked(blocked, col + c, row + r, cols, rows)) return true
+    }
+  }
+  return false
+}
+
+export function nearestWalkableCell(
+  blocked: number[] | undefined,
+  col: number,
+  row: number,
+  cols: number,
+  rows: number,
+  sizeSquares = 1,
+): { col: number; row: number } | null {
+  if (!tokenOccupiesBlocked(blocked, col, row, cols, rows, sizeSquares)) return { col, row }
+  const maxR = Math.max(cols, rows)
+  for (let d = 1; d <= maxR; d++) {
+    for (let r = row - d; r <= row + d; r++) {
+      for (let c = col - d; c <= col + d; c++) {
+        if (Math.abs(c - col) !== d && Math.abs(r - row) !== d) continue
+        if (!tokenOccupiesBlocked(blocked, c, r, cols, rows, sizeSquares)) return { col: c, row: r }
+      }
+    }
+  }
+  return null
+}
+
+export function cellCenter(col: number, row: number, gridSize: number) {
+  return { x: col * gridSize + gridSize / 2, y: row * gridSize + gridSize / 2 }
+}
+
+export function pixelToCell(x: number, y: number, gridSize: number) {
+  return {
+    col: Math.round((x - gridSize / 2) / gridSize),
+    row: Math.round((y - gridSize / 2) / gridSize),
+  }
+}
+
+export function walkablePixel(
+  map: { blocked?: number[]; gridCols: number; gridRows: number; gridSize: number },
+  col: number,
+  row: number,
+  sizeSquares = 1,
+) {
+  const found =
+    nearestWalkableCell(map.blocked, col, row, map.gridCols, map.gridRows, sizeSquares) ?? { col, row }
+  return cellCenter(found.col, found.row, map.gridSize)
+}
+
 export function hpColor(current: number, max: number) {
   if (max <= 0) return 'bg-muted'
   const r = current / max

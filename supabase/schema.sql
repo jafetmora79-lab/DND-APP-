@@ -71,11 +71,12 @@ create table if not exists public.maps (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid not null references public.campaigns (id) on delete cascade,
   name text not null,
-  image_url text not null,
+  image_url text not null default '',
   grid_size int not null,
   grid_cols int not null,
   grid_rows int not null,
-  grid_type text not null default 'square'
+  grid_type text not null default 'square',
+  blocked_cells jsonb not null default '[]'::jsonb
 );
 
 create table if not exists public.encounter_templates (

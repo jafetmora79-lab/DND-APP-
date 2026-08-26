@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url'
 import bcrypt from 'bcryptjs'
 import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
-import { emptySheet, TOKEN_PALETTE, type CharacterSheetData, type FogState, type NamedEntry } from '../src/lib/types.ts'
-import { tokenSizeSquares, templateTokenCell } from '../src/lib/utils.ts'
+import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type FogState, type NamedEntry } from '../src/lib/types.ts'
+import { parseBlockedCells, templateTokenCell, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
 import { loadSrdMonsters } from './srd.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS maps (
   grid_cols INTEGER NOT NULL,
   grid_rows INTEGER NOT NULL,
   grid_type TEXT NOT NULL DEFAULT 'square',
+  blocked_cells TEXT NOT NULL DEFAULT '[]',
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS encounter_templates (
@@ -159,8 +160,30 @@ CREATE TABLE IF NOT EXISTS live_sessions (
 );
 `)
 
+try {
+  db.exec(`ALTER TABLE maps ADD COLUMN blocked_cells TEXT NOT NULL DEFAULT '[]'`)
+} catch {
+  /* already present on existing databases */
+}
+
 export function now() {
   return Date.now()
+}
+
+export function mapFromDb(row: Record<string, unknown>): BattleMap {
+  const gridCols = Number(row.grid_cols)
+  const gridRows = Number(row.grid_rows)
+  return {
+    id: String(row.id),
+    campaignId: String(row.campaign_id),
+    name: String(row.name),
+    imageUrl: String(row.image_url ?? ''),
+    gridSize: Number(row.grid_size),
+    gridCols,
+    gridRows,
+    gridType: 'square',
+    blocked: parseBlockedCells(row.blocked_cells, gridCols, gridRows),
+  }
 }
 
 export function jparse<T>(s: string, fallback: T): T {
@@ -351,19 +374,31 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
         '',
       )
       const { col, row } = templateTokenCell(spec, i, placed)
+      const size = tokenSizeSquares(String(src.size ?? 'Medium'))
+      const pos = walkablePixel(
+        {
+          blocked: parseBlockedCells(map.blocked_cells, Number(map.grid_cols), Number(map.grid_rows)),
+          gridCols: Number(map.grid_cols),
+          gridRows: Number(map.grid_rows),
+          gridSize: cell,
+        },
+        col,
+        row,
+        size,
+      )
       db.prepare(
         `INSERT INTO tokens_on_map (id, encounter_instance_id, x, y, ref_type, ref_id, label, color, size_squares, visible_to_players)
          VALUES (?,?,?,?,?,?,?,?,?,?)`,
       ).run(
         ids.id(),
         instanceId,
-        col * cell + cell / 2,
-        row * cell + cell / 2,
+        pos.x,
+        pos.y,
         'combatant',
         cid,
         label,
         spec.color || '#c4453c',
-        tokenSizeSquares(String(src.size ?? 'Medium')),
+        size,
         1,
       )
       placed++
@@ -407,14 +442,26 @@ export function addCharacterCombatant(instanceId: string, characterId: string) {
     '',
   )
   const count = db.prepare('SELECT COUNT(*) as c FROM tokens_on_map WHERE encounter_instance_id = ?').get(instanceId) as { c: number }
+  const pos = walkablePixel(
+    map
+      ? {
+          blocked: parseBlockedCells(map.blocked_cells, Number(map.grid_cols), Number(map.grid_rows)),
+          gridCols: Number(map.grid_cols),
+          gridRows: Number(map.grid_rows),
+          gridSize: cell,
+        }
+      : { blocked: [], gridCols: 20, gridRows: 15, gridSize: cell },
+    2 + (count.c % 6),
+    10,
+  )
   db.prepare(
     `INSERT INTO tokens_on_map (id, encounter_instance_id, x, y, ref_type, ref_id, label, color, size_squares, visible_to_players)
      VALUES (?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     ids.id(),
     instanceId,
-    cell * (2 + (count.c % 6)) + cell / 2,
-    cell * 10 + cell / 2,
+    pos.x,
+    pos.y,
     'combatant',
     cid,
     ch.name as string,
@@ -439,16 +486,9 @@ function seedDemo() {
   const campaignId = ids.id()
   db.prepare('INSERT INTO campaigns (id, dm_account_id, name) VALUES (?,?,?)').run(campaignId, dmId, 'Phandalin Nights')
   const mapId = ids.id()
-  db.prepare('INSERT INTO maps (id, campaign_id, name, image_url, grid_size, grid_cols, grid_rows, grid_type) VALUES (?,?,?,?,?,?,?,?)').run(
-    mapId,
-    campaignId,
-    'Cragmaw Hideout',
-    '/maps/cragmaw-hideout.svg',
-    70,
-    20,
-    15,
-    'square',
-  )
+  db.prepare(
+    'INSERT INTO maps (id, campaign_id, name, image_url, grid_size, grid_cols, grid_rows, grid_type, blocked_cells) VALUES (?,?,?,?,?,?,?,?,?)',
+  ).run(mapId, campaignId, 'Cragmaw Hideout', '/maps/cragmaw-hideout.svg', 70, 20, 15, 'square', '[]')
 
   const elaraSheet = emptySheet()
   elaraSheet.className = 'Wizard 3'
