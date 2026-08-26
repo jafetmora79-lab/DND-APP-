@@ -57,7 +57,7 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
           )}
         </div>
         {canEdit && onImportPdf && (
-          <div>
+          <div className="flex flex-wrap items-center gap-2">
             <input
               ref={fileRef}
               type="file"
@@ -71,6 +71,16 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
             <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
               Import fillable PDF
             </Button>
+            {character.sourcePdfUrl && (
+              <a
+                href={character.sourcePdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-gold underline-offset-2 hover:underline"
+              >
+                Stored PDF
+              </a>
+            )}
           </div>
         )}
       </div>

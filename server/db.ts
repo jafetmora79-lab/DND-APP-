@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs'
 import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
 import { emptySheet, TOKEN_PALETTE, type CharacterSheetData, type FogState, type NamedEntry } from '../src/lib/types.ts'
-import { tokenSizeSquares } from '../src/lib/utils.ts'
+import { tokenSizeSquares, templateTokenCell } from '../src/lib/utils.ts'
 import { loadSrdMonsters } from './srd.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -350,10 +350,7 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
         spec.color,
         '',
       )
-      const sx = spec.startX || 0
-      const sy = spec.startY || 0
-      const col = sx > 0 ? sx : 2 + (placed % 8)
-      const row = sy > 0 ? sy : 2 + Math.floor(placed / 8)
+      const { col, row } = templateTokenCell(spec, i, placed)
       db.prepare(
         `INSERT INTO tokens_on_map (id, encounter_instance_id, x, y, ref_type, ref_id, label, color, size_squares, visible_to_players)
          VALUES (?,?,?,?,?,?,?,?,?,?)`,

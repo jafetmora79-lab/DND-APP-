@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import { Field, Input, Textarea } from '@/components/ui/input'
+import { Field, Input } from '@/components/ui/input'
 import { CharacterSheet } from '@/components/CharacterSheet'
+import { MonsterForm } from '@/components/MonsterForm'
 import { StatBlock } from '@/components/StatBlock'
+import { MapBoard } from '@/components/map/MapBoard'
 import { api } from '@/lib/api'
-import { emptySheet, TOKEN_PALETTE, type BattleMap, type EncounterTemplate, type Monster, type NamedEntry, type PlayerCharacter, type TemplateMonster } from '@/lib/types'
-import { cn } from '@/lib/utils'
+import { emptySheet, TOKEN_PALETTE, type BattleMap, type EncounterTemplate, type MapToken, type Monster, type PlayerCharacter, type TemplateMonster } from '@/lib/types'
+import { cn, tokenSizeSquares } from '@/lib/utils'
 
 const tabs = ['Maps', 'Bestiary', 'Encounters', 'Characters'] as const
 
@@ -29,6 +31,10 @@ function blankMonster(): Partial<Monster> {
     cha: 10,
     savingThrows: '',
     skills: '',
+    damageVulnerabilities: '',
+    damageResistances: '',
+    damageImmunities: '',
+    conditionImmunities: '',
     senses: 'passive Perception 10',
     languages: 'Common',
     challengeRating: 0.25,
@@ -42,6 +48,25 @@ function blankMonster(): Partial<Monster> {
     lairActions: [],
     source: 'custom',
   }
+}
+
+function placementTokens(map: BattleMap, specs: TemplateMonster[], bestiary: Monster[]): MapToken[] {
+  const cell = map.gridSize
+  return specs.map((spec, i) => {
+    const src = bestiary.find((m) => m.id === spec.bestiaryMonsterId)
+    return {
+      id: `tpl-${i}`,
+      encounterInstanceId: '',
+      x: spec.startX * cell + cell / 2,
+      y: spec.startY * cell + cell / 2,
+      refType: 'combatant',
+      refId: String(i),
+      label: spec.quantity > 1 ? `${spec.name} ×${spec.quantity}` : spec.name,
+      color: spec.color,
+      sizeSquares: tokenSizeSquares(src?.size ?? 'Medium'),
+      visibleToPlayers: true,
+    }
+  })
 }
 
 export function Prep() {
@@ -235,57 +260,13 @@ export function Prep() {
           <div>
             {selectedMonster ? (
               <div className="grid gap-4 lg:grid-cols-2">
-                <div className="space-y-3 rounded-xl border border-line bg-panel p-4">
-                  <div className="grid grid-cols-2 gap-2">
-                    <Field label="Name">
-                      <Input value={selectedMonster.name ?? ''} onChange={(e) => setSelectedMonster({ ...selectedMonster, name: e.target.value })} />
-                    </Field>
-                    <Field label="Size">
-                      <Input value={selectedMonster.size ?? ''} onChange={(e) => setSelectedMonster({ ...selectedMonster, size: e.target.value })} />
-                    </Field>
-                    <Field label="Type">
-                      <Input value={selectedMonster.creatureType ?? ''} onChange={(e) => setSelectedMonster({ ...selectedMonster, creatureType: e.target.value })} />
-                    </Field>
-                    <Field label="Alignment">
-                      <Input value={selectedMonster.alignment ?? ''} onChange={(e) => setSelectedMonster({ ...selectedMonster, alignment: e.target.value })} />
-                    </Field>
-                    <Field label="AC">
-                      <Input type="number" value={selectedMonster.acValue ?? 10} onChange={(e) => setSelectedMonster({ ...selectedMonster, acValue: Number(e.target.value) })} />
-                    </Field>
-                    <Field label="HP">
-                      <Input type="number" value={selectedMonster.hpMax ?? 10} onChange={(e) => setSelectedMonster({ ...selectedMonster, hpMax: Number(e.target.value) })} />
-                    </Field>
-                    <Field label="Speed">
-                      <Input value={selectedMonster.speed ?? ''} onChange={(e) => setSelectedMonster({ ...selectedMonster, speed: e.target.value })} />
-                    </Field>
-                    <Field label="CR">
-                      <Input type="number" step="0.125" value={selectedMonster.challengeRating ?? 0} onChange={(e) => setSelectedMonster({ ...selectedMonster, challengeRating: Number(e.target.value) })} />
-                    </Field>
-                  </div>
-                  <Field label="Actions (one per line: Name. Description)">
-                    <Textarea
-                      value={(selectedMonster.actions ?? []).map((a) => `${a.name}. ${a.desc}`).join('\n\n')}
-                      onChange={(e) =>
-                        setSelectedMonster({
-                          ...selectedMonster,
-                          actions: e.target.value.split('\n\n').filter(Boolean).map((line) => {
-                            const [n, ...rest] = line.split('.')
-                            return { name: n.trim(), desc: rest.join('.').trim() } satisfies NamedEntry
-                          }),
-                        })
-                      }
-                    />
-                  </Field>
-                  <div className="flex gap-2">
-                    <Button onClick={saveMonster}>{editingNew ? 'Add to bestiary' : 'Save changes'}</Button>
-                    {selectedMonster.id && (
-                      <Button variant="ghost" onClick={() => api.deleteMonster(selectedMonster.id!).then(reload)}>
-                        Delete
-                      </Button>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted">Edits do not rewrite monsters already placed in a paused fight.</p>
-                </div>
+                <MonsterForm
+                  monster={selectedMonster}
+                  editingNew={editingNew}
+                  onChange={setSelectedMonster}
+                  onSave={saveMonster}
+                  onDelete={selectedMonster.id ? () => api.deleteMonster(selectedMonster.id!).then(reload) : undefined}
+                />
                 {'id' in selectedMonster && selectedMonster.id ? (
                   <StatBlock monster={selectedMonster as Monster} />
                 ) : (
@@ -302,7 +283,7 @@ export function Prep() {
       {tab === 'Encounters' && (
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <div className="rounded-xl border border-line bg-panel p-4">
-            <h2 className="font-display text-xl text-gold">New template</h2>
+            <h2 className="font-display text-xl text-gold">{tpl.id ? 'Edit template' : 'New template'}</h2>
             <div className="mt-3 grid gap-3">
               <Field label="Name">
                 <Input value={tpl.name ?? ''} onChange={(e) => setTpl({ ...tpl, name: e.target.value })} />
@@ -331,15 +312,18 @@ export function Prep() {
                     const list = [...(tpl.monsters ?? [])]
                     const existing = list.find((x) => x.bestiaryMonsterId === hit.id)
                     if (existing) existing.quantity += 1
-                    else
+                    else {
+                      const map = maps.find((m) => m.id === tpl.mapId)
+                      const used = list.length
                       list.push({
                         bestiaryMonsterId: hit.id,
                         name: hit.name,
                         quantity: 1,
-                        startX: 4 + list.length,
-                        startY: 4,
+                        startX: Math.min(map ? map.gridCols - 1 : 8, 2 + (used % 8)),
+                        startY: Math.min(map ? map.gridRows - 1 : 8, 2 + Math.floor(used / 8)),
                         color: TOKEN_PALETTE[list.length % TOKEN_PALETTE.length],
                       } satisfies TemplateMonster)
+                    }
                     setTpl({ ...tpl, monsters: list })
                     e.currentTarget.value = ''
                   }}
@@ -347,40 +331,122 @@ export function Prep() {
               </Field>
               <ul className="space-y-2">
                 {(tpl.monsters ?? []).map((m, i) => (
-                  <li key={m.bestiaryMonsterId} className="flex items-center gap-2 text-sm">
+                  <li key={m.bestiaryMonsterId} className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="flex-1">{m.name}</span>
                     <Input
                       className="w-16"
                       type="number"
+                      min={1}
                       value={m.quantity}
                       onChange={(e) => {
                         const list = tpl.monsters!.slice()
-                        list[i] = { ...m, quantity: Number(e.target.value) }
+                        list[i] = { ...m, quantity: Math.max(1, Number(e.target.value)) }
                         setTpl({ ...tpl, monsters: list })
                       }}
                     />
+                    <Field label="Col">
+                      <Input
+                        className="w-16"
+                        type="number"
+                        min={0}
+                        value={m.startX}
+                        onChange={(e) => {
+                          const list = tpl.monsters!.slice()
+                          list[i] = { ...m, startX: Number(e.target.value) }
+                          setTpl({ ...tpl, monsters: list })
+                        }}
+                      />
+                    </Field>
+                    <Field label="Row">
+                      <Input
+                        className="w-16"
+                        type="number"
+                        min={0}
+                        value={m.startY}
+                        onChange={(e) => {
+                          const list = tpl.monsters!.slice()
+                          list[i] = { ...m, startY: Number(e.target.value) }
+                          setTpl({ ...tpl, monsters: list })
+                        }}
+                      />
+                    </Field>
                     <button type="button" className="text-blood" onClick={() => setTpl({ ...tpl, monsters: tpl.monsters!.filter((_, j) => j !== i) })}>
                       ×
                     </button>
                   </li>
                 ))}
               </ul>
-              <Button onClick={saveTemplate}>Save template</Button>
+              <p className="text-xs text-muted">Drag tokens on the map to set starting squares. Extra copies of the same monster spawn in a small cluster from that cell.</p>
+              <div className="flex gap-2">
+                <Button onClick={saveTemplate}>{tpl.id ? 'Save changes' : 'Save template'}</Button>
+                {tpl.id && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setTpl({ name: '', mapId: '', monsters: [] })}
+                  >
+                    New template
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
-          <ul className="space-y-3">
-            {templates.map((t) => (
-              <li key={t.id} className="rounded-xl border border-line bg-panel p-4">
-                <div className="font-display text-lg text-gold">{t.name}</div>
-                <p className="text-sm text-muted">
-                  {t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ') || 'No monsters yet'}
-                </p>
-                <Button className="mt-2" size="sm" variant="ghost" onClick={() => api.deleteTemplate(t.id).then(reload)}>
-                  Delete
-                </Button>
-              </li>
-            ))}
-          </ul>
+          <div className="space-y-3">
+            {tpl.mapId && maps.find((m) => m.id === tpl.mapId) ? (
+              <div className="h-[28rem] overflow-hidden rounded-xl border border-line bg-bg">
+                <MapBoard
+                  map={maps.find((m) => m.id === tpl.mapId)!}
+                  tokens={placementTokens(maps.find((m) => m.id === tpl.mapId)!, tpl.monsters ?? [], monsters)}
+                  fog={{
+                    cols: maps.find((m) => m.id === tpl.mapId)!.gridCols,
+                    rows: maps.find((m) => m.id === tpl.mapId)!.gridRows,
+                    enabled: false,
+                    revealed: [],
+                  }}
+                  isDm
+                  tool="select"
+                  onMove={(id, x, y) => {
+                    const map = maps.find((m) => m.id === tpl.mapId)!
+                    const index = Number(id.replace('tpl-', ''))
+                    const list = (tpl.monsters ?? []).slice()
+                    if (!list[index]) return
+                    list[index] = {
+                      ...list[index],
+                      startX: Math.max(0, Math.round((x - map.gridSize / 2) / map.gridSize)),
+                      startY: Math.max(0, Math.round((y - map.gridSize / 2) / map.gridSize)),
+                    }
+                    setTpl({ ...tpl, monsters: list })
+                  }}
+                />
+              </div>
+            ) : (
+              <p className="rounded-xl border border-dashed border-line p-6 text-sm text-muted">Choose a map to place starting tokens.</p>
+            )}
+            <ul className="space-y-3">
+              {templates.map((t) => (
+                <li key={t.id} className="rounded-xl border border-line bg-panel p-4">
+                  <div className="font-display text-lg text-gold">{t.name}</div>
+                  <p className="text-sm text-muted">
+                    {t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ') || 'No monsters yet'}
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setTpl({
+                      ...t,
+                      monsters: t.monsters.map((m, i) => ({
+                        ...m,
+                        startX: Number.isFinite(m.startX) ? m.startX : 2 + (i % 8),
+                        startY: Number.isFinite(m.startY) ? m.startY : 2 + Math.floor(i / 8),
+                      })),
+                    })}>
+                      Edit placement
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => api.deleteTemplate(t.id).then(reload)}>
+                      Delete
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
 

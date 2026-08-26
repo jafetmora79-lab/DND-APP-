@@ -67,6 +67,17 @@ export function initials(name: string) {
   return (parts[0][0] + parts[1][0]).toUpperCase()
 }
 
+export function templateTokenCell(
+  spec: { startX?: number; startY?: number },
+  copyIndex: number,
+  placed: number,
+) {
+  const hasStart = Number.isFinite(spec.startX) && Number.isFinite(spec.startY)
+  const baseCol = hasStart ? Number(spec.startX) : 2 + (placed % 8)
+  const baseRow = hasStart ? Number(spec.startY) : 2 + Math.floor(placed / 8)
+  return { col: baseCol + (copyIndex % 4), row: baseRow + Math.floor(copyIndex / 4) }
+}
+
 export function hpColor(current: number, max: number) {
   if (max <= 0) return 'bg-muted'
   const r = current / max
