@@ -15,11 +15,11 @@ Do not put the `service_role` key in the frontend.
 
 ## 2. Database
 
-Run `schema.sql` once in **SQL Editor**.
+Open **SQL Editor → New query**, paste the **entire** `schema.sql` file, and click **Run**.
 
-That creates tables, row-level security, the `join_table` / `peek_join` RPCs, realtime publication, and public `maps` + `pdfs` storage buckets.
+That creates every table (including `maps`), row-level security, the `join_table` / `peek_join` RPCs, realtime, and the `maps` + `pdfs` storage buckets. New projects should run this file only.
 
-If the project already had `schema.sql` applied before the map maker shipped, also run `migrate-map-maker.sql` so maps can store blocked squares.
+If you already ran an older `schema.sql` and creating a map fails with **blocked_cells** / schema cache, run `migrate-map-maker.sql` (or re-run the current `schema.sql`). It adds the column and reloads PostgREST.
 
 If it was applied before encounter play (one token per monster copy, player start squares, player attacks), also run `migrate-encounter-play.sql`. The app can still save player starting squares without that column (it stores them with the monster JSON); the migrate is optional for this feature.
 
