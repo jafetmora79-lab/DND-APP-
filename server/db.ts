@@ -689,16 +689,20 @@ export function resolveCombatAttack(opts: {
   const fumbleNote =
     outcome === 'fumble' ? ` ${target.name} has advantage against ${attacker.name} next turn.` : ''
   const modeNote = mode === 'normal' ? '' : ` (${mode})`
+  const atkName = String(attacker.name)
+  const tgtName = String(target.name)
+  const atkId = String(attacker.id)
+  const attackerEconRaw = String(attacker.turn_economy_json ?? '{}')
   function noteAttack(hit: boolean, dmg: number) {
-    const econ = parseTurnEconomy(jparse((attacker.turn_economy_json as string) || '{}', {}))
+    const econ = parseTurnEconomy(jparse(attackerEconRaw || '{}', {}))
     econ.action = true
-    db.prepare('UPDATE combatants SET turn_economy_json = ? WHERE id = ?').run(JSON.stringify(econ), attacker.id)
-    appendInstanceActivity(instanceId, `${attacker.name} attacks ${target.name}.`)
+    db.prepare('UPDATE combatants SET turn_economy_json = ? WHERE id = ?').run(JSON.stringify(econ), atkId)
+    appendInstanceActivity(instanceId, `${atkName} attacks ${tgtName}.`)
     appendInstanceActivity(instanceId, `Attack roll: ${diceNote} + ${bonus} = ${total}.`)
     appendInstanceActivity(instanceId, hit ? 'HIT.' : outcome === 'fumble' ? 'MISS (nat 1).' : 'MISS.')
     if (hit) {
       appendInstanceActivity(instanceId, `Damage: ${dmg}.`)
-      appendInstanceActivity(instanceId, `${target.name} took ${dmg} damage.`)
+      appendInstanceActivity(instanceId, `${tgtName} took ${dmg} damage.`)
     }
   }
   if (outcome === 'miss' || outcome === 'fumble') {
@@ -950,7 +954,7 @@ export function applyDeclaredAction(opts: {
 export function resolvePromptSave(opts: { instanceId: string; combatantId: string; d20: number }) {
   const inst = db.prepare('SELECT * FROM encounter_instances WHERE id = ?').get(opts.instanceId) as Record<string, unknown> | undefined
   if (!inst) throw new Error('Encounter not found')
-  const prompt = parsePrompt(inst.prompt_json ? jparse(inst.prompt_json, null) : null)
+  const prompt = parsePrompt(inst.prompt_json ? jparse(String(inst.prompt_json), null) : null)
   if (!prompt || prompt.kind !== 'save' || prompt.combatantId !== opts.combatantId) throw new Error('No save is waiting.')
   const ability = prompt.ability ?? 'dex'
   const dc = prompt.dc ?? 13
