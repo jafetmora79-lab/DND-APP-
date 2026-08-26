@@ -6,17 +6,16 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
-    if: ${{ github.event.head_commit.message != 'chore: publish GitHub Pages site' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,47 +33,8 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
-      - name: Prefer GitHub Actions as the Pages source
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api --method PUT "/repos/${GITHUB_REPOSITORY}/pages" \
-            -H "Accept: application/vnd.github+json" \
-            -f build_type=workflow || true
-      - name: Publish /docs for branch-based Pages
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          python3 - <<'PY'
-          from pathlib import Path
-          import shutil
-          docs = Path("docs")
-          if docs.exists():
-              shutil.rmtree(docs)
-          shutil.copytree("dist", docs)
-          docs.joinpath("_config.yml").write_text(
-              'defaults:\n  - scope:\n      path: ""\n    values:\n      layout: none\n',
-              encoding="utf-8",
-          )
-          for name in ("index.html", "404.html"):
-              path = docs / name
-              if not path.exists():
-                  continue
-              text = path.read_text(encoding="utf-8")
-              if "layout: none" not in text.splitlines()[:5]:
-                  path.write_text("---\nlayout: none\n---\n" + text, encoding="utf-8")
-          PY
-          git add docs
-          if git diff --cached --quiet; then
-            echo "docs unchanged"
-            exit 0
-          fi
-          git commit -m "chore: publish GitHub Pages site"
-          git push origin HEAD:main
 
   deploy:
-    if: ${{ github.event.head_commit.message != 'chore: publish GitHub Pages site' }}
     needs: build
     runs-on: ubuntu-latest
     environment:
