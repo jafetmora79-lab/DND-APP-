@@ -225,6 +225,16 @@ export const supabaseApi: TableApi = {
     const user = await currentUserId()
     const { data, error } = await db().from('campaigns').insert({ dm_account_id: user.id, name }).select().single()
     throwIf(error)
+    const { error: mapErr } = await db().from('maps').insert({
+      campaign_id: data.id,
+      name: 'Cragmaw Hideout',
+      image_url: '/maps/cragmaw-hideout.svg',
+      grid_size: 70,
+      grid_cols: 20,
+      grid_rows: 15,
+      grid_type: 'square',
+    })
+    throwIf(mapErr)
     return { campaign: { id: String(data.id), dmAccountId: user.id, name: String(data.name) } }
   },
 
@@ -280,7 +290,13 @@ export const supabaseApi: TableApi = {
     if (!file) throw new Error('Map image required')
     const path = `${campaignId}/${crypto.randomUUID()}-${file.name}`
     const { error: upErr } = await db().storage.from('maps').upload(path, file, { upsert: true })
-    throwIf(upErr)
+    if (upErr) {
+      throw new Error(
+        upErr.message.includes('Bucket not found') || upErr.message.includes('not found')
+          ? 'Create a public Storage bucket named "maps" in Supabase, then try the upload again.'
+          : upErr.message,
+      )
+    }
     const { data: pub } = db().storage.from('maps').getPublicUrl(path)
     const { data, error } = await db()
       .from('maps')
