@@ -80,7 +80,7 @@ export function Player() {
 
   if (!combat || !snap.instance || !snap.map) {
     return (
-      <div className="flex h-dvh flex-col bg-bg">
+      <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
         <header className="flex items-center gap-2 border-b border-line px-3 py-2">
           <div className="min-w-0 flex-1">
             <div className="truncate font-display text-gold">{snap.campaign.name}</div>
@@ -120,8 +120,8 @@ export function Player() {
   }
 
   return (
-    <div className="flex h-dvh flex-col bg-bg">
-      <header className="flex items-center gap-2 border-b border-line px-3 py-2">
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
+      <header className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
         <div className="min-w-0 flex-1">
           <div className="truncate font-display text-gold">{snap.campaign.name}</div>
           <div className="truncate text-xs text-muted">
@@ -149,7 +149,7 @@ export function Player() {
       </header>
       {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
 
-      <div className="flex gap-1 border-b border-line px-2 py-1 lg:hidden">
+      <div className="flex shrink-0 gap-1 border-b border-line px-2 py-1 lg:hidden">
         <button type="button" className={cn('rounded px-3 py-1 text-sm', tab === 'map' ? 'bg-gold text-bg' : 'text-muted')} onClick={() => setTab('map')}>
           Map
         </button>
@@ -202,7 +202,7 @@ export function Player() {
             }
           />
         </div>
-        <aside className={cn('w-full overflow-y-auto border-line p-3 lg:block lg:w-72 lg:border-l', tab === 'map' ? 'hidden lg:block' : 'block')}>
+        <aside className={cn('min-h-0 w-full overflow-y-auto border-line p-3 lg:block lg:w-72 lg:border-l', tab === 'map' ? 'hidden lg:block' : 'block min-h-0 flex-1')}>
           <Tracker
             combatants={snap.combatants}
             current={snap.instance.currentTurnPosition}
@@ -247,11 +247,12 @@ export function Player() {
       {me && (
         <>
           {!myCombatant && (
-            <p className="border-t border-line bg-panel px-3 py-2 text-xs text-muted">
+            <p className="shrink-0 border-t border-line bg-panel px-3 py-2 text-xs text-muted">
               You are not on the map yet. Ask the DM to place your character (or include you on the encounter template).
             </p>
           )}
-          {note && <p className="border-t border-line bg-panel px-3 py-1 text-sm text-gold">{note}</p>}
+          {note && <p className="shrink-0 border-t border-line bg-panel px-3 py-1 text-sm text-gold">{note}</p>}
+          <div className="max-h-[40vh] shrink-0 overflow-y-auto pb-[env(safe-area-inset-bottom)] lg:max-h-[30vh]">
           <PlayerTurnPanel
             instanceId={snap.instance.id}
             character={me}
@@ -266,6 +267,7 @@ export function Player() {
             onLaunchHandled={() => setLaunchAttack(null)}
             onSettled={refreshLive}
           />
+          </div>
         </>
       )}
 

@@ -45,6 +45,7 @@ export function Live() {
   const [attackBusy, setAttackBusy] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [finalizeOpen, setFinalizeOpen] = useState(false)
+  const [hudTab, setHudTab] = useState<'map' | 'tracker' | 'sheet'>('map')
   const [saveAbility, setSaveAbility] = useState<Ability>('dex')
   const [saveDc, setSaveDc] = useState('13')
   const captionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -355,14 +356,17 @@ export function Live() {
 
   if (!combat || !instance || !snap.map) {
     return (
-      <div className="flex h-dvh flex-col bg-bg">
-        <header className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-          <Link to={`/dm/${campaignId}`} className="font-display text-gold">
-            {snap.campaign.name}
-          </Link>
-          <span className="text-muted">/</span>
-          <span>At the table</span>
-          <div className="ml-auto flex flex-wrap items-center gap-2">{joinActions}</div>
+      <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
+        <header className="shrink-0 border-b border-line">
+          <div className="flex items-center gap-2 px-3 py-2">
+            <Link to={`/dm/${campaignId}`} className="min-w-0 truncate font-display text-gold">
+              {snap.campaign.name}
+            </Link>
+            <span className="hidden text-muted sm:inline">/</span>
+            <span className="hidden truncate sm:inline">At the table</span>
+            <div className="ml-auto hidden items-center gap-2 lg:flex">{joinActions}</div>
+          </div>
+          <div className="flex gap-2 overflow-x-auto px-3 pb-2 lg:hidden">{joinActions}</div>
         </header>
         {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
         <TableHub
@@ -398,43 +402,74 @@ export function Live() {
     )
   }
 
+  const tableActions = (
+    <>
+      <Button size="sm" variant="outline" disabled={busy} onClick={leaveToTable}>
+        Table
+      </Button>
+      <Button size="sm" variant="outline" disabled={busy || Boolean(outcome)} onClick={() => setPickerOpen(true)}>
+        Next encounter
+      </Button>
+      <Button size="sm" variant="ember" disabled={busy || Boolean(outcome)} onClick={() => setFinalizeOpen(true)}>
+        <Trophy className="h-4 w-4" /> Finalize
+      </Button>
+      {instance.status === 'active' ? (
+        <Button size="sm" variant="outline" onClick={pause}>
+          <Pause className="h-4 w-4" /> Pause
+        </Button>
+      ) : (
+        <Button size="sm" onClick={() => resume(instance.id)}>
+          <Play className="h-4 w-4" /> Resume
+        </Button>
+      )}
+    </>
+  )
+
   return (
-    <div className="flex h-dvh flex-col bg-bg">
-      <header className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-        <Link to={`/dm/${campaignId}`} className="font-display text-gold">
-          {snap.campaign.name}
-        </Link>
-        <span className="text-muted">/</span>
-        <span>{instance.name}</span>
-        <span className={cn('rounded-full px-2 py-0.5 text-xs uppercase', instance.status === 'active' ? 'bg-moss/20 text-moss' : 'bg-gold/20 text-gold')}>
-          {instance.status}
-        </span>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
+      <header className="shrink-0 border-b border-line">
+        <div className="flex items-center gap-2 px-3 py-2">
+          <Link to={`/dm/${campaignId}`} className="min-w-0 truncate font-display text-gold">
+            {snap.campaign.name}
+          </Link>
+          <span className="hidden text-muted sm:inline">/</span>
+          <span className="hidden min-w-0 truncate sm:inline">{instance.name}</span>
+          <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs uppercase', instance.status === 'active' ? 'bg-moss/20 text-moss' : 'bg-gold/20 text-gold')}>
+            {instance.status}
+          </span>
+          <div className="ml-auto hidden items-center gap-2 lg:flex">
+            {joinActions}
+            {tableActions}
+          </div>
+        </div>
+        <div className="flex gap-2 overflow-x-auto px-3 pb-2 lg:hidden">
           {joinActions}
-          <Button size="sm" variant="outline" disabled={busy} onClick={leaveToTable}>
-            Table
-          </Button>
-          <Button size="sm" variant="outline" disabled={busy || Boolean(outcome)} onClick={() => setPickerOpen(true)}>
-            Next encounter
-          </Button>
-          <Button size="sm" variant="ember" disabled={busy || Boolean(outcome)} onClick={() => setFinalizeOpen(true)}>
-            <Trophy className="h-4 w-4" /> Finalize
-          </Button>
-          {instance.status === 'active' ? (
-            <Button size="sm" variant="outline" onClick={pause}>
-              <Pause className="h-4 w-4" /> Pause
-            </Button>
-          ) : (
-            <Button size="sm" onClick={() => resume(instance.id)}>
-              <Play className="h-4 w-4" /> Resume
-            </Button>
-          )}
+          {tableActions}
         </div>
       </header>
-      {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
+      {error && <p className="shrink-0 border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
+
+      <div className="flex shrink-0 gap-1 border-b border-line px-2 py-1 lg:hidden">
+        {(['map', 'tracker', 'sheet'] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            className={cn('rounded px-3 py-1 text-sm capitalize', hudTab === tab ? 'bg-gold text-bg' : 'text-muted')}
+            onClick={() => setHudTab(tab)}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <aside className="w-full shrink-0 border-b border-line p-3 lg:w-80 lg:border-b-0 lg:border-r">
+        <aside
+          className={cn(
+            'min-h-0 w-full flex-col overflow-y-auto border-line p-3 lg:flex lg:w-80 lg:shrink-0 lg:flex-none lg:overflow-hidden lg:border-r',
+            hudTab === 'tracker' ? 'flex min-h-0 flex-1' : 'hidden lg:flex',
+          )}
+        >
+          <div className="min-h-0 lg:flex-1 lg:overflow-hidden">
           <Tracker
             combatants={snap.combatants}
             current={instance.currentTurnPosition}
@@ -484,6 +519,8 @@ export function Live() {
               api.reorder(instance.id, ids).then(() => refreshLive())
             }}
           />
+          </div>
+          <div className="shrink-0 lg:max-h-[42%] lg:overflow-y-auto">
           {selectedCombatant?.source === 'character' && (
             <div className="mt-3 space-y-2 rounded-md border border-line bg-bg p-2">
               <Button
@@ -566,9 +603,10 @@ export function Live() {
               )
             })}
           </div>
+          </div>
         </aside>
 
-        <main className="relative min-h-[45vh] flex-1">
+        <main className={cn('relative min-h-0 flex-1', hudTab === 'map' ? 'block' : 'hidden lg:block')}>
           <MapBoard
             map={snap.map}
             tokens={decorateTokens(snap.tokens, snap.combatants)}
@@ -615,7 +653,7 @@ export function Live() {
             }}
             onFog={onFog}
           />
-          <div className="absolute left-3 top-3 flex gap-1">
+          <div className="absolute left-2 top-2 z-10 flex max-w-[calc(100%-3.5rem)] flex-wrap gap-1">
             <Button size="sm" variant={tool === 'select' ? 'default' : 'outline'} onClick={() => setTool('select')}>
               <Sword className="h-4 w-4" /> Move
             </Button>
@@ -654,7 +692,12 @@ export function Live() {
           </div>
         </main>
 
-        <aside className="w-full shrink-0 overflow-y-auto border-t border-line p-3 lg:w-[26rem] lg:border-l lg:border-t-0">
+        <aside
+          className={cn(
+            'min-h-0 w-full overflow-y-auto border-line p-3 lg:block lg:w-[26rem] lg:shrink-0 lg:flex-none lg:border-l',
+            hudTab === 'sheet' ? 'block min-h-0 flex-1' : 'hidden lg:block',
+          )}
+        >
           <div className="mb-3 flex gap-1">
             {(['tracker', 'sheet', 'stat'] as const).map((p) => (
               <button
@@ -689,7 +732,7 @@ export function Live() {
         </aside>
       </div>
       {selectedCombatant && (
-        <>
+        <div className="max-h-[38vh] shrink-0 overflow-y-auto pb-[env(safe-area-inset-bottom)] lg:max-h-[28vh]">
           <AttackBar
             attacks={attackerAttacks}
             pendingIndex={pending?.index ?? null}
@@ -728,7 +771,7 @@ export function Live() {
             message={attackMsg}
           />
           <SaveBar combatants={snap.combatants} selectedId={selected} characters={snap.characters} monster={selectedMonster} compact />
-        </>
+        </div>
       )}
       {outcome && (
         <EncounterOutcomeOverlay

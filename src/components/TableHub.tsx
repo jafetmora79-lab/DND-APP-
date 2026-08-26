@@ -52,7 +52,7 @@ export function TableHub({
   const fileRef = useRef<HTMLInputElement>(null)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+    <div className="flex min-h-0 flex-1 flex-col lg:flex-row overflow-hidden">
       <div className="relative min-h-[40vh] flex-1 lg:min-h-0">
         <AmbianceStage imageUrl={imageUrl} caption={caption} className="h-full min-h-[40vh]" />
         {lastOutcome && (
