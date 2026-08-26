@@ -5,7 +5,7 @@ import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
 import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter } from './utils'
-import { specCopyCell } from './combat'
+import { afterHpChange, emptyTurnEconomy, parseDeathState, parseTurnEconomy, resolveDeathSave, specCopyCell } from './combat'
 import { sessionFromRow } from './session'
 import { packMonstersJson, unpackTemplateJson } from './template-json'
 import type { TableApi } from './local-api'
@@ -167,7 +167,7 @@ function characterFromRow(row: Record<string, unknown>): PlayerCharacter {
     name: String(row.name ?? ''),
     tokenColor: String(row.token_color ?? '#6ea8c9'),
     sourcePdfUrl: (row.source_pdf_url as string) || null,
-    sheet: (row.sheet_json as PlayerCharacter['sheet']) ?? emptySheet(),
+    sheet: { ...emptySheet(), ...((row.sheet_json as object) || {}) },
   }
 }
 
@@ -1055,6 +1055,10 @@ export const supabaseApi: TableApi = {
         advantageAgainst: Array.isArray((c as { advantage_against_json?: string[] }).advantage_against_json)
           ? ((c as { advantage_against_json: string[] }).advantage_against_json)
           : [],
+        deathState: parseDeathState((c as { death_state?: string }).death_state),
+        deathSuccess: Number((c as { death_success?: number }).death_success ?? 0),
+        deathFail: Number((c as { death_fail?: number }).death_fail ?? 0),
+        turnEconomy: parseTurnEconomy((c as { turn_economy_json?: unknown }).turn_economy_json),
       })),
       tokens: (tokens ?? []).map((t) => ({
         id: String(t.id),
@@ -1147,6 +1151,11 @@ export const supabaseApi: TableApi = {
     if (body.color != null) patch.color = body.color
     if (body.notes != null) patch.notes = body.notes
     if (body.conditions != null) patch.conditions_json = body.conditions
+    if (body.deathState != null) patch.death_state = body.deathState
+    if (body.deathSuccess != null) patch.death_success = body.deathSuccess
+    if (body.deathFail != null) patch.death_fail = body.deathFail
+    if (body.turnEconomy != null) patch.turn_economy_json = parseTurnEconomy(body.turnEconomy)
+    const prevHp = body.hpCurrent != null ? Number((await db().from('combatants').select('hp_current').eq('id', id).maybeSingle()).data?.hp_current ?? 0) : 0
     const { data, error } = await db().from('combatants').update(patch).eq('id', id).select().single()
     throwIf(error)
     if (data.source === 'character' && (body.hpCurrent != null || body.hpMax != null)) {
@@ -1157,6 +1166,26 @@ export const supabaseApi: TableApi = {
         if (body.hpMax != null) sheet.hpMax = body.hpMax
         await db().from('player_characters').update({ sheet_json: sheet }).eq('id', data.source_id)
       }
+    }
+    if (body.hpCurrent != null) {
+      const knock = afterHpChange({
+        source: data.source === 'character' ? 'character' : 'bestiary',
+        prevHp,
+        nextHp: Number(body.hpCurrent),
+        conditions: Array.isArray(data.conditions_json) ? (data.conditions_json as string[]) : [],
+        deathState: parseDeathState((data as { death_state?: string }).death_state),
+        deathSuccess: Number((data as { death_success?: number }).death_success ?? 0),
+        deathFail: Number((data as { death_fail?: number }).death_fail ?? 0),
+      })
+      await db()
+        .from('combatants')
+        .update({
+          conditions_json: knock.conditions,
+          death_state: knock.deathState,
+          death_success: knock.deathSuccess,
+          death_fail: knock.deathFail,
+        })
+        .eq('id', id)
     }
     return {}
   },
@@ -1175,6 +1204,13 @@ export const supabaseApi: TableApi = {
     }
     const { error: uErr } = await db().from('encounter_instances').update({ current_turn_position: pos, round_number: round }).eq('id', id)
     throwIf(uErr)
+    const { data: up } = await db()
+      .from('combatants')
+      .select('id')
+      .eq('encounter_instance_id', id)
+      .eq('turn_order_position', pos)
+      .maybeSingle()
+    if (up) await db().from('combatants').update({ turn_economy_json: emptyTurnEconomy() }).eq('id', up.id)
     return {}
   },
 
@@ -1184,6 +1220,8 @@ export const supabaseApi: TableApi = {
     const rows = [...(data ?? [])].sort((a, b) => Number(b.initiative) - Number(a.initiative))
     await Promise.all(rows.map((r, i) => db().from('combatants').update({ turn_order_position: i }).eq('id', r.id)))
     await db().from('encounter_instances').update({ current_turn_position: 0 }).eq('id', id)
+    const first = rows[0]
+    if (first) await db().from('combatants').update({ turn_economy_json: emptyTurnEconomy() }).eq('id', first.id)
     return {}
   },
 
@@ -1228,20 +1266,33 @@ export const supabaseApi: TableApi = {
   },
 
   async playerAttack(instanceId, body) {
-    const { data, error } = await db().rpc('resolve_player_attack', {
+    const payload: Record<string, unknown> = {
       p_instance: instanceId,
       p_target: body.targetId,
       p_attack_index: body.attackIndex,
       p_d20: body.d20,
       p_damage: body.damage,
       p_attacker: body.attackerId ?? null,
-    })
+      p_d20_b: body.d20b ?? null,
+      p_roll_mode: body.rollMode ?? 'normal',
+    }
+    let { data, error } = await db().rpc('resolve_player_attack', payload)
+    if (error && /p_d20_b|p_roll_mode/.test(error.message)) {
+      delete payload.p_d20_b
+      delete payload.p_roll_mode
+      const retry = await db().rpc('resolve_player_attack', payload)
+      data = retry.data
+      error = retry.error
+    }
     throwIf(error)
     return data as {
       hit: boolean
       crit: boolean
       fumble: boolean
       hadAdvantage: boolean
+      rollMode?: string
+      d20?: number
+      d20b?: number | null
       total: number
       ac: number
       damage: number
@@ -1250,6 +1301,70 @@ export const supabaseApi: TableApi = {
       targetName: string
       message: string
     }
+  },
+
+  async deathSave(combatantId, body) {
+    const { data: row, error: rErr } = await db().from('combatants').select('*').eq('id', combatantId).single()
+    throwIf(rErr)
+    const result = resolveDeathSave(Number(body.d20), {
+      deathSuccess: Number(row.death_success ?? 0),
+      deathFail: Number(row.death_fail ?? 0),
+      deathState: parseDeathState(row.death_state),
+    })
+    const conditions = Array.isArray(row.conditions_json) ? [...(row.conditions_json as string[])] : []
+    let hp = Number(row.hp_current)
+    if (result.revived) {
+      hp = result.hpCurrent
+      const i = conditions.indexOf('Unconscious')
+      if (i >= 0) conditions.splice(i, 1)
+    } else if ((result.deathState === 'dying' || result.deathState === 'stable') && !conditions.includes('Unconscious')) {
+      conditions.push('Unconscious')
+    }
+    const { error } = await db()
+      .from('combatants')
+      .update({
+        death_state: result.deathState,
+        death_success: result.deathSuccess,
+        death_fail: result.deathFail,
+        hp_current: hp,
+        conditions_json: conditions,
+      })
+      .eq('id', combatantId)
+    if (error) {
+      const rpc = await db().rpc('resolve_death_save', { p_combatant: combatantId, p_d20: Number(body.d20) })
+      throwIf(rpc.error)
+      return rpc.data as typeof result
+    }
+    if (row.source === 'character') {
+      const { data: ch } = await db().from('player_characters').select('sheet_json').eq('id', row.source_id).maybeSingle()
+      if (ch) {
+        const sheet = { ...(ch.sheet_json as Record<string, unknown>), deathSuccess: result.deathSuccess, deathFail: result.deathFail, hpCurrent: hp }
+        await db().from('player_characters').update({ sheet_json: sheet }).eq('id', row.source_id)
+      }
+    }
+    return result
+  },
+
+  async resetDeath(combatantId) {
+    const { data: row, error: rErr } = await db().from('combatants').select('*').eq('id', combatantId).single()
+    throwIf(rErr)
+    const conditions = (Array.isArray(row.conditions_json) ? (row.conditions_json as string[]) : []).filter((c) => c !== 'Unconscious')
+    const { error } = await db()
+      .from('combatants')
+      .update({ death_state: 'ok', death_success: 0, death_fail: 0, conditions_json: conditions })
+      .eq('id', combatantId)
+    throwIf(error)
+    return {}
+  },
+
+  async setTurnEconomy(combatantId, body) {
+    const economy = parseTurnEconomy(body)
+    const { error } = await db().from('combatants').update({ turn_economy_json: economy }).eq('id', combatantId)
+    if (error) {
+      const rpc = await db().rpc('set_turn_economy', { p_combatant: combatantId, p_economy: economy })
+      throwIf(rpc.error)
+    }
+    return {}
   },
 }
 

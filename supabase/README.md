@@ -25,6 +25,8 @@ If it was applied before encounter play (one token per monster copy, player star
 
 If it was applied before the campaign table (scene image between fights, next encounter, won/lost), also run `migrate-campaign-table.sql`.
 
+If it was applied before combat completeness (advantage dice, death saves, turn reminders), also run `migrate-combat-completeness.sql`, then re-run the `resolve_player_attack` / `resolve_death_save` / `set_turn_economy` functions from `schema.sql`.
+
 ## 3. App env
 
 ```bash

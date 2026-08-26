@@ -6,7 +6,7 @@ import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
 import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type FogState, type NamedEntry, type TemplateCharacter, type TemplateMonster } from '../src/lib/types.ts'
 import { cellCenter, parseBlockedCells, playerStartOrigin, spreadCells, tokenCellKeys, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
-import { applyDamage, attackOutcome, attacksFromMonster, consumeAdvantage, grantAdvantage, isAttackInRange, parseAttackBonus, parseRangeFeet, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
+import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, isAttackInRange, parseAttackBonus, parseDeathState, parseRangeFeet, parseRollMode, parseTurnEconomy, pickUsedD20, resolveDeathSave, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { loadSrdMonsters } from './srd.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -139,6 +139,10 @@ CREATE TABLE IF NOT EXISTS combatants (
   notes TEXT,
   constitution INTEGER NOT NULL DEFAULT 10,
   advantage_against_json TEXT NOT NULL DEFAULT '[]',
+  death_state TEXT NOT NULL DEFAULT 'ok',
+  death_success INTEGER NOT NULL DEFAULT 0,
+  death_fail INTEGER NOT NULL DEFAULT 0,
+  turn_economy_json TEXT NOT NULL DEFAULT '{"action":false,"bonus":false,"reaction":false,"movement":false}',
   FOREIGN KEY (encounter_instance_id) REFERENCES encounter_instances(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS tokens_on_map (
@@ -185,6 +189,26 @@ try {
 }
 try {
   db.exec(`ALTER TABLE combatants ADD COLUMN advantage_against_json TEXT NOT NULL DEFAULT '[]'`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE combatants ADD COLUMN death_state TEXT NOT NULL DEFAULT 'ok'`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE combatants ADD COLUMN death_success INTEGER NOT NULL DEFAULT 0`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE combatants ADD COLUMN death_fail INTEGER NOT NULL DEFAULT 0`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE combatants ADD COLUMN turn_economy_json TEXT NOT NULL DEFAULT '{"action":false,"bonus":false,"reaction":false,"movement":false}'`)
 } catch {
   /* already present */
 }
@@ -291,7 +315,7 @@ export function characterFromRow(row: Record<string, unknown>) {
     name: row.name as string,
     tokenColor: row.token_color as string,
     sourcePdfUrl: (row.source_pdf_url as string) || null,
-    sheet: jparse<CharacterSheetData>(row.sheet_json as string, emptySheet()),
+    sheet: { ...emptySheet(), ...jparse<CharacterSheetData>(row.sheet_json as string, emptySheet()) },
   }
 }
 
@@ -541,10 +565,21 @@ export function resolveCombatAttack(opts: {
   targetId: string
   attackIndex: number
   d20: number
+  d20b?: number
+  rollMode?: string
   damage: number
 }): PlayerAttackResult {
   const { campaignId, instanceId, attackerId, targetId, attackIndex, d20, damage } = opts
   if (!Number.isInteger(d20) || d20 < 1 || d20 > 20) throw new Error('d20 must be between 1 and 20')
+  const requested = parseRollMode(opts.rollMode)
+  let d20b = opts.d20b
+  if (requested !== 'normal') {
+    if (!Number.isInteger(d20b) || (d20b as number) < 1 || (d20b as number) > 20) {
+      throw new Error('Enter both d20s for advantage or disadvantage')
+    }
+  } else {
+    d20b = undefined
+  }
   if (!Number.isFinite(damage) || damage < 0 || damage > 999) throw new Error('Damage looks wrong')
   const inst = db.prepare('SELECT * FROM encounter_instances WHERE id = ? AND campaign_id = ?').get(instanceId, campaignId) as
     | Record<string, unknown>
@@ -554,6 +589,14 @@ export function resolveCombatAttack(opts: {
     | Record<string, unknown>
     | undefined
   if (!attacker) throw new Error('Attacker is not on the map')
+  if (
+    !canTakeAttacks({
+      conditions: jparse<string[]>((attacker.conditions_json as string) || '[]', []),
+      deathState: parseDeathState(attacker.death_state),
+    })
+  ) {
+    throw new Error(`${attacker.name} cannot take a normal attack`)
+  }
   const target = db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(targetId, instanceId) as
     | Record<string, unknown>
     | undefined
@@ -580,20 +623,27 @@ export function resolveCombatAttack(opts: {
   const attackerAdv = jparse<string[]>((attacker.advantage_against_json as string) || '[]', [])
   const targetAdv = jparse<string[]>((target.advantage_against_json as string) || '[]', [])
   const hadAdvantage = attackerAdv.includes(String(target.id))
-  const outcome = attackOutcome(d20, bonus, ac)
-  const total = d20 + bonus
+  const mode = effectiveRollMode(requested, hadAdvantage)
+  const dice = pickUsedD20(d20, mode === 'normal' ? undefined : d20b, mode)
+  const outcome = attackOutcome(dice.used, bonus, ac)
+  const total = dice.used + bonus
+  const diceNote = formatDiceUsed(dice.a, dice.b, dice.used)
   const nextAttackerAdv = consumeAdvantage(attackerAdv, String(target.id))
   const nextTargetAdv = outcome === 'fumble' ? grantAdvantage(targetAdv, String(attacker.id)) : targetAdv
   db.prepare('UPDATE combatants SET advantage_against_json = ? WHERE id = ?').run(JSON.stringify(nextAttackerAdv), attacker.id)
   db.prepare('UPDATE combatants SET advantage_against_json = ? WHERE id = ?').run(JSON.stringify(nextTargetAdv), target.id)
   const fumbleNote =
     outcome === 'fumble' ? ` ${target.name} has advantage against ${attacker.name} next turn.` : ''
+  const modeNote = mode === 'normal' ? '' : ` (${mode})`
   if (outcome === 'miss' || outcome === 'fumble') {
     return {
       hit: false,
       crit: false,
       fumble: outcome === 'fumble',
       hadAdvantage,
+      rollMode: mode,
+      d20: dice.used,
+      d20b: dice.b,
       total,
       ac,
       damage: 0,
@@ -602,12 +652,14 @@ export function resolveCombatAttack(opts: {
       targetName: String(target.name),
       message:
         outcome === 'fumble'
-          ? `Natural 1 against ${target.name} — miss.${fumbleNote}`
-          : `${total} vs AC ${ac} — need higher than ${ac} to hit ${target.name}.${hadAdvantage ? ' (advantage used)' : ''}`,
+          ? `${diceNote}${modeNote}. Natural 1 against ${target.name} — miss.${fumbleNote}`
+          : `${diceNote}${modeNote}. ${total} vs AC ${ac} — need higher than ${ac} to hit ${target.name}.${hadAdvantage ? ' (advantage used)' : ''}`,
     }
   }
-  const next = applyDamage(Number(target.hp_current), Number(target.hp_temp), damage)
+  const prevHp = Number(target.hp_current)
+  const next = applyDamage(prevHp, Number(target.hp_temp), damage)
   db.prepare('UPDATE combatants SET hp_current = ?, hp_temp = ? WHERE id = ?').run(next.hpCurrent, next.hpTemp, target.id)
+  applyKnockout(target, prevHp, next.hpCurrent, outcome === 'crit' ? 2 : 1)
   if (target.source === 'character') {
     const victim = db.prepare('SELECT sheet_json FROM player_characters WHERE id = ?').get(target.source_id) as { sheet_json: string } | undefined
     if (victim) {
@@ -623,6 +675,9 @@ export function resolveCombatAttack(opts: {
     crit,
     fumble: false,
     hadAdvantage,
+    rollMode: mode,
+    d20: dice.used,
+    d20b: dice.b,
     total,
     ac,
     damage,
@@ -630,9 +685,114 @@ export function resolveCombatAttack(opts: {
     hpTemp: next.hpTemp,
     targetName: String(target.name),
     message: crit
-      ? `Natural 20! ${damage} damage to ${target.name} (${next.hpCurrent} HP left).`
-      : `Hit ${target.name} (${total} beats AC ${ac}) for ${damage} damage (${next.hpCurrent} HP left).`,
+      ? `${diceNote}${modeNote}. Natural 20! ${damage} damage to ${target.name} (${next.hpCurrent} HP left).`
+      : `${diceNote}${modeNote}. Hit ${target.name} (${total} beats AC ${ac}) for ${damage} damage (${next.hpCurrent} HP left).`,
   }
+}
+
+function applyKnockout(target: Record<string, unknown>, prevHp: number, nextHp: number, extraDeathFails: number) {
+  const next = afterHpChange({
+    source: target.source === 'character' ? 'character' : 'bestiary',
+    prevHp,
+    nextHp,
+    conditions: jparse<string[]>((target.conditions_json as string) || '[]', []),
+    deathState: parseDeathState(target.death_state),
+    deathSuccess: Number(target.death_success ?? 0),
+    deathFail: Number(target.death_fail ?? 0),
+    extraDeathFails: prevHp <= 0 && nextHp <= 0 ? extraDeathFails : undefined,
+  })
+  db.prepare('UPDATE combatants SET conditions_json = ?, death_state = ?, death_success = ?, death_fail = ? WHERE id = ?').run(
+    JSON.stringify(next.conditions),
+    next.deathState,
+    next.deathSuccess,
+    next.deathFail,
+    target.id,
+  )
+  if (target.source === 'character') {
+    const victim = db.prepare('SELECT sheet_json FROM player_characters WHERE id = ?').get(target.source_id) as { sheet_json: string } | undefined
+    if (victim) {
+      const vs = jparse(victim.sheet_json, {} as Record<string, unknown>)
+      vs.deathSuccess = next.deathSuccess
+      vs.deathFail = next.deathFail
+      db.prepare('UPDATE player_characters SET sheet_json = ? WHERE id = ?').run(JSON.stringify(vs), target.source_id)
+    }
+  }
+}
+
+export function applyCombatDeathSave(combatantId: string, d20: number) {
+  const row = db.prepare('SELECT * FROM combatants WHERE id = ?').get(combatantId) as Record<string, unknown> | undefined
+  if (!row) throw new Error('Combatant not found')
+  if (row.source !== 'character') throw new Error('Death saves are for player characters')
+  const result = resolveDeathSave(d20, {
+    deathSuccess: Number(row.death_success ?? 0),
+    deathFail: Number(row.death_fail ?? 0),
+    deathState: parseDeathState(row.death_state),
+  })
+  let conditions = jparse<string[]>((row.conditions_json as string) || '[]', [])
+  let hp = Number(row.hp_current)
+  if (result.revived) {
+    hp = result.hpCurrent
+    conditions = conditions.filter((c) => c !== 'Unconscious')
+  } else if (result.deathState === 'dying' || result.deathState === 'stable') {
+    if (!conditions.includes('Unconscious')) conditions.push('Unconscious')
+  }
+  db.prepare('UPDATE combatants SET death_state = ?, death_success = ?, death_fail = ?, hp_current = ?, conditions_json = ? WHERE id = ?').run(
+    result.deathState,
+    result.deathSuccess,
+    result.deathFail,
+    hp,
+    JSON.stringify(conditions),
+    combatantId,
+  )
+  const ch = db.prepare('SELECT sheet_json FROM player_characters WHERE id = ?').get(row.source_id) as { sheet_json: string } | undefined
+  if (ch) {
+    const sheet = jparse(ch.sheet_json, {} as Record<string, unknown>)
+    sheet.deathSuccess = result.deathSuccess
+    sheet.deathFail = result.deathFail
+    sheet.hpCurrent = hp
+    db.prepare('UPDATE player_characters SET sheet_json = ? WHERE id = ?').run(JSON.stringify(sheet), row.source_id)
+  }
+  return result
+}
+
+export function resetCombatDeath(combatantId: string) {
+  const row = db.prepare('SELECT * FROM combatants WHERE id = ?').get(combatantId) as Record<string, unknown> | undefined
+  if (!row) throw new Error('Combatant not found')
+  const conditions = jparse<string[]>((row.conditions_json as string) || '[]', []).filter((c) => c !== 'Unconscious')
+  db.prepare('UPDATE combatants SET death_state = ?, death_success = 0, death_fail = 0, conditions_json = ? WHERE id = ?').run(
+    'ok',
+    JSON.stringify(conditions),
+    combatantId,
+  )
+  if (row.source === 'character') {
+    const ch = db.prepare('SELECT sheet_json FROM player_characters WHERE id = ?').get(row.source_id) as { sheet_json: string } | undefined
+    if (ch) {
+      const sheet = jparse(ch.sheet_json, {} as Record<string, unknown>)
+      sheet.deathSuccess = 0
+      sheet.deathFail = 0
+      db.prepare('UPDATE player_characters SET sheet_json = ? WHERE id = ?').run(JSON.stringify(sheet), row.source_id)
+    }
+  }
+}
+
+export function resetTurnEconomyAt(instanceId: string, turnOrderPosition: number) {
+  const row = db
+    .prepare('SELECT id FROM combatants WHERE encounter_instance_id = ? AND turn_order_position = ?')
+    .get(instanceId, turnOrderPosition) as { id: string } | undefined
+  if (!row) return
+  db.prepare('UPDATE combatants SET turn_economy_json = ? WHERE id = ?').run(JSON.stringify(emptyTurnEconomy()), row.id)
+}
+
+export function setCombatTurnEconomy(combatantId: string, economy: unknown) {
+  const row = db.prepare('SELECT id FROM combatants WHERE id = ?').get(combatantId) as { id: string } | undefined
+  if (!row) throw new Error('Combatant not found')
+  db.prepare('UPDATE combatants SET turn_economy_json = ? WHERE id = ?').run(JSON.stringify(parseTurnEconomy(economy)), combatantId)
+}
+
+export function applyHpKnockout(combatantId: string, prevHp: number, nextHp: number) {
+  const target = db.prepare('SELECT * FROM combatants WHERE id = ?').get(combatantId) as Record<string, unknown> | undefined
+  if (!target) return
+  applyKnockout(target, prevHp, nextHp, 1)
 }
 
 function lookupAttack(attacker: Record<string, unknown>, attackIndex: number) {
@@ -659,6 +819,8 @@ export function resolvePlayerAttack(opts: {
   targetId: string
   attackIndex: number
   d20: number
+  d20b?: number
+  rollMode?: string
   damage: number
 }): PlayerAttackResult {
   const attacker = db

@@ -139,6 +139,26 @@ export type Monster = {
 
 export type Attack = { name: string; bonus: string; damage: string; range?: string }
 
+export type ResourceReset = 'short' | 'long' | 'manual'
+
+export type CharacterResource = {
+  name: string
+  current: number
+  max: number
+  reset: ResourceReset
+}
+
+export type RollMode = 'normal' | 'advantage' | 'disadvantage'
+
+export type DeathState = 'ok' | 'dying' | 'stable' | 'dead'
+
+export type TurnEconomy = {
+  action: boolean
+  bonus: boolean
+  reaction: boolean
+  movement: boolean
+}
+
 export type CharacterSheetData = {
   className: string
   level: number
@@ -164,6 +184,7 @@ export type CharacterSheetData = {
   spellSlots: number[]
   spellSlotsUsed: number[]
   spells: { name: string; level: number; prepared: boolean }[]
+  resources: CharacterResource[]
   personality: string
   ideals: string
   bonds: string
@@ -253,6 +274,10 @@ export type Combatant = {
   constitution: number
   /** Combatant IDs this creature has advantage against on its next attack. */
   advantageAgainst: string[]
+  deathState: DeathState
+  deathSuccess: number
+  deathFail: number
+  turnEconomy: TurnEconomy
 }
 
 export type MapToken = {
@@ -272,6 +297,7 @@ export type MapToken = {
   ac?: number
   color2?: string
   conditions?: string[]
+  statusLabel?: string
 }
 
 export type FogState = {
@@ -358,6 +384,7 @@ export function emptySheet(): CharacterSheetData {
     equipment: '',
     notes: '',
     features: '',
+    resources: [],
   }
 }
 

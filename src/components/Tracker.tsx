@@ -1,6 +1,8 @@
-import { CONDITIONS, conditionRingColor, type Combatant } from '@/lib/types'
+import { useState } from 'react'
+import { CONDITIONS, conditionRingColor, type Combatant, type TurnEconomy } from '@/lib/types'
 import { cn, hpColor } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { emptyTurnEconomy } from '@/lib/combat'
 
 type Props = {
   combatants: Combatant[]
@@ -8,16 +10,41 @@ type Props = {
   round: number
   isDm: boolean
   selectedId?: string | null
+  economyId?: string | null
   onSelect: (id: string) => void
   onPatch: (id: string, body: Record<string, unknown>) => void
   onNext: () => void
   onSort: () => void
   onReorder: (dir: -1 | 1, id: string) => void
+  onDeathSave?: (id: string, d20: number) => void
+  onResetDeath?: (id: string) => void
 }
 
-export function Tracker({ combatants, current, round, isDm, selectedId, onSelect, onPatch, onNext, onSort, onReorder }: Props) {
+const ECON: { key: keyof TurnEconomy; label: string }[] = [
+  { key: 'action', label: 'Action' },
+  { key: 'bonus', label: 'Bonus' },
+  { key: 'reaction', label: 'Reaction' },
+  { key: 'movement', label: 'Move' },
+]
+
+export function Tracker({
+  combatants,
+  current,
+  round,
+  isDm,
+  selectedId,
+  economyId,
+  onSelect,
+  onPatch,
+  onNext,
+  onSort,
+  onReorder,
+  onDeathSave,
+  onResetDeath,
+}: Props) {
   const ordered = [...combatants].sort((a, b) => a.turnOrderPosition - b.turnOrderPosition)
   const whose = ordered[current]
+  const [deathD20, setDeathD20] = useState('')
 
   return (
     <div className="flex h-full flex-col">
@@ -38,19 +65,27 @@ export function Tracker({ combatants, current, round, isDm, selectedId, onSelect
         )}
       </div>
       <ul className="mt-2 flex-1 space-y-2 overflow-y-auto scroll-thin pr-1">
-        {ordered.map((c, i) => (
+        {ordered.map((c, i) => {
+          const econ = c.turnEconomy ?? emptyTurnEconomy()
+          const canEcon = isDm || c.id === economyId
+          const dying = c.deathState === 'dying' || c.deathState === 'stable' || c.deathState === 'dead'
+          return (
           <li
             key={c.id}
             className={cn(
               'cursor-pointer rounded-md border p-2',
               i === current ? 'border-ember bg-ember/15' : 'border-line bg-panel-2/40',
               selectedId === c.id && 'ring-1 ring-gold',
+              c.deathState === 'dead' && 'opacity-70',
             )}
             onClick={() => onSelect(c.id)}
           >
             <div className="flex items-center gap-2">
               <span className="h-3 w-3 rounded-full" style={{ background: c.color }} />
               <span className="flex-1 font-medium">{c.name}</span>
+              {c.deathState === 'dying' && <span className="text-[10px] uppercase tracking-wide text-blood">Dying</span>}
+              {c.deathState === 'stable' && <span className="text-[10px] uppercase tracking-wide text-gold">Stable</span>}
+              {c.deathState === 'dead' && <span className="text-[10px] uppercase tracking-wide text-blood">Dead</span>}
               {isDm && (
                 <span className="flex gap-1">
                   <button type="button" className="text-xs text-muted" onClick={() => onReorder(-1, c.id)}>
@@ -152,8 +187,102 @@ export function Tracker({ combatants, current, round, isDm, selectedId, onSelect
                 ))}
               </select>
             )}
+            {canEcon && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {ECON.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={cn(
+                      'rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide',
+                      econ[key] ? 'bg-gold text-bg' : 'border border-line text-muted',
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onPatch(c.id, { turnEconomy: { ...econ, [key]: !econ[key] } })
+                    }}
+                  >
+                    {label}
+                    {econ[key] ? ' ✓' : ''}
+                  </button>
+                ))}
+              </div>
+            )}
+            {c.source === 'character' && dying && (
+              <div className="mt-2 text-[10px] uppercase tracking-wide text-muted">
+                Death saves {c.deathSuccess}/3 ok · {c.deathFail}/3 fail
+              </div>
+            )}
+            {isDm && c.source === 'character' && selectedId === c.id && (
+              <div className="mt-2 flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                <span className="text-[10px] uppercase tracking-wide text-muted">Saves</span>
+                <input
+                  className="h-8 w-10 rounded border border-line bg-bg px-1 text-xs"
+                  type="number"
+                  min={0}
+                  max={3}
+                  value={c.deathSuccess}
+                  onChange={(e) => onPatch(c.id, { deathSuccess: Math.max(0, Math.min(3, Number(e.target.value))) })}
+                  aria-label="Death save successes"
+                />
+                <input
+                  className="h-8 w-10 rounded border border-line bg-bg px-1 text-xs"
+                  type="number"
+                  min={0}
+                  max={3}
+                  value={c.deathFail}
+                  onChange={(e) => onPatch(c.id, { deathFail: Math.max(0, Math.min(3, Number(e.target.value))) })}
+                  aria-label="Death save failures"
+                />
+                <select
+                  className="h-8 rounded border border-line bg-bg px-1 text-xs"
+                  value={c.deathState}
+                  onChange={(e) => onPatch(c.id, { deathState: e.target.value })}
+                  aria-label="Death state"
+                >
+                  <option value="ok">Ok</option>
+                  <option value="dying">Dying</option>
+                  <option value="stable">Stable</option>
+                  <option value="dead">Dead</option>
+                </select>
+              </div>
+            )}
+            {c.source === 'character' && c.deathState === 'dying' && onDeathSave && (selectedId === c.id || economyId === c.id) && (
+              <div className="mt-2 flex gap-1" onClick={(e) => e.stopPropagation()}>
+                <input
+                  className="h-8 w-14 rounded border border-line bg-bg px-1 text-xs"
+                  inputMode="numeric"
+                  placeholder="d20"
+                  value={deathD20}
+                  onChange={(e) => setDeathD20(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    onDeathSave(c.id, Number(deathD20))
+                    setDeathD20('')
+                  }}
+                >
+                  Death save
+                </Button>
+              </div>
+            )}
+            {isDm && dying && onResetDeath && selectedId === c.id && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="mt-1"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onResetDeath(c.id)
+                }}
+              >
+                Reset death saves
+              </Button>
+            )}
           </li>
-        ))}
+          )
+        })}
       </ul>
     </div>
   )

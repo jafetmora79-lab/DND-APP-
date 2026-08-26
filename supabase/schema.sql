@@ -116,7 +116,11 @@ create table if not exists public.combatants (
   color text,
   notes text,
   constitution int not null default 10,
-  advantage_against_json jsonb not null default '[]'::jsonb
+  advantage_against_json jsonb not null default '[]'::jsonb,
+  death_state text not null default 'ok',
+  death_success int not null default 0,
+  death_fail int not null default 0,
+  turn_economy_json jsonb not null default '{"action":false,"bonus":false,"reaction":false,"movement":false}'::jsonb
 );
 
 create table if not exists public.tokens_on_map (
@@ -231,9 +235,14 @@ grant execute on function public.plays_in_campaign(uuid) to authenticated;
 alter table public.encounter_templates add column if not exists characters_json jsonb not null default '[]'::jsonb;
 alter table public.combatants add column if not exists constitution int not null default 10;
 alter table public.combatants add column if not exists advantage_against_json jsonb not null default '[]'::jsonb;
+alter table public.combatants add column if not exists death_state text not null default 'ok';
+alter table public.combatants add column if not exists death_success int not null default 0;
+alter table public.combatants add column if not exists death_fail int not null default 0;
+alter table public.combatants add column if not exists turn_economy_json jsonb not null default '{"action":false,"bonus":false,"reaction":false,"movement":false}'::jsonb;
 
 drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int);
 drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int, uuid);
+drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int, uuid, int, text);
 
 create or replace function public.resolve_player_attack(
   p_instance uuid,
@@ -241,7 +250,9 @@ create or replace function public.resolve_player_attack(
   p_attack_index int,
   p_d20 int,
   p_damage int,
-  p_attacker uuid default null
+  p_attacker uuid default null,
+  p_d20_b int default null,
+  p_roll_mode text default 'normal'
 )
 returns json
 language plpgsql
@@ -273,6 +284,9 @@ declare
   msg text;
   attacker_adv jsonb;
   target_adv jsonb;
+  used_d20 int;
+  mode text;
+  dice_note text;
 begin
   if auth.uid() is null then
     raise exception 'Sign-in required';
@@ -324,6 +338,14 @@ begin
   end if;
   if target.id = attacker.id then
     raise exception 'Pick a different creature';
+  end if;
+  if coalesce(attacker.death_state, 'ok') in ('dying', 'stable', 'dead')
+     or coalesce(attacker.conditions_json, '[]'::jsonb) @> '"Unconscious"'::jsonb
+     or coalesce(attacker.conditions_json, '[]'::jsonb) @> '"Paralyzed"'::jsonb
+     or coalesce(attacker.conditions_json, '[]'::jsonb) @> '"Stunned"'::jsonb
+     or coalesce(attacker.conditions_json, '[]'::jsonb) @> '"Incapacitated"'::jsonb
+     or coalesce(attacker.conditions_json, '[]'::jsonb) @> '"Petrified"'::jsonb then
+    raise exception '% cannot take a normal attack', attacker.name;
   end if;
 
   if attacker.source = 'character' then
@@ -385,6 +407,22 @@ begin
   attacker_adv := coalesce(attacker.advantage_against_json, '[]'::jsonb);
   target_adv := coalesce(target.advantage_against_json, '[]'::jsonb);
   had_adv := attacker_adv @> to_jsonb(target.id::text);
+  mode := coalesce(nullif(p_roll_mode, ''), 'normal');
+  if had_adv and mode = 'disadvantage' then mode := 'normal'; end if;
+  if had_adv and mode = 'normal' then mode := 'advantage'; end if;
+  if mode <> 'normal' then
+    if p_d20_b is null or p_d20_b < 1 or p_d20_b > 20 then
+      raise exception 'Enter both d20s for advantage or disadvantage';
+    end if;
+    if mode = 'advantage' then used_d20 := greatest(p_d20, p_d20_b); else used_d20 := least(p_d20, p_d20_b); end if;
+    dice_note := format('%s / %s → %s used', p_d20, p_d20_b, used_d20);
+  else
+    used_d20 := p_d20;
+    dice_note := used_d20::text;
+  end if;
+  total := used_d20 + bonus;
+  crit := used_d20 >= 20;
+  fumble := used_d20 <= 1;
   attacker_adv := coalesce((
     select jsonb_agg(to_jsonb(x))
     from jsonb_array_elements_text(attacker_adv) x
@@ -405,15 +443,18 @@ begin
 
   if not hit then
     if fumble then
-      msg := format('Natural 1 against %s — miss. %s has advantage against %s next turn.', target.name, target.name, attacker.name);
+      msg := format('%s. Natural 1 against %s — miss. %s has advantage against %s next turn.', dice_note, target.name, target.name, attacker.name);
     else
-      msg := format('%s vs AC %s — need higher than %s to hit %s.', total, target.ac, target.ac, target.name);
+      msg := format('%s. %s vs AC %s — need higher than %s to hit %s.', dice_note, total, target.ac, target.ac, target.name);
     end if;
     return json_build_object(
       'hit', false,
       'crit', false,
       'fumble', fumble,
       'hadAdvantage', had_adv,
+      'rollMode', mode,
+      'd20', used_d20,
+      'd20b', p_d20_b,
       'total', total,
       'ac', target.ac,
       'damage', 0,
@@ -434,6 +475,39 @@ begin
   end if;
 
   update public.combatants set hp_current = new_hp, hp_temp = new_temp where id = target.id;
+  if new_hp > 0 then
+    update public.combatants
+      set conditions_json = coalesce((
+            select jsonb_agg(to_jsonb(x))
+            from jsonb_array_elements_text(coalesce(conditions_json, '[]'::jsonb)) x
+            where x <> 'Unconscious'
+          ), '[]'::jsonb),
+          death_success = case when coalesce(death_state, 'ok') <> 'ok' then 0 else death_success end,
+          death_fail = case when coalesce(death_state, 'ok') <> 'ok' then 0 else death_fail end,
+          death_state = case when coalesce(death_state, 'ok') <> 'ok' then 'ok' else death_state end
+      where id = target.id;
+  else
+    if not (coalesce(target.conditions_json, '[]'::jsonb) @> '"Unconscious"'::jsonb) then
+      update public.combatants
+        set conditions_json = coalesce(conditions_json, '[]'::jsonb) || '"Unconscious"'::jsonb
+        where id = target.id;
+    end if;
+    if target.source = 'character' and coalesce(target.death_state, 'ok') <> 'dead' then
+      if target.hp_current > 0 and coalesce(target.death_state, 'ok') in ('ok', '') then
+        update public.combatants set death_state = 'dying', death_success = 0, death_fail = 0 where id = target.id;
+      elsif coalesce(target.death_state, 'ok') = 'dying' then
+        update public.combatants
+          set death_fail = least(3, coalesce(death_fail, 0) + case when target.hp_current <= 0 and crit then 2 else 1 end)
+          where id = target.id;
+        update public.combatants set death_state = 'dead' where id = target.id and death_fail >= 3;
+      elsif coalesce(target.death_state, 'ok') = 'stable' then
+        update public.combatants
+          set death_state = 'dying', death_success = 0,
+              death_fail = least(3, case when target.hp_current <= 0 and crit then 2 else 1 end)
+          where id = target.id;
+      end if;
+    end if;
+  end if;
   if target.source = 'character' then
     update public.player_characters
       set sheet_json = jsonb_set(jsonb_set(coalesce(sheet_json, '{}'::jsonb), '{hpCurrent}', to_jsonb(new_hp)), '{hpTemp}', to_jsonb(new_temp))
@@ -441,9 +515,9 @@ begin
   end if;
 
   if crit then
-    msg := format('Natural 20! %s damage to %s (%s HP left).', p_damage, target.name, new_hp);
+    msg := format('%s. Natural 20! %s damage to %s (%s HP left).', dice_note, p_damage, target.name, new_hp);
   else
-    msg := format('Hit %s (%s beats AC %s) for %s damage (%s HP left).', target.name, total, target.ac, p_damage, new_hp);
+    msg := format('%s. Hit %s (%s beats AC %s) for %s damage (%s HP left).', dice_note, target.name, total, target.ac, p_damage, new_hp);
   end if;
 
   return json_build_object(
@@ -451,6 +525,9 @@ begin
     'crit', crit,
     'fumble', false,
     'hadAdvantage', had_adv,
+    'rollMode', mode,
+    'd20', used_d20,
+    'd20b', p_d20_b,
     'total', total,
     'ac', target.ac,
     'damage', p_damage,
@@ -462,7 +539,105 @@ begin
 end;
 $$;
 
-grant execute on function public.resolve_player_attack(uuid, uuid, int, int, int, uuid) to authenticated;
+grant execute on function public.resolve_player_attack(uuid, uuid, int, int, int, uuid, int, text) to authenticated;
+
+create or replace function public.resolve_death_save(p_combatant uuid, p_d20 int)
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  c record;
+  inst record;
+  succ int;
+  fail int;
+  state text;
+  hp int;
+  cond jsonb;
+  revived boolean := false;
+  msg text;
+begin
+  if auth.uid() is null then raise exception 'Sign-in required'; end if;
+  if p_d20 < 1 or p_d20 > 20 then raise exception 'd20 must be between 1 and 20'; end if;
+  select * into c from public.combatants where id = p_combatant;
+  if not found then raise exception 'Combatant not found'; end if;
+  select * into inst from public.encounter_instances where id = c.encounter_instance_id;
+  if not public.is_dm_of_campaign(inst.campaign_id)
+     and not (c.source = 'character' and public.plays_in_campaign(inst.campaign_id) and exists (
+       select 1 from public.character_access a where a.user_id = auth.uid() and a.character_id::text = c.source_id and a.campaign_id = inst.campaign_id
+     )) then
+    raise exception 'Not allowed';
+  end if;
+  if c.source <> 'character' then raise exception 'Death saves are for player characters'; end if;
+  succ := coalesce(c.death_success, 0);
+  fail := coalesce(c.death_fail, 0);
+  state := coalesce(nullif(c.death_state, ''), 'ok');
+  hp := c.hp_current;
+  cond := coalesce(c.conditions_json, '[]'::jsonb);
+  if state = 'dead' then
+    return json_build_object('deathSuccess', succ, 'deathFail', fail, 'deathState', state, 'hpCurrent', hp, 'message', 'Already dead.', 'revived', false);
+  end if;
+  if state <> 'dying' then state := 'dying'; end if;
+  if p_d20 >= 20 then
+    hp := 1; state := 'ok'; succ := 0; fail := 0; revived := true;
+    cond := coalesce((select jsonb_agg(to_jsonb(x)) from jsonb_array_elements_text(cond) x where x <> 'Unconscious'), '[]'::jsonb);
+    msg := 'Natural 20 — regain 1 HP and wake.';
+  elsif p_d20 <= 1 then
+    fail := least(3, fail + 2);
+    msg := 'Natural 1 — two death-save failures.';
+  elsif p_d20 >= 10 then
+    succ := least(3, succ + 1);
+    msg := format('%s — death save success (%s/3).', p_d20, succ);
+  else
+    fail := least(3, fail + 1);
+    msg := format('%s — death save failure (%s/3).', p_d20, fail);
+  end if;
+  if not revived and fail >= 3 then state := 'dead'; msg := msg || ' Dead.';
+  elsif not revived and succ >= 3 then state := 'stable'; msg := msg || ' Stabilized.';
+  end if;
+  if not revived and (state = 'dying' or state = 'stable') and not (cond @> '"Unconscious"'::jsonb) then
+    cond := cond || '"Unconscious"'::jsonb;
+  end if;
+  update public.combatants set death_state = state, death_success = succ, death_fail = fail, hp_current = hp, conditions_json = cond where id = c.id;
+  return json_build_object('deathSuccess', succ, 'deathFail', fail, 'deathState', state, 'hpCurrent', hp, 'message', msg, 'revived', revived);
+end;
+$$;
+
+create or replace function public.set_turn_economy(p_combatant uuid, p_economy jsonb)
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  c record;
+  inst record;
+  econ jsonb;
+begin
+  if auth.uid() is null then raise exception 'Sign-in required'; end if;
+  select * into c from public.combatants where id = p_combatant;
+  if not found then raise exception 'Combatant not found'; end if;
+  select * into inst from public.encounter_instances where id = c.encounter_instance_id;
+  if not public.is_dm_of_campaign(inst.campaign_id)
+     and not (c.source = 'character' and exists (
+       select 1 from public.character_access a where a.user_id = auth.uid() and a.character_id::text = c.source_id and a.campaign_id = inst.campaign_id
+     )) then
+    raise exception 'Not allowed';
+  end if;
+  econ := jsonb_build_object(
+    'action', coalesce((p_economy->>'action')::boolean, false),
+    'bonus', coalesce((p_economy->>'bonus')::boolean, false),
+    'reaction', coalesce((p_economy->>'reaction')::boolean, false),
+    'movement', coalesce((p_economy->>'movement')::boolean, false)
+  );
+  update public.combatants set turn_economy_json = econ where id = c.id;
+  return json_build_object('ok', true);
+end;
+$$;
+
+grant execute on function public.resolve_death_save(uuid, int) to authenticated;
+grant execute on function public.set_turn_economy(uuid, jsonb) to authenticated;
 notify pgrst, 'reload schema';
 
 alter table public.dm_accounts enable row level security;

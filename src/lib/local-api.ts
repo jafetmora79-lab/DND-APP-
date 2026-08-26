@@ -113,13 +113,24 @@ export const localApi = {
   setFog: (id: string, fogState: FogState) => req(`/api/instances/${id}/fog`, { method: 'PATCH', body: JSON.stringify({ fogState }) }),
   playerAttack: (
     instanceId: string,
-    body: { targetId: string; attackIndex: number; d20: number; damage: number; attackerId?: string },
+    body: {
+      targetId: string
+      attackIndex: number
+      d20: number
+      d20b?: number
+      rollMode?: string
+      damage: number
+      attackerId?: string
+    },
   ) =>
     req<{
       hit: boolean
       crit: boolean
       fumble: boolean
       hadAdvantage: boolean
+      rollMode?: string
+      d20?: number
+      d20b?: number | null
       total: number
       ac: number
       damage: number
@@ -128,6 +139,18 @@ export const localApi = {
       targetName: string
       message: string
     }>(`/api/instances/${instanceId}/player-attack`, { method: 'POST', body: JSON.stringify(body) }),
+  deathSave: (combatantId: string, body: { d20: number }) =>
+    req<{
+      deathSuccess: number
+      deathFail: number
+      deathState: string
+      hpCurrent: number
+      message: string
+      revived: boolean
+    }>(`/api/combatants/${combatantId}/death-save`, { method: 'POST', body: JSON.stringify(body) }),
+  resetDeath: (combatantId: string) => req(`/api/combatants/${combatantId}/reset-death`, { method: 'POST' }),
+  setTurnEconomy: (combatantId: string, body: { action: boolean; bonus: boolean; reaction: boolean; movement: boolean }) =>
+    req(`/api/combatants/${combatantId}/turn-economy`, { method: 'POST', body: JSON.stringify(body) }),
 }
 
 export type TableApi = typeof localApi

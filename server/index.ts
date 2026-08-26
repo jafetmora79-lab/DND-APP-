@@ -8,6 +8,7 @@ import express from 'express'
 import multer from 'multer'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { sessionFromRow } from '../src/lib/session.ts'
+import { parseDeathState, parseTurnEconomy } from '../src/lib/combat.ts'
 import { emptySheet, type AuthUser, type FogState, type NamedEntry } from '../src/lib/types.ts'
 import {
     clampGridDim,
@@ -33,6 +34,11 @@ import {
   spawnFromTemplate,
   resolvePlayerAttack,
   resolveCombatAttack,
+  applyCombatDeathSave,
+  resetCombatDeath,
+  resetTurnEconomyAt,
+  setCombatTurnEconomy,
+  applyHpKnockout,
 } from './db.ts'
 import { parseCharacterPdf } from './pdf.ts'
 
@@ -179,6 +185,10 @@ function snapshot(campaignId: string) {
       notes: c.notes,
       constitution: Number(c.constitution ?? 10),
       advantageAgainst: jparse<string[]>((c.advantage_against_json as string) || '[]', []),
+      deathState: parseDeathState(c.death_state),
+      deathSuccess: Number(c.death_success ?? 0),
+      deathFail: Number(c.death_fail ?? 0),
+      turnEconomy: parseTurnEconomy(jparse((c.turn_economy_json as string) || '{}', {})),
     })),
     tokens: tokens.map((t) => ({
       id: t.id,
@@ -1039,6 +1049,8 @@ app.post('/api/instances/:id/player-attack', requireUser, (req, res) => {
       targetId: String(req.body.targetId ?? ''),
       attackIndex: Number(req.body.attackIndex),
       d20: Number(req.body.d20),
+      d20b: req.body.d20b == null || req.body.d20b === '' ? undefined : Number(req.body.d20b),
+      rollMode: req.body.rollMode,
       damage: Number(req.body.damage),
     }
     let result
@@ -1087,20 +1099,96 @@ app.patch('/api/combatants/:id', requireDm, (req, res) => {
       db.prepare('UPDATE combatants SET conditions_json = ? WHERE id = ?').run(JSON.stringify(v), c.id)
       continue
     }
+    if (k === 'turnEconomy') {
+      setCombatTurnEconomy(String(c.id), v)
+      continue
+    }
+    if (k === 'deathState' || k === 'deathSuccess' || k === 'deathFail') {
+      const col = k === 'deathState' ? 'death_state' : k === 'deathSuccess' ? 'death_success' : 'death_fail'
+      db.prepare(`UPDATE combatants SET ${col} = ? WHERE id = ?`).run(v, c.id)
+      continue
+    }
     const col = map[k] ?? k
     if (fields.includes(col as (typeof fields)[number])) {
       db.prepare(`UPDATE combatants SET ${col} = ? WHERE id = ?`).run(v, c.id)
     }
   }
-  if (c.source === 'character' && (req.body.hpCurrent != null || req.body.hpMax != null)) {
+  if (c.source === 'character' && (req.body.hpCurrent != null || req.body.hpMax != null || req.body.deathSuccess != null || req.body.deathFail != null)) {
     const ch = db.prepare('SELECT sheet_json FROM player_characters WHERE id = ?').get(c.source_id) as { sheet_json: string } | undefined
     if (ch) {
       const sheet = jparse(ch.sheet_json, {} as Record<string, unknown>)
       if (req.body.hpCurrent != null) sheet.hpCurrent = req.body.hpCurrent
       if (req.body.hpMax != null) sheet.hpMax = req.body.hpMax
+      if (req.body.deathSuccess != null) sheet.deathSuccess = req.body.deathSuccess
+      if (req.body.deathFail != null) sheet.deathFail = req.body.deathFail
       db.prepare('UPDATE player_characters SET sheet_json = ? WHERE id = ?').run(JSON.stringify(sheet), c.source_id)
     }
   }
+  if (req.body.hpCurrent != null) {
+    applyHpKnockout(String(c.id), Number(c.hp_current), Number(req.body.hpCurrent))
+  }
+  pushCampaign(inst.campaign_id as string)
+  res.json({ ok: true })
+})
+
+function combatantCampaign(c: Record<string, unknown>) {
+  const inst = instanceRow(c.encounter_instance_id as string)
+  return inst
+}
+
+function canActAsCombatant(user: AuthUser, c: Record<string, unknown>, inst: Record<string, unknown>) {
+  if (user.role === 'dm') return campaignOwned(inst.campaign_id as string, user.id)
+  return user.role === 'player' && c.source === 'character' && String(c.source_id) === user.characterId && inst.campaign_id === user.campaignId
+}
+
+app.post('/api/combatants/:id/death-save', requireUser, (req, res) => {
+  const c = db.prepare('SELECT * FROM combatants WHERE id = ?').get(param(req, 'id')) as Record<string, unknown> | undefined
+  if (!c) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  const inst = combatantCampaign(c)
+  if (!inst || !canActAsCombatant(userOf(req), c, inst)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  try {
+    const result = applyCombatDeathSave(String(c.id), Number(req.body.d20))
+    pushCampaign(inst.campaign_id as string)
+    res.json(result)
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Death save failed' })
+  }
+})
+
+app.post('/api/combatants/:id/reset-death', requireDm, (req, res) => {
+  const c = db.prepare('SELECT * FROM combatants WHERE id = ?').get(param(req, 'id')) as Record<string, unknown> | undefined
+  if (!c) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  const inst = combatantCampaign(c)
+  if (!inst || !campaignOwned(inst.campaign_id as string, userOf(req).id)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  resetCombatDeath(String(c.id))
+  pushCampaign(inst.campaign_id as string)
+  res.json({ ok: true })
+})
+
+app.post('/api/combatants/:id/turn-economy', requireUser, (req, res) => {
+  const c = db.prepare('SELECT * FROM combatants WHERE id = ?').get(param(req, 'id')) as Record<string, unknown> | undefined
+  if (!c) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  const inst = combatantCampaign(c)
+  if (!inst || !canActAsCombatant(userOf(req), c, inst)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  setCombatTurnEconomy(String(c.id), req.body)
   pushCampaign(inst.campaign_id as string)
   res.json({ ok: true })
 })
@@ -1123,6 +1211,7 @@ app.post('/api/instances/:id/next-turn', requireDm, (req, res) => {
     round += 1
   }
   db.prepare('UPDATE encounter_instances SET current_turn_position = ?, round_number = ? WHERE id = ?').run(pos, round, inst.id)
+  resetTurnEconomyAt(String(inst.id), pos)
   pushCampaign(inst.campaign_id as string)
   res.json({ ok: true, round, pos })
 })
@@ -1137,6 +1226,7 @@ app.post('/api/instances/:id/sort-initiative', requireDm, (req, res) => {
   rows.sort((a, b) => b.initiative - a.initiative)
   rows.forEach((r, i) => db.prepare('UPDATE combatants SET turn_order_position = ? WHERE id = ?').run(i, r.id))
   db.prepare('UPDATE encounter_instances SET current_turn_position = 0 WHERE id = ?').run(inst.id)
+  resetTurnEconomyAt(String(inst.id), 0)
   pushCampaign(inst.campaign_id as string)
   res.json({ ok: true })
 })
