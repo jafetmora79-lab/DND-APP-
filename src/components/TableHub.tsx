@@ -128,7 +128,7 @@ export function TableHub({
                     <li key={i.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2">
                       <div className="min-w-0">
                         <div className="truncate">{i.name}</div>
-                        <div className="text-xs text-muted">Round {i.roundNumber}</div>
+                        <div className="text-xs text-muted">{i.roundNumber === 0 ? 'Initiative' : `Round ${i.roundNumber}`}</div>
                       </div>
                       <Button size="sm" disabled={dm.busy} onClick={() => dm.onResume(i.id)}>
                         <Play className="h-4 w-4" /> Resume

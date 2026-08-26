@@ -88,7 +88,8 @@ a personal code from Prep.
     submit their d20; Dex (or the sheet initiative bonus) is added. Sort
     breaks ties by Dex then name. Begin round 1 starts combat. Corpses and
     surprised creatures are skipped. Dying PCs still get a turn for death
-    saves.
+    saves. Table / Pause during initiative keeps the fight in setup — Resume
+    does not skip to round 1.
 
   Combat
     Map (Konva, 5-ft squares), initiative tracker, attacks, fog of war.
@@ -192,7 +193,7 @@ C) What does NOT add them
     hub with their sheet. It does not drop a token onto a fight that is already
     running, unless they were placed on that template and you started it.
   - Creating a character in Prep does not put them on any encounter until you
-    Place on map (and save) or press + Name in combat.
+    Place on map (and save), press + Name in combat, or Join this fight.
 
 
 6. LIVE COMBAT DETAILS
@@ -243,8 +244,9 @@ When no fight is active:
   - Scene image (upload or the default tavern hearth)
   - Caption you can edit
   - All character sheets
+  - Optional short rest: type HP recovered from hit dice
   - Ready-to-start templates with a check mark
-  - Paused fights you can resume
+  - Paused fights you can resume (including fights still on initiative)
 
 Won / Lost overlay appears after the DM finalizes, then everyone is back here.
 
@@ -308,6 +310,7 @@ If a player token never appears, check in this order:
   - On the template: was Place on map used AND Save clicked?
   - Did Start use that same template?
   - During combat: did + Name report an error at the top of the live page?
+  - On the phone: did Join this fight succeed?
 
 
 11. WHAT THIS APP DELIBERATELY DOES NOT DO

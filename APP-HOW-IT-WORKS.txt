@@ -173,8 +173,10 @@ COMBAT
 
 Shown when the session is in the setup or combat phase with a map + instance
 that is not completed. Start opens a checklist (who is placed, fog, surprise)
-then setup: type initiative, Sort (Dex ties), Begin round 1. Pause keeps the
-fight; Table pauses and returns to the hub; Finalize ends it.
+then setup: type initiative, Sort (Dex ties), Begin round 1. New fights store
+round 0 until Begin round 1, so Table / Resume during initiative does not
+skip into combat. Pause keeps the fight; Table pauses and returns to the hub;
+Finalize ends it.
 
 MAP
   Konva. Pan, zoom, drag tokens. Snap to 5-ft squares.

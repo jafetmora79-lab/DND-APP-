@@ -16,7 +16,7 @@ import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
 import { attacksFromMonster, canTakeAttacks, decorateTokens, effectiveRollMode, inRangeCombatantIds } from '@/lib/combat'
 import { useLive } from '@/lib/realtime'
-import { showCombatStage, showOutcome } from '@/lib/session'
+import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
 import { ABILITIES, ABILITY_LABELS, type Ability, type Attack, type EncounterInstance, type EncounterSnapshot, type EncounterTemplate, type FogState, type Monster, type RollMode } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
@@ -223,7 +223,10 @@ export function Live() {
     setError('')
     try {
       await api.setStatus(id, 'active')
-      await api.openSession(campaignId, id)
+      const pausedInst = instances.find((i) => i.id === id)
+      await api.openSession(campaignId, id, {
+        tablePhase: pausedInst && pausedInst.roundNumber === 0 ? 'setup' : 'combat',
+      })
       setPickerOpen(false)
       await load()
     } catch (e) {
@@ -327,7 +330,7 @@ export function Live() {
   const paused = instances.filter((i) => i.status === 'paused')
   const combat = showCombatStage(snap?.session ?? null, instance ?? null, snap?.map ?? null)
   const outcome = showOutcome(snap?.session ?? null)
-  const setup = snap?.session?.tablePhase === 'setup'
+  const setup = isFightSetup(snap?.session ?? null, instance ?? null)
   const hubCharacter = snap?.characters.find((c) => c.id === sheetId) ?? snap?.characters[0]
 
   if (!snap) {

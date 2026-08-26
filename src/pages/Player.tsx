@@ -12,7 +12,7 @@ import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { decorateTokens } from '@/lib/combat'
 import { useLive } from '@/lib/realtime'
-import { showCombatStage, showOutcome } from '@/lib/session'
+import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
 import type { Attack, EncounterSnapshot, PlayerCharacter } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -133,7 +133,7 @@ export function Player() {
         <div className="min-w-0 flex-1">
           <div className="truncate font-display text-gold">{snap.campaign.name}</div>
           <div className="truncate text-xs text-muted">
-            {snap.session?.tablePhase === 'setup'
+            {isFightSetup(snap.session, snap.instance)
               ? 'Roll initiative — enter your d20 below'
               : snap.instance
                 ? `Round ${snap.instance.roundNumber} · ${whose?.name ?? 'waiting'}'s turn`
@@ -220,7 +220,7 @@ export function Player() {
             current={snap.instance.currentTurnPosition}
             round={snap.instance.roundNumber}
             isDm={false}
-            setup={snap.session?.tablePhase === 'setup'}
+            setup={isFightSetup(snap.session, snap.instance)}
             selectedId={saveTargetId}
             economyId={myCombatant?.id}
             onSelect={(id) => setFocusId(id)}
@@ -294,7 +294,7 @@ export function Player() {
             launchAttack={launchAttack}
             onLaunchHandled={() => setLaunchAttack(null)}
             onSettled={refreshLive}
-            setup={snap.session?.tablePhase === 'setup'}
+            setup={isFightSetup(snap.session, snap.instance)}
             currentTurnPosition={snap.instance.currentTurnPosition}
           />
           </div>

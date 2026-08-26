@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { isFightSetup } from '../src/lib/session.ts'
+import type { EncounterInstance, LiveSession } from '../src/lib/types.ts'
 import { applyShortRestHp, canActThisTurn, firstActingPosition, nextActingPosition, sortByInitiative, standingEnemies, type CombatantLike } from '../src/lib/turn-flow.ts'
 
 function check(name: string, fn: () => void) {
@@ -92,6 +94,43 @@ check('short rest hp is typed and capped', () => {
   assert.equal(applyShortRestHp(4, 10, 3), 7)
   assert.equal(applyShortRestHp(8, 10, 9), 10)
   assert.equal(applyShortRestHp(2, 10, -4), 2)
+})
+
+function inst(round: number): EncounterInstance {
+  return {
+    id: 'i',
+    campaignId: 'c',
+    encounterTemplateId: null,
+    name: 'Fight',
+    status: 'paused',
+    roundNumber: round,
+    currentTurnPosition: 0,
+    fogState: { cols: 1, rows: 1, enabled: false, revealed: [1] },
+    mapId: 'm',
+    activity: [],
+    prompt: null,
+  }
+}
+
+function sess(phase: LiveSession['tablePhase']): LiveSession {
+  return {
+    id: 's',
+    joinCode: 'HEARTH',
+    campaignId: 'c',
+    encounterInstanceId: 'i',
+    tablePhase: phase,
+    ambianceImageUrl: null,
+    ambianceCaption: '',
+    lastOutcome: null,
+  }
+}
+
+check('setup survives returning to the hub (round 0)', () => {
+  assert.equal(isFightSetup(sess('table'), inst(0)), true)
+  assert.equal(isFightSetup(sess('combat'), inst(0)), true)
+  assert.equal(isFightSetup(sess('setup'), inst(0)), true)
+  assert.equal(isFightSetup(sess('combat'), inst(1)), false)
+  assert.equal(isFightSetup(sess('victory'), inst(0)), false)
 })
 
 console.log('all turn-flow checks passed')
