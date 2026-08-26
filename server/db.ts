@@ -13,6 +13,7 @@ import { applyEncounterRewards, emptyBrief, parseHub } from '../src/lib/campaign
 import { unpackTemplateJson } from '../src/lib/template-json.ts'
 import { coverBonusAlongLine, lightingFromStart, makeStartFog } from '../src/lib/vision.ts'
 import { actionRevealsHiding, hidingBrokenByWatchers, isHiding, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from '../src/lib/stealth.ts'
+import { seedMandatoryFun } from './seed-mandatory-fun.ts'
 import {
   SURPRISED,
   combatantLikeFromRow,
@@ -1515,3 +1516,8 @@ function seedDemo() {
 }
 
 seedDemo()
+const hearth = db.prepare('SELECT id FROM dm_accounts WHERE name = ?').get('Hearthkeeper') as { id: string } | undefined
+if (hearth) {
+  seedBestiaryForDm(hearth.id)
+  seedMandatoryFun({ db, id: ids.id, insertMonster }, hearth.id)
+}
