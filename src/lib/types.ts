@@ -46,6 +46,7 @@ export const CONDITIONS = [
   'Restrained',
   'Stunned',
   'Unconscious',
+  'Surprised',
   'Dodging',
   'Disengaging',
   'Hiding',
@@ -73,6 +74,7 @@ export const CONDITION_RING: Record<(typeof CONDITIONS)[number], string> = {
   Restrained: '#f59e0b',
   Stunned: '#38bdf8',
   Unconscious: '#818cf8',
+  Surprised: '#fbbf24',
   Dodging: '#86efac',
   Disengaging: '#fdba74',
   Hiding: '#94a3b8',
@@ -421,7 +423,7 @@ export type EncounterInstance = {
   prompt: CombatPrompt
 }
 
-export type TablePhase = 'table' | 'combat' | 'victory' | 'defeat'
+export type TablePhase = 'table' | 'setup' | 'combat' | 'victory' | 'defeat'
 export type EncounterOutcome = 'won' | 'lost'
 
 export type LiveSession = {

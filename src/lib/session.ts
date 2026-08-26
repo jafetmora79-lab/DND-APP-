@@ -4,7 +4,7 @@ export function sessionFromRow(row: Record<string, unknown>): LiveSession {
   const encounterInstanceId = row.encounter_instance_id ? String(row.encounter_instance_id) : null
   const rawPhase = String(row.table_phase ?? '')
   let tablePhase: TablePhase =
-    rawPhase === 'table' || rawPhase === 'combat' || rawPhase === 'victory' || rawPhase === 'defeat'
+    rawPhase === 'table' || rawPhase === 'setup' || rawPhase === 'combat' || rawPhase === 'victory' || rawPhase === 'defeat'
       ? rawPhase
       : encounterInstanceId
         ? 'combat'
@@ -34,6 +34,7 @@ export function showCombatStage(
   const phase = session?.tablePhase ?? 'combat'
   if (phase === 'victory' || phase === 'defeat') return true
   if (phase === 'table') return false
+  if (phase === 'setup' || phase === 'combat') return instance.status !== 'completed'
   return instance.status !== 'completed'
 }
 

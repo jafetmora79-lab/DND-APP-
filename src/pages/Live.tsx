@@ -10,6 +10,7 @@ import { CharacterSheet } from '@/components/CharacterSheet'
 import { EncounterOutcomeOverlay } from '@/components/EncounterOutcome'
 import { MapBoard } from '@/components/map/MapBoard'
 import { StatBlock } from '@/components/StatBlock'
+import { StartFightDialog } from '@/components/StartFightDialog'
 import { TableHub } from '@/components/TableHub'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
@@ -20,6 +21,7 @@ import { ABILITIES, ABILITY_LABELS, type Ability, type Attack, type EncounterIns
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
 import { markBeatForTemplate, parseHub, sortTemplates } from '@/lib/campaign-hub'
+import { asCombatantLike, standingEnemies, type StartFightOpts } from '@/lib/turn-flow'
 
 export function Live() {
   const { campaignId } = useParams()
@@ -44,7 +46,9 @@ export function Live() {
   const [attackMsg, setAttackMsg] = useState('')
   const [attackBusy, setAttackBusy] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerTpl, setPickerTpl] = useState<EncounterTemplate | null>(null)
   const [finalizeOpen, setFinalizeOpen] = useState(false)
+  const [lootHolder, setLootHolder] = useState('')
   const [hudTab, setHudTab] = useState<'map' | 'tracker' | 'sheet'>('map')
   const [saveAbility, setSaveAbility] = useState<Ability>('dex')
   const [saveDc, setSaveDc] = useState('13')
@@ -149,21 +153,25 @@ export function Live() {
     }
   }
 
-  async function startFrom(templateId: string) {
+  async function startFrom(templateId: string, opts?: StartFightOpts) {
     if (!campaignId) return
+    if (instance && instance.status === 'active' && !showOutcome(snap?.session ?? null)) {
+      setError('Pause or Finalize this fight before starting another. Table keeps the fight; Finalize ends it.')
+      setPickerOpen(false)
+      setPickerTpl(null)
+      return
+    }
     setBusy(true)
     setError('')
     try {
-      if (instance && instance.status === 'active') {
-        await api.setStatus(instance.id, 'completed')
-      }
-      const r = await api.startInstance(campaignId, templateId)
-      await api.openSession(campaignId, r.instanceId)
+      const r = await api.startInstance(campaignId, templateId, opts)
+      await api.openSession(campaignId, r.instanceId, { tablePhase: 'setup' })
       const hub = parseHub(snap?.campaign.hub)
       if (hub.beats.some((b) => b.templateId === templateId)) {
         await api.patchCampaign(campaignId, { hub: markBeatForTemplate(hub, templateId, 'active') })
       }
       setPickerOpen(false)
+      setPickerTpl(null)
       setFinalizeOpen(false)
       setPending(null)
       setTargetId(null)
@@ -251,8 +259,9 @@ export function Live() {
     if (!campaignId) return
     setBusy(true)
     try {
-      await api.finishEncounter(campaignId, outcome)
+      await api.finishEncounter(campaignId, outcome, { lootHolder: outcome === 'won' ? lootHolder : undefined })
       setFinalizeOpen(false)
+      setLootHolder('')
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed')
@@ -318,6 +327,7 @@ export function Live() {
   const paused = instances.filter((i) => i.status === 'paused')
   const combat = showCombatStage(snap?.session ?? null, instance ?? null, snap?.map ?? null)
   const outcome = showOutcome(snap?.session ?? null)
+  const setup = snap?.session?.tablePhase === 'setup'
   const hubCharacter = snap?.characters.find((c) => c.id === sheetId) ?? snap?.characters[0]
 
   if (!snap) {
@@ -396,6 +406,12 @@ export function Live() {
             onStart: startFrom,
             onResume: resume,
             busy,
+            activeFight: Boolean(instance && instance.status === 'active'),
+          }}
+          onShortRest={(characterId, hpCurrent) => {
+            const ch = snap.characters.find((c) => c.id === characterId)
+            if (!ch) return
+            void api.patchCharacter(characterId, { sheet: { ...ch.sheet, hpCurrent } }).then(load)
           }}
         />
       </div>
@@ -404,10 +420,16 @@ export function Live() {
 
   const tableActions = (
     <>
-      <Button size="sm" variant="outline" disabled={busy} onClick={leaveToTable}>
+      <Button size="sm" variant="outline" disabled={busy} onClick={leaveToTable} title="Pause this fight and return to the hub. The fight stays.">
         Table
       </Button>
-      <Button size="sm" variant="outline" disabled={busy || Boolean(outcome)} onClick={() => setPickerOpen(true)}>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy || Boolean(outcome) || (instance.status === 'active' && !outcome)}
+        title={instance.status === 'active' ? 'Pause or Finalize this fight first.' : 'Start the next template'}
+        onClick={() => setPickerOpen(true)}
+      >
         Next encounter
       </Button>
       <Button size="sm" variant="ember" disabled={busy || Boolean(outcome)} onClick={() => setFinalizeOpen(true)}>
@@ -434,8 +456,8 @@ export function Live() {
           </Link>
           <span className="hidden text-muted sm:inline">/</span>
           <span className="hidden min-w-0 truncate sm:inline">{instance.name}</span>
-          <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs uppercase', instance.status === 'active' ? 'bg-moss/20 text-moss' : 'bg-gold/20 text-gold')}>
-            {instance.status}
+          <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs uppercase', setup ? 'bg-gold/20 text-gold' : instance.status === 'active' ? 'bg-moss/20 text-moss' : 'bg-gold/20 text-gold')}>
+            {setup ? 'setup' : instance.status}
           </span>
           <div className="ml-auto hidden items-center gap-2 lg:flex">
             {joinActions}
@@ -448,6 +470,19 @@ export function Live() {
         </div>
       </header>
       {error && <p className="shrink-0 border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
+      {setup && !outcome && (
+        <p className="shrink-0 border-b border-line bg-gold/10 px-3 py-2 text-sm">
+          Roll initiative at the table. Type monster totals here; players enter their d20 on their phones. Sort (Dex breaks ties), then Begin round 1.
+        </p>
+      )}
+      {!setup && !outcome && standingEnemies((snap.combatants ?? []).map(asCombatantLike)).length === 0 && snap.combatants.some((c) => c.source === 'bestiary') && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-gold/10 px-3 py-2 text-sm">
+          <span>No standing enemies. Finalize when the fight is actually over — Table still pauses if someone fled.</span>
+          <Button size="sm" variant="ember" disabled={busy} onClick={() => setFinalizeOpen(true)}>
+            Finalize
+          </Button>
+        </div>
+      )}
 
       <div className="flex shrink-0 gap-1 border-b border-line px-2 py-1 lg:hidden">
         {(['map', 'tracker', 'sheet'] as const).map((tab) => (
@@ -475,6 +510,7 @@ export function Live() {
             current={instance.currentTurnPosition}
             round={instance.roundNumber}
             isDm
+            setup={setup}
             selectedId={selected}
             onSelect={(id) => {
               setSelected(id)
@@ -495,10 +531,20 @@ export function Live() {
               else void api.patchCombatant(id, body).then(done)
             }}
             onNext={() => {
-              void api.nextTurn(instance.id).then(() => refreshLive())
+              void api.nextTurn(instance.id, { expectedTurnPosition: instance.currentTurnPosition }).then(() => refreshLive())
+            }}
+            onSkip={() => {
+              void api.nextTurn(instance.id, { expectedTurnPosition: instance.currentTurnPosition }).then(() => refreshLive())
+            }}
+            onBeginRound={() => {
+              if (!campaignId) return
+              void api.beginRound(campaignId).then(() => refreshLive()).catch((e) => setError(e instanceof Error ? e.message : 'Could not begin'))
             }}
             onSort={() => {
-              void api.sortInit(instance.id).then(() => refreshLive())
+              void api.sortInit(instance.id, { keepCurrent: !setup }).then(() => refreshLive())
+            }}
+            onRemove={(id) => {
+              void api.removeCombatant(id).then(() => refreshLive()).catch((e) => setError(e instanceof Error ? e.message : 'Could not remove'))
             }}
             onDeathSave={(id, d20v) => {
               void api.deathSave(id, { d20: d20v }).then((r) => {
@@ -572,6 +618,12 @@ export function Live() {
             </div>
           )}
           <CombatActivityFeed items={instance.activity ?? []} />
+          {(() => {
+            const tpl = templates.find((t) => t.id === instance.encounterTemplateId)
+            const brief = [tpl?.difficulty, tpl?.objective, tpl?.notes].filter(Boolean).join(' · ')
+            if (!brief) return null
+            return <p className="mt-2 text-xs text-muted">{brief}</p>
+          })()}
           <div className="mt-3 flex gap-2">
             <Input
               placeholder="Add monster…"
@@ -788,8 +840,25 @@ export function Live() {
           <div className="w-full max-w-md rounded-xl border border-line bg-panel p-6 text-center">
             <h2 className="font-display text-2xl text-gold-2">How did it go?</h2>
             <p className="mt-2 text-sm text-muted">
-              Players see a victory or defeat on their phones, then you bring everyone back to the table — same join code.
+              Players see a victory or defeat on their phones, then you bring everyone back to the table — same join code. XP goes to characters who were in this fight. Table would have paused instead of ending it.
             </p>
+            {snap.characters.length > 0 && (
+              <label className="mt-4 block text-left text-sm">
+                Loot holder (optional)
+                <select
+                  className="mt-1 h-9 w-full rounded-md border border-line bg-bg px-2"
+                  value={lootHolder}
+                  onChange={(e) => setLootHolder(e.target.value)}
+                >
+                  <option value="">Party / unassigned</option>
+                  {snap.characters.map((ch) => (
+                    <option key={ch.id} value={ch.name}>
+                      {ch.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Button disabled={busy} onClick={() => finish('won')}>
                 <Trophy className="h-4 w-4" /> Won
@@ -808,7 +877,9 @@ export function Live() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-label="Next encounter">
           <div className="max-h-[80dvh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-panel p-6">
             <h2 className="font-display text-2xl text-gold-2">Next encounter</h2>
-            <p className="mt-2 text-sm text-muted">The join code stays. This fight is left behind; the new map opens for everyone at the table.</p>
+            <p className="mt-2 text-sm text-muted">
+              The join code stays. Only open a new fight after this one is finalized or paused — starting here does not silently complete an active fight.
+            </p>
             {paused.length > 0 && (
               <section className="mt-4">
                 <h3 className="text-xs uppercase tracking-wider text-muted">Paused</h3>
@@ -831,7 +902,7 @@ export function Live() {
                     <div className="truncate">{t.name}</div>
                     <div className="truncate text-xs text-muted">{t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')}</div>
                   </div>
-                  <Button size="sm" variant="ember" disabled={busy} onClick={() => startFrom(t.id)}>
+                  <Button size="sm" variant="ember" disabled={busy} onClick={() => setPickerTpl(t)}>
                     Start
                   </Button>
                 </li>
@@ -845,6 +916,18 @@ export function Live() {
             </div>
           </div>
         </div>
+      )}
+      {pickerTpl && (
+        <StartFightDialog
+          template={pickerTpl}
+          characters={snap.characters}
+          busy={busy}
+          warnActiveFight={instance.status === 'active' && !outcome}
+          onCancel={() => setPickerTpl(null)}
+          onConfirm={(opts) => {
+            void startFrom(pickerTpl.id, opts)
+          }}
+        />
       )}
     </div>
   )

@@ -114,6 +114,14 @@ export function Player() {
           onSelectCharacter={setSheetId}
           sheet={sheet}
           playerView
+          onShortRest={
+            me
+              ? (characterId, hpCurrent) => {
+                  if (characterId !== me.id) return
+                  void api.patchCharacter(me.id, { sheet: { ...me.sheet, hpCurrent } }).then(load)
+                }
+              : undefined
+          }
         />
       </div>
     )
@@ -125,7 +133,11 @@ export function Player() {
         <div className="min-w-0 flex-1">
           <div className="truncate font-display text-gold">{snap.campaign.name}</div>
           <div className="truncate text-xs text-muted">
-            {snap.instance ? `Round ${snap.instance.roundNumber} · ${whose?.name ?? 'waiting'}'s turn` : 'No encounter loaded yet'}
+            {snap.session?.tablePhase === 'setup'
+              ? 'Roll initiative — enter your d20 below'
+              : snap.instance
+                ? `Round ${snap.instance.roundNumber} · ${whose?.name ?? 'waiting'}'s turn`
+                : 'No encounter loaded yet'}
           </div>
         </div>
         {me && (
@@ -208,6 +220,7 @@ export function Player() {
             current={snap.instance.currentTurnPosition}
             round={snap.instance.roundNumber}
             isDm={false}
+            setup={snap.session?.tablePhase === 'setup'}
             selectedId={saveTargetId}
             economyId={myCombatant?.id}
             onSelect={(id) => setFocusId(id)}
@@ -247,9 +260,24 @@ export function Player() {
       {me && (
         <>
           {!myCombatant && (
-            <p className="shrink-0 border-t border-line bg-panel px-3 py-2 text-xs text-muted">
-              You are not on the map yet. Ask the DM to place your character (or include you on the encounter template).
-            </p>
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-panel px-3 py-2 text-sm">
+              <span className="text-muted">You are not on the map yet.</span>
+              <Button
+                size="sm"
+                variant="ember"
+                onClick={() => {
+                  void api
+                    .joinFight(snap.instance!.id)
+                    .then(() => {
+                      setNote('You are on the map.')
+                      refreshLive()
+                    })
+                    .catch((e) => setError(e instanceof Error ? e.message : 'Could not join the fight'))
+                }}
+              >
+                Join this fight
+              </Button>
+            </div>
           )}
           {note && <p className="shrink-0 border-t border-line bg-panel px-3 py-1 text-sm text-gold">{note}</p>}
           <div className="max-h-[40vh] shrink-0 overflow-y-auto pb-[env(safe-area-inset-bottom)] lg:max-h-[30vh]">
@@ -266,6 +294,8 @@ export function Player() {
             launchAttack={launchAttack}
             onLaunchHandled={() => setLaunchAttack(null)}
             onSettled={refreshLive}
+            setup={snap.session?.tablePhase === 'setup'}
+            currentTurnPosition={snap.instance.currentTurnPosition}
           />
           </div>
         </>

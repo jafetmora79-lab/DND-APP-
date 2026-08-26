@@ -173,6 +173,17 @@ function abilityScore(raw: unknown, fallback = 10) {
 }
 
 /** Copy the minimum save math off a bestiary row or Monster (camel or snake case). */
+export function combatantStatsFromSheet(abilities: {
+  str?: unknown
+  dex?: unknown
+  con?: unknown
+  int?: unknown
+  wis?: unknown
+  cha?: unknown
+} | null | undefined): CombatantStats {
+  return combatantStatsFromMonster({ ...abilities, savingThrows: '' })
+}
+
 export function combatantStatsFromMonster(src: {
   str?: unknown
   dex?: unknown

@@ -1,11 +1,13 @@
-import { useRef, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Check, ImagePlus, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AmbianceStage } from '@/components/AmbianceStage'
+import { StartFightDialog } from '@/components/StartFightDialog'
 import type { CampaignHub, EncounterInstance, EncounterOutcome, EncounterTemplate, PlayerCharacter } from '@/lib/types'
 import { templateReady } from '@/lib/token-look'
 import { sortTemplates } from '@/lib/campaign-hub'
+import { applyShortRestHp, type StartFightOpts } from '@/lib/turn-flow'
 import { CampaignHubPanel } from '@/components/CampaignHubPanel'
 import { cn } from '@/lib/utils'
 
@@ -17,9 +19,10 @@ type DmProps = {
   hasImage: boolean
   templates: EncounterTemplate[]
   paused: EncounterInstance[]
-  onStart: (templateId: string) => void
+  onStart: (templateId: string, opts?: StartFightOpts) => void
   onResume: (instanceId: string) => void
   busy: boolean
+  activeFight?: boolean
 }
 
 type Props = {
@@ -34,6 +37,7 @@ type Props = {
   sheet: ReactNode
   playerView?: boolean
   dm?: DmProps
+  onShortRest?: (characterId: string, hpCurrent: number) => void
 }
 
 export function TableHub({
@@ -48,8 +52,12 @@ export function TableHub({
   sheet,
   playerView,
   dm,
+  onShortRest,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
+  const [startTpl, setStartTpl] = useState<EncounterTemplate | null>(null)
+  const [restHp, setRestHp] = useState('')
+  const selected = characters.find((c) => c.id === selectedId)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col lg:flex-row overflow-hidden">
@@ -97,7 +105,7 @@ export function TableHub({
           <h2 className="font-display text-xl text-gold-2">{dm ? 'The table' : 'Your character'}</h2>
           <p className="mt-1 text-sm text-muted">
             {dm
-              ? 'Talk, travel, and plan here. Start a fight when you are ready — the join code stays the same.'
+              ? 'Talk, travel, and plan here. Start a fight when you are ready — the join code stays the same. Table during combat pauses the fight; Finalize ends it.'
               : 'This is the campaign table. Your sheet stays open while the party talks, travels, or waits on the next fight.'}
           </p>
           {dm && (
@@ -143,7 +151,7 @@ export function TableHub({
                       {[t.difficulty, t.objective, t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')}
                     </div>
                   </div>
-                  <Button size="sm" variant="ember" disabled={dm.busy} onClick={() => dm.onStart(t.id)}>
+                  <Button size="sm" variant="ember" disabled={dm.busy} onClick={() => setStartTpl(t)}>
                     Start
                   </Button>
                 </li>
@@ -176,8 +184,53 @@ export function TableHub({
             <CampaignHubPanel hub={hub} characters={characters} templates={dm?.templates} canEdit={false} compact playerView={playerView} />
           </div>
         )}
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">{sheet}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          {selected && onShortRest && (
+            <div className="mb-3 rounded-md border border-line bg-bg p-2">
+              <div className="text-xs uppercase tracking-wider text-muted">Short rest — {selected.name}</div>
+              <p className="mt-1 text-xs text-muted">
+                Type the HP recovered from hit dice ({selected.sheet.hitDice || 'none on sheet'}). The app does not roll.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Input
+                  className="h-8 w-20"
+                  inputMode="numeric"
+                  placeholder="HP"
+                  value={restHp}
+                  onChange={(e) => setRestHp(e.target.value)}
+                  aria-label="Hit dice HP recovered"
+                />
+                <Button
+                  size="sm"
+                  disabled={dm?.busy}
+                  onClick={() => {
+                    const n = Number(restHp)
+                    if (!Number.isFinite(n) || n < 0) return
+                    onShortRest(selected.id, applyShortRestHp(selected.sheet.hpCurrent, selected.sheet.hpMax, n))
+                    setRestHp('')
+                  }}
+                >
+                  Apply HP
+                </Button>
+              </div>
+            </div>
+          )}
+          {sheet}
+        </div>
       </aside>
+      {startTpl && dm && (
+        <StartFightDialog
+          template={startTpl}
+          characters={characters}
+          busy={dm.busy}
+          warnActiveFight={dm.activeFight}
+          onCancel={() => setStartTpl(null)}
+          onConfirm={(opts) => {
+            dm.onStart(startTpl.id, opts)
+            setStartTpl(null)
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -11,10 +11,14 @@ type Props = {
   isDm: boolean
   selectedId?: string | null
   economyId?: string | null
+  setup?: boolean
   onSelect: (id: string) => void
   onPatch: (id: string, body: Record<string, unknown>) => void
   onNext: () => void
   onSort: () => void
+  onSkip?: () => void
+  onBeginRound?: () => void
+  onRemove?: (id: string) => void
   onReorder: (dir: -1 | 1, id: string) => void
   onDeathSave?: (id: string, d20: number) => void
   onResetDeath?: (id: string) => void
@@ -34,10 +38,14 @@ export function Tracker({
   isDm,
   selectedId,
   economyId,
+  setup,
   onSelect,
   onPatch,
   onNext,
   onSort,
+  onSkip,
+  onBeginRound,
+  onRemove,
   onReorder,
   onDeathSave,
   onResetDeath,
@@ -50,17 +58,30 @@ export function Tracker({
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
         <div>
-          <div className="font-display text-lg text-gold-2">Round {round}</div>
-          <div className="text-sm text-muted">{whose ? `${whose.name}'s turn` : 'No combatants yet'}</div>
+          <div className="font-display text-lg text-gold-2">{setup ? 'Initiative' : `Round ${round}`}</div>
+          <div className="text-sm text-muted">
+            {setup ? 'Enter rolls, Sort, then begin round 1' : whose ? `${whose.name}'s turn` : 'No combatants yet'}
+          </div>
         </div>
         {isDm && (
-          <div className="flex gap-1">
+          <div className="flex flex-wrap justify-end gap-1">
             <Button size="sm" variant="outline" onClick={onSort}>
               Sort
             </Button>
-            <Button size="sm" variant="ember" onClick={onNext}>
-              Next turn
-            </Button>
+            {setup ? (
+              <Button size="sm" variant="ember" onClick={onBeginRound}>
+                Begin round 1
+              </Button>
+            ) : (
+              <>
+                <Button size="sm" variant="outline" onClick={onSkip ?? onNext}>
+                  Skip
+                </Button>
+                <Button size="sm" variant="ember" onClick={onNext}>
+                  Next turn
+                </Button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -86,6 +107,9 @@ export function Tracker({
               {c.deathState === 'dying' && <span className="text-[10px] uppercase tracking-wide text-blood">Dying</span>}
               {c.deathState === 'stable' && <span className="text-[10px] uppercase tracking-wide text-gold">Stable</span>}
               {c.deathState === 'dead' && <span className="text-[10px] uppercase tracking-wide text-blood">Dead</span>}
+              {c.hpCurrent <= 0 && c.source === 'bestiary' && c.deathState !== 'dead' && (
+                <span className="text-[10px] uppercase tracking-wide text-muted">Down</span>
+              )}
               {isDm && (
                 <span className="flex gap-1">
                   <button type="button" className="text-xs text-muted" onClick={() => onReorder(-1, c.id)}>
@@ -302,6 +326,19 @@ export function Tracker({
                   Death save
                 </Button>
               </div>
+            )}
+            {isDm && onRemove && selectedId === c.id && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="mt-1"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRemove(c.id)
+                }}
+              >
+                Remove from fight
+              </Button>
             )}
             {isDm && dying && onResetDeath && selectedId === c.id && (
               <Button

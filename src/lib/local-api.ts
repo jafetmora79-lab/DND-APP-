@@ -1,3 +1,4 @@
+import type { StartFightOpts } from './turn-flow'
 import type {
   AuthUser,
   BattleMap,
@@ -8,6 +9,7 @@ import type {
   FogState,
   Monster,
   PlayerCharacter,
+  TablePhase,
 } from './types'
 
 const TOKEN_KEY = 'dlt-token'
@@ -78,38 +80,48 @@ export const localApi = {
       : req<{ template: EncounterTemplate }>(`/api/campaigns/${campaignId}/templates`, { method: 'POST', body: JSON.stringify(body) }),
   deleteTemplate: (id: string) => req(`/api/templates/${id}`, { method: 'DELETE' }),
   instances: (campaignId: string) => req<{ instances: EncounterInstance[] }>(`/api/campaigns/${campaignId}/instances`),
-  startInstance: (campaignId: string, templateId: string, name?: string) =>
-    req<{ instanceId: string }>(`/api/campaigns/${campaignId}/instances`, { method: 'POST', body: JSON.stringify({ templateId, name }) }),
+  startInstance: (campaignId: string, templateId: string, opts?: StartFightOpts) =>
+    req<{ instanceId: string }>(`/api/campaigns/${campaignId}/instances`, {
+      method: 'POST',
+      body: JSON.stringify({ templateId, name: opts?.name, fog: opts?.fog, surpriseParty: opts?.surpriseParty, surpriseMonsters: opts?.surpriseMonsters }),
+    }),
   setStatus: (id: string, status: string) => req(`/api/instances/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
-  openSession: (campaignId: string, encounterInstanceId: string | null, opts?: { rotateJoinCode?: boolean }) =>
+  openSession: (campaignId: string, encounterInstanceId: string | null, opts?: { rotateJoinCode?: boolean; tablePhase?: TablePhase }) =>
     req<{ session: { joinCode: string } }>(`/api/campaigns/${campaignId}/session`, {
       method: 'POST',
-      body: JSON.stringify({ encounterInstanceId, rotateJoinCode: opts?.rotateJoinCode }),
+      body: JSON.stringify({ encounterInstanceId, rotateJoinCode: opts?.rotateJoinCode, tablePhase: opts?.tablePhase }),
     }),
   ensureSession: (campaignId: string) =>
     req<{ session: { joinCode: string } }>(`/api/campaigns/${campaignId}/session`, {
       method: 'POST',
       body: JSON.stringify({ ensure: true }),
     }),
-  patchSession: (campaignId: string, body: { ambianceCaption?: string; ambianceImageUrl?: string | null }) =>
+  patchSession: (campaignId: string, body: { ambianceCaption?: string; ambianceImageUrl?: string | null; tablePhase?: TablePhase }) =>
     req(`/api/campaigns/${campaignId}/session`, { method: 'PATCH', body: JSON.stringify(body) }),
   uploadAmbiance: (campaignId: string, file: File) => {
     const form = new FormData()
     form.append('image', file)
     return req(`/api/campaigns/${campaignId}/session/ambiance`, { method: 'POST', body: form })
   },
-  finishEncounter: (campaignId: string, outcome: 'won' | 'lost') =>
-    req(`/api/campaigns/${campaignId}/finish-encounter`, { method: 'POST', body: JSON.stringify({ outcome }) }),
+  finishEncounter: (campaignId: string, outcome: 'won' | 'lost', opts?: { lootHolder?: string }) =>
+    req(`/api/campaigns/${campaignId}/finish-encounter`, { method: 'POST', body: JSON.stringify({ outcome, lootHolder: opts?.lootHolder }) }),
   returnToTable: (campaignId: string) => req(`/api/campaigns/${campaignId}/return-to-table`, { method: 'POST' }),
+  beginRound: (campaignId: string) => req(`/api/campaigns/${campaignId}/begin-round`, { method: 'POST' }),
   peekJoin: (code: string) => req<{ campaignName: string; joinCode: string }>(`/api/join/${code}`),
   join: (code: string, personalCode: string) =>
     req<{ token: string; user: AuthUser }>(`/api/join/${code}`, { method: 'POST', body: JSON.stringify({ personalCode }) }),
   live: (campaignId: string) => req<EncounterSnapshot>(`/api/campaigns/${campaignId}/live`),
   addCombatant: (instanceId: string, body: Record<string, unknown>) =>
     req(`/api/instances/${instanceId}/combatants`, { method: 'POST', body: JSON.stringify(body) }),
+  joinFight: (instanceId: string) => req(`/api/instances/${instanceId}/join-fight`, { method: 'POST' }),
   patchCombatant: (id: string, body: Record<string, unknown>) => req(`/api/combatants/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  nextTurn: (id: string) => req(`/api/instances/${id}/next-turn`, { method: 'POST' }),
-  sortInit: (id: string) => req(`/api/instances/${id}/sort-initiative`, { method: 'POST' }),
+  removeCombatant: (id: string) => req(`/api/combatants/${id}`, { method: 'DELETE' }),
+  setInitiative: (id: string, body: { d20: number }) =>
+    req<{ initiative: number }>(`/api/combatants/${id}/initiative`, { method: 'POST', body: JSON.stringify(body) }),
+  nextTurn: (id: string, opts?: { expectedTurnPosition?: number }) =>
+    req(`/api/instances/${id}/next-turn`, { method: 'POST', body: JSON.stringify({ expectedTurnPosition: opts?.expectedTurnPosition }) }),
+  sortInit: (id: string, opts?: { keepCurrent?: boolean }) =>
+    req(`/api/instances/${id}/sort-initiative`, { method: 'POST', body: JSON.stringify({ keepCurrent: opts?.keepCurrent }) }),
   reorder: (id: string, ids: string[]) => req(`/api/instances/${id}/reorder`, { method: 'POST', body: JSON.stringify({ ids }) }),
   moveToken: (id: string, body: Record<string, unknown>) => req(`/api/tokens/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   setFog: (id: string, fogState: FogState) => req(`/api/instances/${id}/fog`, { method: 'PATCH', body: JSON.stringify({ fogState }) }),

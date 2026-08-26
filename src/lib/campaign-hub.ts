@@ -159,6 +159,7 @@ export function applyEncounterRewards(opts: {
   encounterName: string
   templateId: string | null
   brief: EncounterBrief
+  lootHolder?: string
 }) {
   const hub = parseHub(opts.hub)
   const xp = opts.outcome === 'won' ? Math.max(0, opts.brief.xpAward) : 0
@@ -170,7 +171,7 @@ export function applyEncounterRewards(opts: {
       name: lootLine,
       qty: 1,
       notes: `From ${opts.encounterName}`,
-      holder: '',
+      holder: String(opts.lootHolder ?? '').trim(),
     })
   }
   const beats = hub.beats.map((b) => {

@@ -72,13 +72,15 @@ THE NIGHT, IN ORDER
   1. DM logs in, opens a campaign.
   2. Prep: maps, monsters, character sheets, encounter templates (starts).
   3. Live hub (tavern table). Players join. Sheets + campaign notebook.
-  4. Start a ready encounter (or resume a paused one).
-  5. Combat: map, tracker, attacks, saves, movement, fog.
-  6. Finalize Won or Lost. Overlay, then back to the hub. Same join code.
+  4. Start a ready encounter (checklist, then initiative, then Begin round 1).
+  5. Combat: map, tracker (skips the dead), attacks, saves, movement, fog.
+  6. Finalize Won or Lost. XP to combatants in that fight. Overlay, then
+     back to the hub. Same join code. Short rest HP is typed, not rolled.
   7. Repeat, or Pause / Table and pick up later.
 
 Joining as a player does NOT put a token on a fight. Tokens come from the
-template’s player starts (and Save) or from + Name during combat.
+template’s player starts (and Save), from + Name during combat, or from
+Join this fight on the player phone.
 
 
 PREP LIBRARY
@@ -158,9 +160,10 @@ Stored on campaigns.hub_json.
   Recap       running text; Finalize appends a victory/defeat line
 
 Starting a template that is linked to a beat marks that beat active.
-Finalize Won marks the linked beat done, adds XP to every character sheet,
-and appends loot from the template loot notes (one line) to party loot.
-Finalize Lost awards no XP and no loot, recap still gets a defeat line.
+Finalize Won marks the linked beat done, adds XP only to characters who
+were combatants on that instance, and appends loot from the template loot
+notes (one line) to party loot, with an optional holder. Finalize Lost
+awards no XP and no loot, recap still gets a defeat line.
 Rewards apply only the first time that instance is set completed. A second
 Won does not double XP or loot.
 
@@ -168,8 +171,10 @@ Won does not double XP or loot.
 COMBAT
 ------
 
-Shown when the session is in the combat phase with a map + instance that is
-not completed. Pause keeps the fight; Table pauses and returns to the hub.
+Shown when the session is in the setup or combat phase with a map + instance
+that is not completed. Start opens a checklist (who is placed, fog, surprise)
+then setup: type initiative, Sort (Dex ties), Begin round 1. Pause keeps the
+fight; Table pauses and returns to the hub; Finalize ends it.
 
 MAP
   Konva. Pan, zoom, drag tokens. Snap to 5-ft squares.
@@ -191,8 +196,10 @@ FOG
 
 TRACKER
   Round, whose turn, initiative, AC, HP (current / max / temp), conditions.
-  DM: type init, Sort, Next turn, reorder arrows, HP fields, add/remove
-  conditions.
+  DM: type init, Sort (Dex then name on ties), Next turn (skips corpses and
+  dropped monsters), Skip, Begin round 1 during setup, reorder arrows, HP
+  fields, add/remove conditions, Remove from fight.
+  Mid-fight Sort keeps the current creature in the new order.
   Turn reminders (everyone sees; DM and the owner can toggle theirs):
     Action, Bonus, Reaction, Move (used / not).
   Movement line for everyone: Move remaining / speed ft.
@@ -238,9 +245,9 @@ DEATH / 0 HP
   Tracker shows Dying / Stable / Dead. Owner or DM can enter a death-save d20.
 
 HEADER (DM)
-  Finalize Won / Lost
-  Next encounter (picker; same join code)
-  Table (pause + return to hub)
+  Finalize Won / Lost (optional loot holder; XP to combatants in the fight)
+  Next encounter (blocked while a fight is active; same join code)
+  Table (pause + return to hub — the fight is not over)
   Pause / Resume
   Join code (copy)
 
@@ -249,6 +256,8 @@ PLAYERS IN COMBAT
   Sheet drawer. Attack bar + Save bar.
   Leave is in the header (not a floating button over the bars).
   Header shows round and whose turn, plus own HP.
+  Not on the map: Join this fight. Setup: submit initiative d20.
+  YOUR TURN is the phone banner on that player’s turn.
 
 
 LIVE COMBAT — ADDING PEOPLE MID-FIGHT
@@ -257,6 +266,9 @@ LIVE COMBAT — ADDING PEOPLE MID-FIGHT
 Under the DM tracker, each campaign character:
 
   + Elara        add to this fight and drop a token
+  Elara on map   already in; the button is disabled
+
+Players who are at the table but not on this map tap Join this fight.
   Elara on map   already in; button disabled
 
 Use when the template had no player starts, someone arrived late, or spawn

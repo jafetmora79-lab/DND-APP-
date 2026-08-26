@@ -39,6 +39,8 @@ type Props = {
   launchAttack?: { attack: Attack; index: number } | null
   onLaunchHandled?: () => void
   onSettled?: () => void
+  setup?: boolean
+  currentTurnPosition?: number
 }
 
 export function PlayerTurnPanel({
@@ -54,6 +56,8 @@ export function PlayerTurnPanel({
   launchAttack,
   onLaunchHandled,
   onSettled,
+  setup,
+  currentTurnPosition,
 }: Props) {
   const myTurn = Boolean(combatant && whose && whose.id === combatant.id)
   const [menu, setMenu] = useState<Menu>(null)
@@ -67,6 +71,7 @@ export function PlayerTurnPanel({
   const [custom, setCustom] = useState('')
   const [reactionNote, setReactionNote] = useState('')
   const [saveD20, setSaveD20] = useState('')
+  const [initD20, setInitD20] = useState('')
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -215,7 +220,7 @@ export function PlayerTurnPanel({
   async function endTurn() {
     setBusy(true)
     try {
-      await api.nextTurn(instanceId)
+      await api.nextTurn(instanceId, { expectedTurnPosition: currentTurnPosition })
       resetMenus()
       setMsg('')
       onSettled?.()
@@ -270,9 +275,14 @@ export function PlayerTurnPanel({
     <div className="border-t border-line bg-panel px-3 py-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         {myTurn ? (
-          <div>
-            <div className="font-display text-lg tracking-wide text-gold">YOUR TURN</div>
+          <div className="rounded-md border border-gold bg-gold/15 px-3 py-2">
+            <div className="font-display text-2xl tracking-wide text-gold">YOUR TURN</div>
             <div className="text-sm text-ink">{combatant?.name ?? character.name}</div>
+          </div>
+        ) : setup ? (
+          <div>
+            <div className="font-display text-lg tracking-wide text-gold">Initiative</div>
+            <div className="text-sm text-muted">Enter the d20 you rolled. Dex is added for you.</div>
           </div>
         ) : (
           <div>
@@ -293,6 +303,37 @@ export function PlayerTurnPanel({
           </div>
         )}
       </div>
+
+      {setup && combatant && (
+        <div className="mt-2 rounded-md border border-gold/40 bg-bg px-3 py-2">
+          <div className="text-xs uppercase tracking-wider text-gold">Your initiative</div>
+          <p className="mt-1 text-sm text-muted">
+            Current total {combatant.initiative}. Enter the d20 from the table; Dex {character.sheet.initiativeBonus ?? ''} is added.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Input className="h-8 w-16" inputMode="numeric" placeholder="d20" value={initD20} onChange={(e) => setInitD20(e.target.value)} aria-label="Initiative d20" />
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                const roll = Number(initD20)
+                setBusy(true)
+                void api
+                  .setInitiative(combatant.id, { d20: roll })
+                  .then((r) => {
+                    setMsg(`Initiative ${r.initiative}`)
+                    setInitD20('')
+                    onSettled?.()
+                  })
+                  .catch((e) => setMsg(e instanceof Error ? e.message : 'Could not set initiative'))
+                  .finally(() => setBusy(false))
+              }}
+            >
+              Submit
+            </Button>
+          </div>
+        </div>
+      )}
 
       {minePrompt && prompt?.kind === 'save' && (
         <div className="mt-2 rounded-md border border-gold/50 bg-bg px-3 py-2">
@@ -324,7 +365,7 @@ export function PlayerTurnPanel({
         </div>
       )}
 
-      {myTurn && combatant && (
+      {myTurn && combatant && !setup && (
         <>
           <div className="mt-2 flex flex-wrap gap-1">
             <Button size="sm" variant={menu === 'action' || menu === 'attack' || (menu === 'other' && slot === 'action') || menu === 'help' ? 'default' : 'outline'} disabled={Boolean(econ?.action)} onClick={() => openSlot('action')}>

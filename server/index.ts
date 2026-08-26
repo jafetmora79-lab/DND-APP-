@@ -40,7 +40,6 @@ import {
   resolveCombatAttack,
   applyCombatDeathSave,
   resetCombatDeath,
-  resetTurnEconomyAt,
   setCombatTurnEconomy,
   applyHpKnockout,
   consumeTurnMovement,
@@ -49,6 +48,11 @@ import {
   instanceActivity,
   setInstancePrompt,
   resolvePromptSave,
+  advanceInstanceTurn,
+  beginInstanceRound,
+  removeCombatantFromFight,
+  setCombatantInitiativeFromD20,
+  sortInstanceInitiative,
 } from './db.ts'
 import { parseCharacterPdf } from './pdf.ts'
 
@@ -805,7 +809,12 @@ app.post('/api/campaigns/:id/instances', requireDm, (req, res) => {
     res.status(404).json({ error: 'Not found' })
     return
   }
-  const instanceId = spawnFromTemplate(param(req, 'id'), req.body.templateId, req.body.name)
+  const instanceId = spawnFromTemplate(param(req, 'id'), req.body.templateId, {
+    name: req.body.name,
+    fog: Boolean(req.body.fog),
+    surpriseParty: Boolean(req.body.surpriseParty),
+    surpriseMonsters: Boolean(req.body.surpriseMonsters),
+  })
   res.json({ instanceId })
 })
 
@@ -846,7 +855,17 @@ app.post('/api/campaigns/:id/session', requireDm, (req, res) => {
     db.prepare(
       `INSERT INTO live_sessions (id, join_code, campaign_id, encounter_instance_id, created_at, table_phase, ambiance_image_url, ambiance_caption, last_outcome)
        VALUES (?,?,?,?,?,?,?,?,?)`,
-    ).run(id, join, campaignId, inst, now(), inst ? 'combat' : 'table', null, '', null)
+    ).run(
+      id,
+      join,
+      campaignId,
+      inst,
+      now(),
+      req.body?.tablePhase === 'setup' ? 'setup' : inst ? 'combat' : 'table',
+      null,
+      '',
+      null,
+    )
     pushCampaign(campaignId)
     existing = liveSessionRow(campaignId)
     res.json({ session: existing ? sessionFromRow(existing) : { id, joinCode: join, campaignId, encounterInstanceId: inst } })
@@ -864,7 +883,14 @@ app.post('/api/campaigns/:id/session', requireDm, (req, res) => {
   let lastOutcome = existing.last_outcome
   if (encounterInstanceId !== undefined) {
     inst = encounterInstanceId
-    phase = encounterInstanceId ? 'combat' : 'table'
+    phase =
+      req.body?.tablePhase === 'setup'
+        ? 'setup'
+        : req.body?.tablePhase === 'combat'
+          ? 'combat'
+          : encounterInstanceId
+            ? 'combat'
+            : 'table'
     lastOutcome = encounterInstanceId ? null : lastOutcome
     if (encounterInstanceId) {
       db.prepare(`UPDATE encounter_instances SET status = 'active' WHERE id = ?`).run(encounterInstanceId)
@@ -900,7 +926,20 @@ app.patch('/api/campaigns/:id/session', requireDm, (req, res) => {
       : req.body.ambianceImageUrl
         ? String(req.body.ambianceImageUrl)
         : null
-  db.prepare('UPDATE live_sessions SET ambiance_caption=?, ambiance_image_url=? WHERE id=?').run(caption, imageUrl, existing.id)
+  const phase =
+    req.body?.tablePhase === 'setup' ||
+    req.body?.tablePhase === 'combat' ||
+    req.body?.tablePhase === 'table' ||
+    req.body?.tablePhase === 'victory' ||
+    req.body?.tablePhase === 'defeat'
+      ? req.body.tablePhase
+      : existing.table_phase
+  db.prepare('UPDATE live_sessions SET ambiance_caption=?, ambiance_image_url=?, table_phase=? WHERE id=?').run(
+    caption,
+    imageUrl,
+    phase,
+    existing.id,
+  )
   pushCampaign(campaignId)
   const next = liveSessionRow(campaignId)
   res.json({ session: next ? sessionFromRow(next) : sessionFromRow(existing) })
@@ -958,7 +997,7 @@ app.post('/api/campaigns/:id/finish-encounter', requireDm, (req, res) => {
       | undefined
     const firstFinish = inst?.status !== 'completed'
     db.prepare(`UPDATE encounter_instances SET status = 'completed' WHERE id = ?`).run(existing.encounter_instance_id)
-    if (firstFinish) applyFinishRewards(campaignId, existing.encounter_instance_id, outcome)
+    if (firstFinish) applyFinishRewards(campaignId, existing.encounter_instance_id, outcome, req.body?.lootHolder ? String(req.body.lootHolder) : undefined)
   }
   db.prepare('UPDATE live_sessions SET table_phase=?, last_outcome=? WHERE id=?').run(
     outcome === 'won' ? 'victory' : 'defeat',
@@ -983,6 +1022,27 @@ app.post('/api/campaigns/:id/return-to-table', requireDm, (req, res) => {
   db.prepare('UPDATE live_sessions SET encounter_instance_id=NULL, table_phase=? WHERE id=?').run('table', existing.id)
   pushCampaign(campaignId)
   res.json({ ok: true })
+})
+
+app.post('/api/campaigns/:id/begin-round', requireDm, (req, res) => {
+  const campaignId = param(req, 'id')
+  if (!campaignOwned(campaignId, userOf(req).id)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  const existing = liveSessionRow(campaignId)
+  if (!existing?.encounter_instance_id) {
+    res.status(400).json({ error: 'No fight on the table' })
+    return
+  }
+  try {
+    const result = beginInstanceRound(String(existing.encounter_instance_id))
+    db.prepare('UPDATE live_sessions SET table_phase=? WHERE id=?').run('combat', existing.id)
+    pushCampaign(campaignId)
+    res.json({ ok: true, ...result })
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not begin the round' })
+  }
 })
 
 app.get('/api/join/:code', (req, res) => {
@@ -1100,6 +1160,26 @@ app.post('/api/instances/:id/combatants', requireDm, (req, res) => {
   res.json({ ok: true })
 })
 
+app.post('/api/instances/:id/join-fight', requireUser, (req, res) => {
+  const inst = instanceRow(param(req, 'id'))
+  const user = userOf(req)
+  if (!inst) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  if (user.role !== 'player' || user.campaignId !== inst.campaign_id) {
+    res.status(403).json({ error: 'Forbidden' })
+    return
+  }
+  try {
+    addCharacterCombatant(String(inst.id), user.characterId)
+    pushCampaign(inst.campaign_id as string)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not join the fight' })
+  }
+})
+
 app.post('/api/instances/:id/player-attack', requireUser, (req, res) => {
   const user = userOf(req)
   const inst = instanceRow(param(req, 'id'))
@@ -1198,6 +1278,49 @@ app.patch('/api/combatants/:id', requireDm, (req, res) => {
   }
   pushCampaign(inst.campaign_id as string)
   res.json({ ok: true })
+})
+
+app.delete('/api/combatants/:id', requireDm, (req, res) => {
+  const c = db.prepare('SELECT * FROM combatants WHERE id = ?').get(param(req, 'id')) as Record<string, unknown> | undefined
+  if (!c) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  const inst = instanceRow(c.encounter_instance_id as string)
+  if (!inst || !campaignOwned(inst.campaign_id as string, userOf(req).id)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  removeCombatantFromFight(String(c.id))
+  pushCampaign(inst.campaign_id as string)
+  res.json({ ok: true })
+})
+
+app.post('/api/combatants/:id/initiative', requireUser, (req, res) => {
+  const c = db.prepare('SELECT * FROM combatants WHERE id = ?').get(param(req, 'id')) as Record<string, unknown> | undefined
+  if (!c) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  const inst = instanceRow(c.encounter_instance_id as string)
+  if (!inst) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  const user = userOf(req)
+  const asDm = user.role === 'dm' && campaignOwned(inst.campaign_id as string, user.id)
+  const asOwner = user.role === 'player' && c.source === 'character' && String(c.source_id) === user.characterId && inst.campaign_id === user.campaignId
+  if (!asDm && !asOwner) {
+    res.status(403).json({ error: 'Forbidden' })
+    return
+  }
+  try {
+    const result = setCombatantInitiativeFromD20(String(c.id), Number(req.body.d20))
+    pushCampaign(inst.campaign_id as string)
+    res.json(result)
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not set initiative' })
+  }
 })
 
 function combatantCampaign(c: Record<string, unknown>) {
@@ -1423,21 +1546,15 @@ app.post('/api/instances/:id/next-turn', requireUser, (req, res) => {
       return
     }
   }
-  const n = db.prepare('SELECT COUNT(*) as c FROM combatants WHERE encounter_instance_id = ?').get(inst.id) as { c: number }
-  if (n.c === 0) {
-    res.json({ ok: true })
-    return
+  const expectedRaw = req.body?.expectedTurnPosition
+  const expected = Number.isInteger(Number(expectedRaw)) ? Number(expectedRaw) : undefined
+  try {
+    const result = advanceInstanceTurn(String(inst.id), expected)
+    pushCampaign(inst.campaign_id as string)
+    res.json(result)
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not advance the turn' })
   }
-  let pos = Number(inst.current_turn_position) + 1
-  let round = Number(inst.round_number)
-  if (pos >= n.c) {
-    pos = 0
-    round += 1
-  }
-  db.prepare('UPDATE encounter_instances SET current_turn_position = ?, round_number = ? WHERE id = ?').run(pos, round, inst.id)
-  resetTurnEconomyAt(String(inst.id), pos)
-  pushCampaign(inst.campaign_id as string)
-  res.json({ ok: true, round, pos })
 })
 
 app.post('/api/instances/:id/sort-initiative', requireDm, (req, res) => {
@@ -1446,11 +1563,7 @@ app.post('/api/instances/:id/sort-initiative', requireDm, (req, res) => {
     res.status(404).json({ error: 'Not found' })
     return
   }
-  const rows = db.prepare('SELECT id, initiative FROM combatants WHERE encounter_instance_id = ?').all(inst.id) as { id: string; initiative: number }[]
-  rows.sort((a, b) => b.initiative - a.initiative)
-  rows.forEach((r, i) => db.prepare('UPDATE combatants SET turn_order_position = ? WHERE id = ?').run(i, r.id))
-  db.prepare('UPDATE encounter_instances SET current_turn_position = 0 WHERE id = ?').run(inst.id)
-  resetTurnEconomyAt(String(inst.id), 0)
+  sortInstanceInitiative(String(inst.id), Boolean(req.body?.keepCurrent))
   pushCampaign(inst.campaign_id as string)
   res.json({ ok: true })
 })
