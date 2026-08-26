@@ -13,7 +13,7 @@ import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { decorateTokens, monsterForCombatant } from '@/lib/combat'
-import { LanguageToggle } from '@/lib/i18n'
+import { LanguageToggle, useT } from '@/lib/i18n'
 import { useLive } from '@/lib/realtime'
 import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
 import type { Attack, EncounterSnapshot, PlayerCharacter } from '@/lib/types'
@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 export function Player() {
   const { campaignId } = useParams()
   const { user, logout } = useAuth()
+  const { t } = useT()
   const nav = useNavigate()
   const [snap, setSnap] = useState<EncounterSnapshot | null>(null)
   const [drawer, setDrawer] = useState(false)
@@ -72,7 +73,7 @@ export function Player() {
   }, [])
 
   if (!snap) {
-    return <div className="p-6 text-muted">{error || 'Connecting to the table…'}</div>
+    return <div className="p-6 text-muted">{error || t('player.connecting')}</div>
   }
 
   const sheet = viewing ? (
@@ -83,7 +84,7 @@ export function Player() {
       onUseAttack={user?.role === 'player' && viewing.id === user.characterId ? onUseAttack : undefined}
     />
   ) : (
-    <p className="text-sm text-muted">Your character sheet will appear here.</p>
+    <p className="text-sm text-muted">{t('player.noSheet')}</p>
   )
 
   if (!combat || !snap.instance || !snap.map) {
@@ -92,11 +93,11 @@ export function Player() {
         <header className="flex items-center gap-2 border-b border-line px-3 py-2">
           <div className="min-w-0 flex-1">
             <div className="truncate font-display text-gold">{snap.campaign.name}</div>
-            <div className="truncate text-xs text-muted">{snap.session?.ambianceCaption || 'At the table — waiting between encounters'}</div>
+            <div className="truncate text-xs text-muted">{snap.session?.ambianceCaption || t('player.waiting')}</div>
           </div>
           {me && (
             <div className="stat-num text-sm">
-              {me.sheet.hpCurrent}/{me.sheet.hpMax} HP
+              {me.sheet.hpCurrent}/{me.sheet.hpMax} {t('player.hp')}
             </div>
           )}
           <Button
@@ -107,7 +108,7 @@ export function Player() {
               nav('/')
             }}
           >
-            Leave
+            {t('player.leave')}
           </Button>
           <LanguageToggle />
         </header>
@@ -143,24 +144,24 @@ export function Player() {
           <div className="truncate font-display text-gold">{snap.campaign.name}</div>
           <div className="truncate text-xs text-muted">
             {isFightSetup(snap.session, snap.instance)
-              ? 'Roll initiative — enter your d20 below'
+              ? t('player.initHint')
               : snap.instance
-                ? `Round ${snap.instance.roundNumber} · ${whose?.name ?? 'waiting'}'s turn`
-                : 'No encounter loaded yet'}
+                ? `${t('player.round')} ${snap.instance.roundNumber} · ${whose?.name ?? t('player.waitingName')} ${t('player.turn')}`
+                : t('player.noEncounter')}
           </div>
         </div>
         {me && (
           <div className="stat-num text-sm">
-            {me.sheet.hpCurrent}/{me.sheet.hpMax} HP
+            {me.sheet.hpCurrent}/{me.sheet.hpMax} {t('player.hp')}
           </div>
         )}
         {setup && (
           <Button size="sm" variant="outline" onClick={() => setInitOpen(true)}>
-            Initiative
+            {t('init.title')}
           </Button>
         )}
         <Button size="sm" variant="outline" onClick={() => setDrawer(true)}>
-          <BookOpen className="h-4 w-4" /> Sheets
+          <BookOpen className="h-4 w-4" /> {t('player.sheets')}
         </Button>
         <Button
           size="sm"
@@ -170,7 +171,7 @@ export function Player() {
             nav('/')
           }}
         >
-          Leave
+          {t('player.leave')}
         </Button>
         <LanguageToggle />
       </header>
@@ -178,10 +179,10 @@ export function Player() {
 
       <div className="flex shrink-0 gap-1 border-b border-line px-2 py-1 lg:hidden">
         <button type="button" className={cn('rounded px-3 py-1 text-sm', tab === 'map' ? 'bg-gold text-bg' : 'text-muted')} onClick={() => setTab('map')}>
-          Map
+          {t('player.map')}
         </button>
         <button type="button" className={cn('rounded px-3 py-1 text-sm', tab === 'tracker' ? 'bg-gold text-bg' : 'text-muted')} onClick={() => setTab('tracker')}>
-          Tracker
+          {t('player.tracker')}
         </button>
       </div>
 

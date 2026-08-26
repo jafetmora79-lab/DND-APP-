@@ -3,12 +3,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import { characterSaveBonus, saveBonusForCombatant } from '@/lib/combat'
-import { resolveCheck, skillBonusForCombatant, skillByKey } from '@/lib/checks'
+import { resolveCheck, skillBonusForCombatant } from '@/lib/checks'
 import { hideDcFor, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from '@/lib/stealth'
 import { coverBonusAlongLine } from '@/lib/vision'
 import {
   ABILITIES,
-  ABILITY_LABELS,
   SKILLS,
   type Ability,
   type BattleMap,
@@ -18,6 +17,7 @@ import {
   type PlayerCharacter,
 } from '@/lib/types'
 import { pixelToCell, proficiencyBonus } from '@/lib/utils'
+import { useT } from '@/lib/i18n'
 
 type Kind = 'save' | 'skill'
 
@@ -48,6 +48,7 @@ export function CheckBar({
   originId,
   onSettled,
 }: Props) {
+  const { t } = useT()
   const target = combatants.find((c) => c.id === selectedId) ?? combatants[0]
   const [kind, setKind] = useState<Kind>('save')
   const [ability, setAbility] = useState<Ability>('dex')
@@ -59,7 +60,6 @@ export function CheckBar({
   const [busy, setBusy] = useState(false)
   const pc = target?.source === 'character' ? characters.find((c) => c.id === target.sourceId) : undefined
   const hideDc = target ? hideDcFor(target, combatants, characters, monsters) : 13
-  const skill = skillByKey(skillKey)
   const isHide = kind === 'skill' && skillKey === 'stealth' && asHide
 
   const cover =
@@ -124,7 +124,7 @@ export function CheckBar({
           .finally(() => setBusy(false))
         return
       }
-      const label = kind === 'skill' ? skill?.name ?? 'Check' : `${ABILITY_LABELS[ability]} save`
+      const label = kind === 'skill' ? t(`skill.${skillKey}`) : `${t(`ability.${ability}`)} ${t('check.save')}`
       const r = resolveCheck({ d20: roll, modifier, dc: dcN, label: `${target.name} ${label}` })
       setMsg(cover && ability === 'dex' ? `${r.message} (cover +${cover})` : r.message)
       if (instanceId) void api.logActivity(instanceId, r.message).catch(() => undefined)
@@ -136,16 +136,16 @@ export function CheckBar({
   return (
     <div className={compact ? 'border-t border-line bg-panel px-3 py-2' : 'mt-3 rounded-lg border border-line/70 p-2'}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs uppercase tracking-wider text-muted">Check</span>
+        <span className="text-xs uppercase tracking-wider text-muted">{t('check.label')}</span>
         <span className="text-xs text-ink">{target.name}</span>
         <select
           className="h-8 rounded-md border border-line bg-bg px-2 text-xs"
           value={kind}
           onChange={(e) => setKind(e.target.value as Kind)}
-          aria-label="Check kind"
+          aria-label={t('check.label')}
         >
-          <option value="save">Save</option>
-          <option value="skill">Skill</option>
+          <option value="save">{t('check.save')}</option>
+          <option value="skill">{t('check.skill')}</option>
         </select>
         {kind === 'save' ? (
           <select
@@ -155,7 +155,7 @@ export function CheckBar({
           >
             {ABILITIES.map((ab) => (
               <option key={ab} value={ab}>
-                {ABILITY_LABELS[ab]}
+                {t(`ability.${ab}`)}
               </option>
             ))}
           </select>
@@ -167,29 +167,31 @@ export function CheckBar({
           >
             {SKILLS.map((sk) => (
               <option key={sk.key} value={sk.key}>
-                {sk.name}
+                {t(`skill.${sk.key}`)}
               </option>
             ))}
           </select>
         )}
         {isHide ? (
-          <span className="text-xs text-muted">DC {hideDc} (highest passive Perception)</span>
+          <span className="text-xs text-muted">
+            {t('check.dc')} {hideDc} ({t('check.hideDc')})
+          </span>
         ) : (
-          <Input className="h-8 w-16" inputMode="numeric" placeholder="DC" value={dc} onChange={(e) => setDc(e.target.value)} aria-label="Check DC" />
+          <Input className="h-8 w-16" inputMode="numeric" placeholder={t('check.dc')} value={dc} onChange={(e) => setDc(e.target.value)} aria-label={t('check.dc')} />
         )}
-        <Input className="h-8 w-16" inputMode="numeric" placeholder="d20" value={d20} onChange={(e) => setD20(e.target.value)} aria-label="Check d20" />
+        <Input className="h-8 w-16" inputMode="numeric" placeholder="d20" value={d20} onChange={(e) => setD20(e.target.value)} aria-label="d20" />
         <Button size="sm" disabled={busy} onClick={resolve}>
-          Resolve
+          {t('check.resolve')}
         </Button>
         <span className="text-xs text-muted">
-          mod {modifier >= 0 ? `+${modifier}` : modifier}
+          {t('check.mod')} {modifier >= 0 ? `+${modifier}` : modifier}
           {cover && ability === 'dex' && kind === 'save' ? ` · cover +${cover}` : ''}
         </span>
       </div>
       {kind === 'skill' && skillKey === 'stealth' && (
         <label className="mt-1 flex items-center gap-2 text-xs text-muted">
           <input type="checkbox" checked={asHide} onChange={(e) => setAsHide(e.target.checked)} />
-          Apply as Hide (needs no enemy line of sight)
+          {t('check.applyHide')}
         </label>
       )}
       {msg && <p className="mt-1 text-sm text-gold">{msg}</p>}
