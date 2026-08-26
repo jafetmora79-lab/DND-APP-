@@ -1,13 +1,14 @@
 import { customAlphabet } from 'nanoid'
 import { publicAsset, tableEmail } from './config'
-import { emptySheet, type AuthUser, type BattleMap, type FogState, type Monster, type NamedEntry, type PlayerCharacter, type TemplateCharacter, type TemplateMonster } from './types'
+import { emptySheet, type AuthUser, type BattleMap, type FogState, type Monster, type NamedEntry, type PlayerCharacter } from './types'
 import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
 import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter } from './utils'
 import { afterHpChange, emptyTurnEconomy, parseDeathState, parseTurnEconomy, resolveDeathSave, specCopyCell } from './combat'
 import { sessionFromRow } from './session'
-import { packMonstersJson, unpackTemplateJson } from './template-json'
+import { applyEncounterRewards, parseHub } from './campaign-hub'
+import { packTemplateBody, templateFromRow, unpackTemplateJson } from './template-json'
 import type { TableApi } from './local-api'
 
 const joinCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6)
@@ -168,6 +169,36 @@ function characterFromRow(row: Record<string, unknown>): PlayerCharacter {
     tokenColor: String(row.token_color ?? '#6ea8c9'),
     sourcePdfUrl: (row.source_pdf_url as string) || null,
     sheet: { ...emptySheet(), ...((row.sheet_json as object) || {}) },
+  }
+}
+
+async function applyHostedFinishRewards(campaignId: string, instanceId: string, outcome: 'won' | 'lost') {
+  const { data: camp } = await db().from('campaigns').select('*').eq('id', campaignId).maybeSingle()
+  if (!camp) return
+  const { data: inst } = await db().from('encounter_instances').select('*').eq('id', instanceId).maybeSingle()
+  const encounterName = String(inst?.name ?? 'Encounter')
+  const templateId = inst?.encounter_template_id ? String(inst.encounter_template_id) : null
+  let brief = unpackTemplateJson({}).brief
+  if (templateId) {
+    const { data: t } = await db().from('encounter_templates').select('*').eq('id', templateId).maybeSingle()
+    if (t) brief = unpackTemplateJson(t as { monsters_json?: unknown; characters_json?: unknown }).brief
+  }
+  const next = applyEncounterRewards({
+    hub: parseHub((camp as { hub_json?: unknown }).hub_json),
+    outcome,
+    encounterName,
+    templateId,
+    brief,
+  })
+  const { error: hubErr } = await db().from('campaigns').update({ hub_json: next.hub }).eq('id', campaignId)
+  if (hubErr && /hub_json/.test(hubErr.message)) return
+  throwIf(hubErr)
+  if (next.xp <= 0) return
+  const { data: chars } = await db().from('player_characters').select('id, sheet_json').eq('campaign_id', campaignId)
+  for (const ch of chars ?? []) {
+    const sheet = { ...emptySheet(), ...((ch.sheet_json as object) || {}) }
+    sheet.xp = Number(sheet.xp ?? 0) + next.xp
+    await db().from('player_characters').update({ sheet_json: sheet }).eq('id', ch.id)
   }
 }
 
@@ -409,6 +440,7 @@ export const supabaseApi: TableApi = {
         id: String(c.id),
         dmAccountId: String(c.dm_account_id),
         name: String(c.name),
+        hub: parseHub((c as { hub_json?: unknown }).hub_json),
       })),
     }
   },
@@ -427,7 +459,27 @@ export const supabaseApi: TableApi = {
       grid_type: 'square',
     })
     throwIf(mapErr)
-    return { campaign: { id: String(data.id), dmAccountId: user.id, name: String(data.name) } }
+    return { campaign: { id: String(data.id), dmAccountId: user.id, name: String(data.name), hub: parseHub((data as { hub_json?: unknown }).hub_json) } }
+  },
+
+  async patchCampaign(id, body) {
+    const patch: Record<string, unknown> = {}
+    if (body.name != null) patch.name = body.name
+    if (body.hub != null) patch.hub_json = parseHub(body.hub)
+    const { data, error } = await db().from('campaigns').update(patch).eq('id', id).select().single()
+    if (error && /hub_json/.test(error.message)) {
+      throw new Error('Could not find hub_json on campaigns. In the Supabase SQL Editor run migrate-campaign-mvp.sql, then: notify pgrst, \'reload schema\';')
+    }
+    throwIf(error)
+    return {
+      ok: true as const,
+      campaign: {
+        id: String(data.id),
+        dmAccountId: String(data.dm_account_id),
+        name: String(data.name),
+        hub: parseHub((data as { hub_json?: unknown }).hub_json),
+      },
+    }
   },
 
   async bestiary(q = '') {
@@ -666,43 +718,24 @@ export const supabaseApi: TableApi = {
     const { data, error } = await db().from('encounter_templates').select('*').eq('campaign_id', campaignId)
     throwIf(error)
     return {
-      templates: (data ?? []).map((t) => {
-        const packed = unpackTemplateJson(t as { monsters_json?: unknown; characters_json?: unknown })
-        return {
-          id: String(t.id),
-          campaignId: String(t.campaign_id),
-          mapId: String(t.map_id),
-          name: String(t.name),
-          monsters: packed.monsters,
-          characters: packed.characters,
-        }
-      }),
+      templates: (data ?? []).map((t) => templateFromRow(t as { id: unknown; campaign_id: unknown; map_id: unknown; name: unknown; monsters_json?: unknown; characters_json?: unknown })),
     }
   },
 
   async saveTemplate(campaignId, body) {
-    const monsters = (body.monsters ?? []) as TemplateMonster[]
-    const characters = (body.characters ?? []) as TemplateCharacter[]
     const row = (): Record<string, unknown> => {
+      const packedBody = packTemplateBody(body, embedPlayersInMonsters)
       const payload: Record<string, unknown> = {
         name: body.name,
         map_id: body.mapId,
-        monsters_json: packMonstersJson(monsters, characters, embedPlayersInMonsters),
+        monsters_json: packedBody.packed,
       }
-      if (!omittedTemplateCols.has('characters_json')) payload.characters_json = characters
+      if (!omittedTemplateCols.has('characters_json')) payload.characters_json = packedBody.characters
       return payload
     }
     const mapSaved = (data: Record<string, unknown>) => {
-      const packed = unpackTemplateJson(data)
       return {
-        template: {
-          id: String(data.id),
-          campaignId,
-          mapId: String(data.map_id),
-          name: String(data.name),
-          monsters: packed.monsters,
-          characters: packed.characters,
-        },
+        template: templateFromRow({ ...data, campaign_id: data.campaign_id ?? campaignId }),
       }
     }
     const rememberMissingCharactersCol = (message: string) => {
@@ -949,6 +982,7 @@ export const supabaseApi: TableApi = {
         .update({ status: 'completed' })
         .eq('id', existing.encounter_instance_id)
       throwIf(stErr)
+      await applyHostedFinishRewards(campaignId, String(existing.encounter_instance_id), outcome)
     }
     await updateLiveSession(String(existing.id), {
       table_phase: outcome === 'won' ? 'victory' : 'defeat',
@@ -1020,7 +1054,12 @@ export const supabaseApi: TableApi = {
     const { data: characters } = await db().from('player_characters').select('*').eq('campaign_id', campaignId)
     const chars = await hideCodes(campaignId, (characters ?? []).map((r) => characterFromRow(r as Record<string, unknown>)))
     return {
-      campaign: { id: String(campaign.id), dmAccountId: String(campaign.dm_account_id), name: String(campaign.name) },
+      campaign: {
+        id: String(campaign.id),
+        dmAccountId: String(campaign.dm_account_id),
+        name: String(campaign.name),
+        hub: parseHub((campaign as { hub_json?: unknown }).hub_json),
+      },
       session: session ? sessionFromRow(session as Record<string, unknown>) : null,
       instance: instance
         ? {

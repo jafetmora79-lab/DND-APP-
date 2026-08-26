@@ -248,12 +248,74 @@ export type EncounterTemplate = {
   name: string
   monsters: TemplateMonster[]
   characters?: TemplateCharacter[]
+  notes?: string
+  objective?: string
+  difficulty?: string
+  xpAward?: number
+  lootNotes?: string
+  sortOrder?: number
+}
+
+export type SessionBeatKind = 'combat' | 'social' | 'travel' | 'other'
+export type SessionBeatStatus = 'upcoming' | 'active' | 'done'
+export type QuestStatus = 'open' | 'complete' | 'failed'
+
+export type SessionBeat = {
+  id: string
+  kind: SessionBeatKind
+  title: string
+  notes: string
+  templateId: string
+  status: SessionBeatStatus
+}
+
+export type CampaignQuest = {
+  id: string
+  name: string
+  status: QuestStatus
+  notes: string
+  npcIds: string[]
+}
+
+export type CampaignNpc = {
+  id: string
+  name: string
+  role: string
+  notes: string
+}
+
+export type PartyLoot = {
+  id: string
+  name: string
+  qty: number
+  notes: string
+  holder: string
+}
+
+export type CampaignHub = {
+  recap: string
+  sessionTitle: string
+  sessionNotes: string
+  beats: SessionBeat[]
+  quests: CampaignQuest[]
+  npcs: CampaignNpc[]
+  loot: PartyLoot[]
+}
+
+export type EncounterBrief = {
+  notes: string
+  objective: string
+  difficulty: string
+  xpAward: number
+  lootNotes: string
+  sortOrder: number
 }
 
 export type Campaign = {
   id: string
   dmAccountId: string
   name: string
+  hub?: CampaignHub
 }
 
 export type Combatant = {

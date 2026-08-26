@@ -40,6 +40,8 @@ export const localApi = {
   me: () => req<{ user: AuthUser; character?: PlayerCharacter }>('/api/me'),
   campaigns: () => req<{ campaigns: Campaign[] }>('/api/campaigns'),
   createCampaign: (name: string) => req<{ campaign: Campaign }>('/api/campaigns', { method: 'POST', body: JSON.stringify({ name }) }),
+  patchCampaign: (id: string, body: { name?: string; hub?: Campaign['hub'] }) =>
+    req<{ ok: true; campaign?: Campaign }>(`/api/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   bestiary: (q = '') => req<{ monsters: Monster[] }>(`/api/bestiary?q=${encodeURIComponent(q)}`),
   monster: (id: string) => req<{ monster: Monster }>(`/api/bestiary/${id}`),
   saveMonster: (m: Partial<Monster> & { id?: string }) =>

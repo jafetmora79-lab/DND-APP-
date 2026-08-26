@@ -163,6 +163,7 @@ export function Player() {
           imageUrl={snap.session?.ambianceImageUrl ?? null}
           caption={snap.session?.ambianceCaption ?? ''}
           lastOutcome={snap.session?.lastOutcome ?? null}
+          hub={snap.campaign.hub}
           characters={snap.characters}
           selectedId={viewing?.id ?? null}
           onSelectCharacter={setSheetId}

@@ -27,6 +27,8 @@ If it was applied before the campaign table (scene image between fights, next en
 
 If it was applied before combat completeness (advantage dice, death saves, turn reminders), also run `migrate-combat-completeness.sql`, then re-run the `resolve_player_attack` / `resolve_death_save` / `set_turn_economy` functions from `schema.sql`.
 
+If it was applied before the campaign hub (timeline, quests, NPCs, loot), also run `migrate-campaign-mvp.sql`.
+
 ## 3. App env
 
 ```bash

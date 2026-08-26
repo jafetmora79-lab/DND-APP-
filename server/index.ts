@@ -20,8 +20,11 @@ import {
     tokenOccupiesBlocked,
     walkablePixel,
 } from '../src/lib/utils.ts'
+import { parseHub } from '../src/lib/campaign-hub.ts'
+import { packTemplateBody, templateFromRow } from '../src/lib/template-json.ts'
 import {
   addCharacterCombatant,
+  applyFinishRewards,
   characterFromRow,
   db,
   ids,
@@ -152,7 +155,12 @@ function snapshot(campaignId: string) {
     : []
   const characters = db.prepare('SELECT * FROM player_characters WHERE campaign_id = ?').all(campaignId) as Record<string, unknown>[]
   return {
-    campaign: { id: campaign.id, dmAccountId: campaign.dm_account_id, name: campaign.name },
+    campaign: {
+      id: campaign.id,
+      dmAccountId: campaign.dm_account_id,
+      name: campaign.name,
+      hub: parseHub(jparse((campaign.hub_json as string) || '{}', {})),
+    },
     session: session ? sessionFromRow(session) : null,
     instance: instance
       ? {
@@ -258,7 +266,12 @@ app.get('/api/me', requireUser, (req, res) => {
 
 app.get('/api/campaigns', requireDm, (req, res) => {
   const rows = db.prepare('SELECT * FROM campaigns WHERE dm_account_id = ?').all(userOf(req).id)
-  res.json({ campaigns: rows.map((r) => ({ id: (r as { id: string }).id, name: (r as { name: string }).name, dmAccountId: userOf(req).id })) })
+  res.json({
+    campaigns: rows.map((r) => {
+      const row = r as { id: string; name: string; hub_json?: string }
+      return { id: row.id, name: row.name, dmAccountId: userOf(req).id, hub: parseHub(jparse(row.hub_json || '{}', {})) }
+    }),
+  })
 })
 
 app.post('/api/campaigns', requireDm, (req, res) => {
@@ -280,7 +293,15 @@ app.patch('/api/campaigns/:id', requireDm, (req, res) => {
   }
   const name = String(req.body?.name ?? row.name)
   db.prepare('UPDATE campaigns SET name = ? WHERE id = ?').run(name, row.id)
-  res.json({ ok: true })
+  if (req.body.hub != null) {
+    db.prepare('UPDATE campaigns SET hub_json = ? WHERE id = ?').run(JSON.stringify(parseHub(req.body.hub)), row.id)
+  }
+  pushCampaign(param(req, 'id'))
+  const fresh = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(row.id) as { id: string; name: string; hub_json?: string }
+  res.json({
+    ok: true,
+    campaign: { id: fresh.id, name: fresh.name, dmAccountId: userOf(req).id, hub: parseHub(jparse(fresh.hub_json || '{}', {})) },
+  })
 })
 
 app.delete('/api/campaigns/:id', requireDm, (req, res) => {
@@ -657,14 +678,7 @@ app.get('/api/campaigns/:id/templates', requireDm, (req, res) => {
   }
   const rows = db.prepare('SELECT * FROM encounter_templates WHERE campaign_id = ?').all(param(req, 'id')) as Record<string, unknown>[]
   res.json({
-    templates: rows.map((t) => ({
-      id: t.id,
-      campaignId: t.campaign_id,
-      mapId: t.map_id,
-      name: t.name,
-      monsters: jparse(t.monsters_json as string, []),
-      characters: jparse((t.characters_json as string) || '[]', []),
-    })),
+    templates: rows.map((t) => templateFromRow(t)),
   })
 })
 
@@ -674,23 +688,24 @@ app.post('/api/campaigns/:id/templates', requireDm, (req, res) => {
     return
   }
   const id = ids.id()
+  const packedBody = packTemplateBody(req.body, true)
   db.prepare('INSERT INTO encounter_templates (id, campaign_id, map_id, name, monsters_json, characters_json) VALUES (?,?,?,?,?,?)').run(
     id,
     param(req, 'id'),
     req.body.mapId,
     String(req.body.name || 'Encounter'),
-    JSON.stringify(req.body.monsters ?? []),
-    JSON.stringify(req.body.characters ?? []),
+    JSON.stringify(packedBody.packed),
+    JSON.stringify(packedBody.characters),
   )
   res.json({
-    template: {
+    template: templateFromRow({
       id,
-      campaignId: param(req, 'id'),
-      mapId: req.body.mapId,
+      campaign_id: param(req, 'id'),
+      map_id: req.body.mapId,
       name: req.body.name,
-      monsters: req.body.monsters ?? [],
-      characters: req.body.characters ?? [],
-    },
+      monsters_json: packedBody.packed,
+      characters_json: packedBody.characters,
+    }),
   })
 })
 
@@ -700,11 +715,23 @@ app.patch('/api/templates/:id', requireDm, (req, res) => {
     res.status(404).json({ error: 'Not found' })
     return
   }
+  const existing = templateFromRow(t)
+  const nextBrief = {
+    notes: req.body.notes ?? existing.notes,
+    objective: req.body.objective ?? existing.objective,
+    difficulty: req.body.difficulty ?? existing.difficulty,
+    xpAward: req.body.xpAward ?? existing.xpAward,
+    lootNotes: req.body.lootNotes ?? existing.lootNotes,
+    sortOrder: req.body.sortOrder ?? existing.sortOrder,
+    monsters: req.body.monsters ?? existing.monsters,
+    characters: req.body.characters ?? existing.characters,
+  }
+  const saved = packTemplateBody(nextBrief, true)
   db.prepare('UPDATE encounter_templates SET name=?, map_id=?, monsters_json=?, characters_json=? WHERE id=?').run(
     req.body.name ?? t.name,
     req.body.mapId ?? t.map_id,
-    JSON.stringify(req.body.monsters ?? jparse(t.monsters_json as string, [])),
-    JSON.stringify(req.body.characters ?? jparse((t.characters_json as string) || '[]', [])),
+    JSON.stringify(saved.packed),
+    JSON.stringify(saved.characters),
     t.id,
   )
   res.json({ ok: true })
@@ -897,6 +924,7 @@ app.post('/api/campaigns/:id/finish-encounter', requireDm, (req, res) => {
   if (existing.encounter_instance_id) {
     db.prepare(`UPDATE encounter_instances SET status = 'completed' WHERE id = ?`).run(existing.encounter_instance_id)
   }
+  applyFinishRewards(campaignId, existing.encounter_instance_id, outcome)
   db.prepare('UPDATE live_sessions SET table_phase=?, last_outcome=? WHERE id=?').run(
     outcome === 'won' ? 'victory' : 'defeat',
     outcome,
