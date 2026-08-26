@@ -1,0 +1,258 @@
+WHAT IS MISSING — DM, PLAYERS, ROUNDS, ENCOUNTERS
+=================================================
+
+This file is a gap analysis against the running app (not a roadmap with dates).
+HOW-THE-TABLE-WORKS.txt and APP-HOW-IT-WORKS.txt describe what exists.
+This file describes the table ceremonies that are thin or missing:
+especially how a fight starts, how a round turns over, and how a fight ends.
+
+Philosophy of the app (so “missing” is not “build a VTT”):
+  Dice stay at the real table. The app keeps bookkeeping.
+  It should still make the START / ROUND / FINISH loop obvious for DM and
+  phones. Those loops are the gaps below.
+
+
+HOW IT WORKS TODAY (SHORT)
+--------------------------
+
+ENCOUNTER START
+  DM, at the hub: Start on a Ready template (map + at least one monster),
+  or Resume a paused instance.
+  That creates (or reopens) an encounter instance: round 1, turn slot 0,
+  fog off and fully revealed, combatants in spawn order (monsters in the
+  order they were added, then any player starts that were Saved).
+  Initiative is 0 on everyone until the DM types numbers and hits Sort.
+  Players cannot start, pause, or pick the template.
+
+ROUNDS / TURNS
+  “Whose turn” is currentTurnPosition in the initiative list.
+  Round number goes up only when Next turn / End turn walks off the last
+  combatant and wraps to the top.
+  DM: Next turn on the tracker.
+  Player: End turn on their own turn only (YOUR TURN panel).
+  The creature who BECOMES current gets movement remaining reset to speed
+  and turn chips (Action / Bonus / Reaction / Move) cleared.
+  Dead, dying, and unconscious creatures are NOT skipped.
+
+ENCOUNTER FINISH
+  DM: Finalize → Won or Lost.
+  Instance is marked completed (rewards only the first time).
+  Session goes to a victory/defeat overlay.
+  Players wait: “The DM is wrapping this fight.”
+  DM then Return to table (hub) or Next encounter (picker).
+  Table / Pause does not finalize: it keeps HP, positions, round, and turn.
+
+
+1. ENCOUNTER START — WHAT IS MISSING
+------------------------------------
+
+DM
+  No “about to start” step. Start is one click. There is no checklist:
+    who is on the map, who is missing, fog on or off, surprise, init.
+  Ready only means “map + monster.” Player starts are optional. Easy to
+  go live with no PCs on the board.
+  Template notes / objective / difficulty live on the hub notebook, not
+  as a briefing card when combat opens.
+  Fog starts off. There is no “start hidden” or “start in darkness.”
+  Starting a different template while a fight is active marks the old
+  instance completed without Won/Lost, overlay, XP, or loot.
+  No surprise round. No “this side is surprised.”
+  No rolling or entering initiative as a dedicated start phase — it is
+  just fields on the tracker, all 0, first spawn order until Sort.
+  Sort is initiative high-to-low only. Equal inits are not broken by
+  Dex (or by a second d20). Order is whatever Sort’s stable ranking is.
+  Players cannot type their own initiative; only the DM can.
+  No “wait, phones ready?” — players already at the hub are yanked into
+  combat when the DM hits Start.
+
+PLAYERS
+  Cannot start a fight, pick a template, or confirm they are placed.
+  If they were not Place+Save on the template, they join combat with
+  “You are not on the map yet” and must wait for DM + Name.
+  No prompt to roll initiative and send it to the DM.
+  No surprise / “you act this round / you don’t” flag on the phone.
+
+STILL OK (BY DESIGN)
+  Not auto-rolling init. The table rolls; someone types.
+  Not a ready-check video call. Voice is at the real table.
+
+
+2. ROUNDS — WHAT IS MISSING
+---------------------------
+
+There is no separate “round start” or “round end” screen. Round N is a
+counter that ticks when the list wraps.
+
+DM
+  Next turn always advances one slot, including dead and unconscious
+  creatures. You have to click through a corpse or skip them yourself
+  (there is no Skip).
+  Sort mid-fight jumps back to the top of the new order and does not
+  change the round number. Easy to desync “we thought it was round 3.”
+  No legendary-action economy at end of other turns (stat blocks can
+  list legendary text; combat does not prompt it).
+  No lair-action slot at initiative 20.
+  No “start of round” list: concentration, poisoned, burning, dying,
+  regeneration. Conditions are rings + a list; they do not tick.
+  No Delay / Ready. You cannot park someone and come back later in the
+  same round except by reordering arrows (which changes the list for
+  everyone, not a one-off delay).
+  Turn chips reset only for the person who just became current, not
+  for the whole table at round wrap.
+  Monster turns have no “End turn” of their own — the DM Next turn is
+  that button. Easy to forget and leave the tracker on the goblin
+  while you already moved a player.
+
+PLAYERS
+  End turn is allowed only on their turn. They cannot pass a monster
+  or another PC.
+  Header shows “Round N · Name’s turn” plus YOUR TURN / WAITING.
+  There is no stronger “it’s you” (sound is out of scope; a bigger
+  banner is still missing if the phone is face-down).
+  They do not get a round-start reminder (e.g. “you are Poisoned —
+  roll the d20 when the DM asks”).
+  Movement remaining refreshes when their slot becomes current, which
+  is correct, but they cannot see a “round wrapped” moment.
+
+STILL OK (BY DESIGN)
+  No auto-damage from poison. The DM asks for a d20; Save bar / prompt
+  exists. Ticking conditions automatically would be a rules engine.
+
+
+3. ENCOUNTER FINISH — WHAT IS MISSING
+-------------------------------------
+
+DM
+  Only two outcomes: Won or Lost. No Flee, Retreat, Truce, or “left
+  unfinished” besides Pause / Table.
+  Finalize is a header button. Nothing in the tracker says “all enemies
+  are at 0 HP — finalize?” You can sit in combat forever.
+  XP from the template brief goes to EVERY character in the campaign,
+  not only people who were in that fight.
+  Loot is one text line appended to party loot, holder blank. No “give
+  the gem to Elara.”
+  HP, death-save state, and conditions on the encounter instance do not
+  write a “after the fight” snapshot onto character sheets except HP
+  that was already applied during attacks. No short rest / long rest.
+  Next encounter from the overlay can start another fight without
+  sitting at the hub; that is fine, but there is no rest reminder.
+  Completing via “start the next template” (old instance set completed
+  with no outcome) skips overlay and rewards.
+
+PLAYERS
+  Cannot Finalize. They stare at Victory/Defeat until the DM hits
+  Return to table or Next encounter.
+  They do not see a breakdown of XP per person or who got the loot
+  besides later looking at the hub recap / party loot / Combat-tab XP.
+  They cannot mark themselves stable, spend hit dice, or clear
+  conditions as a rest — only the live combatant/sheet fields.
+
+STILL OK (BY DESIGN)
+  Not an inventory manager. Party loot as a notebook is enough if the
+  DM types the line.
+  Not auto-leveling from XP.
+
+
+4. DM SIDE DURING COMBAT — EXTRA GAPS
+-------------------------------------
+
+  No remove-from-fight control besides never adding them. Late leavers
+  stay in the turn order.
+  No hidden initiative (players see Init N on the tracker).
+  Concentration is not tracked (no “this caster is concentrating”).
+  Cover, half cover, three-quarters, and high ground are not modeled
+  (range is Chebyshev vs the attack’s feet only).
+  AoE is “pick one target.”
+  Spell slots on the sheet are not spent by casting; they are typed.
+  Request save / Request reaction exist on the selected PC, not as a
+  table-wide “everyone Dex save.”
+  Combat notes (template brief, monster tactics) are not pinned on the
+  live HUD; the DM leaves combat to read the hub notebook.
+  Adding a monster mid-fight is “type a name, Enter” — no quantity,
+  no start square picker (it drops by the spawn rules).
+  Two different attack UIs: DM AttackBar at the bottom, player
+  Action / End turn panel. Same math, different chrome.
+
+
+5. PLAYER SIDE — EXTRA GAPS
+---------------------------
+
+  Cannot reveal/hide fog (correct for a player; they also cannot ask
+  the app to ping the DM).
+  Cannot drag anyone but themselves, and only on their turn.
+  Help / Dash / Dodge / Hide / Disengage are declared into the activity
+  feed. They do not change movement remaining or grant the Help bonus
+  automatically.
+  Death saves: they can enter a d20 when dying. They cannot stabilize
+  someone else.
+  Sheet drawer is separate from the map. Easy to miss attacks listed
+  only on the sheet vs the turn panel.
+  If the DM never hits Next turn after a player End turn, the table
+  still matches; if the DM hits Next turn AND the player already did,
+  the turn skips ahead — there is no lock. Double-advance is possible
+  if both press close together.
+
+
+6. HIGHEST-IMPACT GAPS (TABLE FLOW)
+-----------------------------------
+
+These are the holes you feel at a real session, in order:
+
+  1. Start of fight is not a phase.
+     Wanted: Start → who is on the map → type inits (PCs could submit)
+     → Sort → round 1 begins. Optional: fog on, surprise skip.
+
+  2. Initiative is DM-only and ties are sloppy.
+     Wanted: each phone sends a d20; DM enters monster inits; Sort
+     uses Dex (or a typed tie-break) when scores match.
+
+  3. Next turn does not skip the dead.
+     Wanted: Next / End turn lands on the next creature who can act,
+     or a Skip control.
+
+  4. Finish is easy to forget and rewards the whole campaign roster.
+     Wanted: nudge when no standing enemies remain; XP only for PCs
+     who were combatants; loot holder optional.
+
+  5. Players cannot put themselves on the map.
+     Wanted: “Join this fight” if the DM allows, or a DM prompt
+     “place Finnie?” when they are at the table but not spawned.
+
+  6. Pause vs Finalize vs Next-template is easy to mix up.
+     Wanted: clearer copy. Table = pause, keep the fight.
+     Finalize = the fight is over. Start next = only after overlay
+     or from the hub, never silent-complete.
+
+  7. No rest after the overlay.
+     Wanted: optional “short rest” on the hub (hit dice typed, not
+     auto-rolled) before the next Start.
+
+
+7. DELIBERATELY NOT MISSING
+---------------------------
+
+Do not treat these as holes in this file. They are out of scope:
+
+  Hex grids, lighting, sound, token animation, AI, OCR of photos,
+  auto-rolling d20s, 5-10-5 diagonal, multiple maps in one fight,
+  a full character builder, an external monster API, a rules engine
+  that applies poison/concentration/legendary actions for you.
+
+
+QUICK MAP: WHO CAN PRESS WHAT
+-----------------------------
+
+                    DM     Player
+  Start template    yes    no
+  Resume paused     yes    no
+  Type initiative   yes    no (see only)
+  Sort initiative   yes    no
+  Next turn         yes    only on own turn (End turn)
+  Skip dead         no     no
+  Move any token    yes    own token, own turn
+  Fog paint         yes    no
+  + Name on map     yes    no
+  Finalize W/L      yes    no (wait on overlay)
+  Return to hub     yes    no
+  Pause / Table     yes    no
+  Leave table       —      yes (logs out)
