@@ -19,7 +19,7 @@ Open **SQL Editor → New query**, paste the **entire** `schema.sql` file, and c
 
 That creates every table (including `maps`), row-level security, the `join_table` / `peek_join` RPCs, realtime, and the `maps` + `pdfs` storage buckets.
 
-Do **not** start with `migrate-map-maker.sql`. That file only adds `blocked_cells` to a `maps` table that already exists. On a new project it will do nothing useful and used to error with `relation "public.maps" does not exist`.
+If you already ran an older `schema.sql` and creating a map fails with **blocked_cells** / schema cache, run `migrate-map-maker.sql` (or re-run the current `schema.sql`). It adds the column and reloads PostgREST.
 
 ## 3. App env
 

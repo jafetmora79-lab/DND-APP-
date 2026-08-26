@@ -1,5 +1,6 @@
--- Only for databases that already ran schema.sql before map maker shipped.
--- New projects: run schema.sql instead. Do not start with this file.
+-- Adds blocked_cells to an existing maps table, then reloads the API schema cache.
+-- Safe to run even if the column is already there.
+-- If public.maps does not exist, run schema.sql instead.
 
 do $$
 begin
@@ -12,3 +13,5 @@ begin
       add column if not exists blocked_cells jsonb not null default '[]'::jsonb
   $sql$;
 end $$;
+
+notify pgrst, 'reload schema';

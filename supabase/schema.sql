@@ -80,6 +80,9 @@ create table if not exists public.maps (
   blocked_cells jsonb not null default '[]'::jsonb
 );
 
+-- CREATE TABLE IF NOT EXISTS does not add new columns to an existing maps table.
+alter table public.maps add column if not exists blocked_cells jsonb not null default '[]'::jsonb;
+
 create table if not exists public.encounter_templates (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid not null references public.campaigns (id) on delete cascade,
@@ -408,3 +411,5 @@ create policy pdfs_dm_update on storage.objects
 create policy pdfs_dm_delete on storage.objects
   for delete to authenticated
   using (bucket_id = 'pdfs');
+
+notify pgrst, 'reload schema';
