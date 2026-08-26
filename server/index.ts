@@ -9,6 +9,7 @@ import multer from 'multer'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { sessionFromRow } from '../src/lib/session.ts'
 import { clampMovementRemaining, combatantStatsFromMonster, parseDeathState, parseSpeedFeet, parseTurnEconomy, snapshotForPlayer, statsForLiveCombatant } from '../src/lib/combat.ts'
+import { parseActivity, parsePrompt } from '../src/lib/combat-activity.ts'
 import { emptySheet, type AuthUser, type EncounterSnapshot, type FogState, type NamedEntry } from '../src/lib/types.ts'
 import {
     clampGridDim,
@@ -43,6 +44,11 @@ import {
   setCombatTurnEconomy,
   applyHpKnockout,
   consumeTurnMovement,
+  appendInstanceActivity,
+  applyDeclaredAction,
+  instanceActivity,
+  setInstancePrompt,
+  resolvePromptSave,
 } from './db.ts'
 import { parseCharacterPdf } from './pdf.ts'
 
@@ -182,6 +188,8 @@ function snapshot(campaignId: string) {
           currentTurnPosition: instance.current_turn_position,
           fogState: jparse<FogState>(instance.fog_state as string, { cols: 20, rows: 15, enabled: false, revealed: [] }),
           mapId: instance.map_id,
+          activity: parseActivity(jparse((instance.activity_json as string) || '[]', [])),
+          prompt: parsePrompt(instance.prompt_json ? jparse(instance.prompt_json as string, null) : null),
         }
       : null,
     map: map ? mapFromDb(map) : null,
@@ -778,12 +786,16 @@ app.get('/api/campaigns/:id/instances', requireDm, (req, res) => {
   res.json({
     instances: rows.map((i) => ({
       id: i.id,
+      campaignId: i.campaign_id,
+      encounterTemplateId: i.encounter_template_id,
       name: i.name,
       status: i.status,
       roundNumber: i.round_number,
       currentTurnPosition: i.current_turn_position,
+      fogState: jparse<FogState>(i.fog_state as string, { cols: 20, rows: 15, enabled: false, revealed: [] }),
       mapId: i.map_id,
-      encounterTemplateId: i.encounter_template_id,
+      activity: parseActivity(jparse((i.activity_json as string) || '[]', [])),
+      prompt: parsePrompt(i.prompt_json ? jparse(i.prompt_json as string, null) : null),
     })),
   })
 })
@@ -1250,11 +1262,166 @@ app.post('/api/combatants/:id/turn-economy', requireUser, (req, res) => {
   res.json({ ok: true })
 })
 
-app.post('/api/instances/:id/next-turn', requireDm, (req, res) => {
+app.post('/api/instances/:id/activity', requireUser, (req, res) => {
+  const inst = instanceRow(param(req, 'id'))
+  const user = userOf(req)
+  if (!inst) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  if (user.role === 'dm') {
+    if (!campaignOwned(inst.campaign_id as string, user.id)) {
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+  } else if (user.campaignId !== inst.campaign_id) {
+    res.status(403).json({ error: 'Forbidden' })
+    return
+  }
+  try {
+    appendInstanceActivity(String(inst.id), String(req.body.text ?? ''))
+    pushCampaign(inst.campaign_id as string)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not log' })
+  }
+})
+
+app.post('/api/instances/:id/declare', requireUser, (req, res) => {
+  const inst = instanceRow(param(req, 'id'))
+  const user = userOf(req)
+  if (!inst) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  let combatantId = String(req.body.combatantId ?? '')
+  if (user.role === 'dm') {
+    if (!campaignOwned(inst.campaign_id as string, user.id)) {
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+  } else {
+    if (user.campaignId !== inst.campaign_id) {
+      res.status(403).json({ error: 'Forbidden' })
+      return
+    }
+    const mine = db
+      .prepare(`SELECT * FROM combatants WHERE encounter_instance_id = ? AND source = 'character' AND source_id = ?`)
+      .get(inst.id, user.characterId) as Record<string, unknown> | undefined
+    if (!mine) {
+      res.status(400).json({ error: 'You are not on the map yet. Ask the DM to place you.' })
+      return
+    }
+    combatantId = String(mine.id)
+  }
+  try {
+    const r = applyDeclaredAction({
+      instanceId: String(inst.id),
+      combatantId,
+      kind: String(req.body.kind ?? ''),
+      slot: req.body.slot,
+      targetId: req.body.targetId,
+      other: req.body.other,
+      custom: req.body.custom,
+    })
+    pushCampaign(inst.campaign_id as string)
+    res.json(r)
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not declare' })
+  }
+})
+
+app.post('/api/instances/:id/prompt', requireDm, (req, res) => {
   const inst = instanceRow(param(req, 'id'))
   if (!inst || !campaignOwned(inst.campaign_id as string, userOf(req).id)) {
     res.status(404).json({ error: 'Not found' })
     return
+  }
+  try {
+    const kind = req.body.kind
+    if (kind == null || kind === '') {
+      setInstancePrompt(String(inst.id), null)
+    } else {
+      setInstancePrompt(String(inst.id), {
+        kind,
+        combatantId: req.body.combatantId,
+        ability: req.body.ability,
+        dc: req.body.dc,
+      })
+    }
+    pushCampaign(inst.campaign_id as string)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not set prompt' })
+  }
+})
+
+app.post('/api/instances/:id/prompt-answer', requireUser, (req, res) => {
+  const inst = instanceRow(param(req, 'id'))
+  const user = userOf(req)
+  if (!inst) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  const { prompt } = instanceActivity(String(inst.id))
+  if (!prompt) {
+    res.status(400).json({ error: 'Nothing is waiting.' })
+    return
+  }
+  const c = db.prepare('SELECT * FROM combatants WHERE id = ?').get(prompt.combatantId) as Record<string, unknown> | undefined
+  if (!c || !canActAsCombatant(user, c, inst)) {
+    res.status(403).json({ error: 'This prompt is not for you.' })
+    return
+  }
+  try {
+    if (prompt.kind === 'save') {
+      const r = resolvePromptSave({ instanceId: String(inst.id), combatantId: prompt.combatantId, d20: Number(req.body.d20) })
+      pushCampaign(inst.campaign_id as string)
+      res.json(r)
+      return
+    }
+    const accept = Boolean(req.body.use)
+    if (accept) {
+      const econ = parseTurnEconomy(jparse((c.turn_economy_json as string) || '{}', {}))
+      econ.reaction = true
+      setCombatTurnEconomy(String(c.id), econ)
+      const note = String(req.body.other || req.body.attackName || '').trim()
+      appendInstanceActivity(String(inst.id), note ? `${c.name} used their Reaction (${note}).` : `${c.name} used their Reaction.`)
+    } else {
+      appendInstanceActivity(String(inst.id), `${c.name} declined a Reaction.`)
+    }
+    setInstancePrompt(String(inst.id), null)
+    pushCampaign(inst.campaign_id as string)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not answer' })
+  }
+})
+
+app.post('/api/instances/:id/next-turn', requireUser, (req, res) => {
+  const inst = instanceRow(param(req, 'id'))
+  const user = userOf(req)
+  if (!inst) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  if (user.role === 'dm') {
+    if (!campaignOwned(inst.campaign_id as string, user.id)) {
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+  } else {
+    if (user.campaignId !== inst.campaign_id) {
+      res.status(403).json({ error: 'Forbidden' })
+      return
+    }
+    const current = db
+      .prepare('SELECT * FROM combatants WHERE encounter_instance_id = ? AND turn_order_position = ?')
+      .get(inst.id, inst.current_turn_position) as Record<string, unknown> | undefined
+    if (!current || !canActAsCombatant(user, current, inst)) {
+      res.status(400).json({ error: 'Wait for your turn to end the round.' })
+      return
+    }
   }
   const n = db.prepare('SELECT COUNT(*) as c FROM combatants WHERE encounter_instance_id = ?').get(inst.id) as { c: number }
   if (n.c === 0) {

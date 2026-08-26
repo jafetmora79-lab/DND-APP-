@@ -217,7 +217,7 @@ check('fog and visibleToPlayers hide tokens from players', () => {
     {
       campaign: { id: 'c', dmAccountId: 'd', name: 'T', hub: emptyHub() },
       session: null,
-      instance: { id: 'i', campaignId: 'c', encounterTemplateId: null, name: 'F', status: 'active', roundNumber: 1, currentTurnPosition: 0, fogState: fog, mapId: 'm' },
+      instance: { id: 'i', campaignId: 'c', encounterTemplateId: null, name: 'F', status: 'active', roundNumber: 1, currentTurnPosition: 0, fogState: fog, mapId: 'm', activity: [], prompt: null },
       map: { id: 'm', campaignId: 'c', name: 'M', imageUrl: '', gridCols: 4, gridRows: 3, gridSize: 70, gridType: 'square', blocked: [] },
       combatants: [],
       tokens: [

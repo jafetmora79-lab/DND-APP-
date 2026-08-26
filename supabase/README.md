@@ -29,6 +29,8 @@ If it was applied before combat completeness (advantage dice, death saves, turn 
 
 If it was applied before the campaign hub (timeline, quests, NPCs, loot), also run `migrate-campaign-mvp.sql`.
 
+If it was applied before player combat (activity feed, declare/prompt, player end-turn), also run `migrate-player-combat.sql`.
+
 ## 3. App env
 
 ```bash
