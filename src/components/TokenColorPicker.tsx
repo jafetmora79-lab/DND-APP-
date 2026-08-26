@@ -32,23 +32,25 @@ export function TokenColorPicker({ value, onChange, disabled, label, title }: Pr
   }, [open])
 
   return (
-    <div ref={wrap} className="relative inline-block">
+    <div ref={wrap} className="relative shrink-0">
       <button
         type="button"
         disabled={disabled}
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-label={title ?? label}
+        title={title ?? label}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2 rounded-md border border-line bg-bg px-2.5 py-1.5 text-xs text-ink hover:bg-panel-2 disabled:opacity-50"
+        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-bg px-2 text-xs text-ink hover:bg-panel-2 disabled:opacity-50"
       >
-        <span className="h-4 w-4 rounded-full border border-line" style={{ background: current }} />
+        <span className="h-4 w-4 shrink-0 rounded-full border border-line" style={{ background: current }} />
         {label}
       </button>
       {open && (
         <div
           role="dialog"
           aria-label={title ?? label}
-          className="absolute right-0 top-full z-40 mt-1 w-[15.5rem] rounded-lg border border-line bg-panel p-3 shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
+          className="absolute right-0 top-full z-50 mt-1 w-[15.5rem] rounded-lg border border-line bg-panel p-3 shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
         >
           <p className="mb-2 text-[10px] uppercase tracking-wider text-gold">{title ?? label}</p>
           <div className="flex flex-wrap gap-2">

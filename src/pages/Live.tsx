@@ -797,7 +797,7 @@ export function Live() {
 
         <aside
           className={cn(
-            'min-h-0 w-full overflow-y-auto border-line p-3 lg:block lg:w-[26rem] lg:shrink-0 lg:flex-none lg:border-l',
+            'min-h-0 min-w-0 w-full overflow-y-auto overflow-x-hidden border-line p-3 lg:block lg:w-[26rem] lg:shrink-0 lg:flex-none lg:border-l',
             hudTab === 'sheet' ? 'block min-h-0 flex-1' : 'hidden lg:block',
           )}
         >

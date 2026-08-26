@@ -948,7 +948,7 @@ export function Prep() {
             </ul>
           </div>
           {selectedChar ? (
-            <div className="rounded-xl border border-line bg-panel p-4">
+            <div className="min-w-0 rounded-xl border border-line bg-panel p-4">
               <CharacterSheet
                 character={selectedChar}
                 canEdit
