@@ -38,9 +38,9 @@ Public repo: [jafetmora79-lab/DND-APP-](https://github.com/jafetmora79-lab/DND-A
    - `VITE_SUPABASE_ANON_KEY`
 3. Re-run the **GitHub Pages** workflow (or push to `main`).
 
-Until Source is GitHub Actions, the workflow also writes the built site to `docs/` so the current “Deploy from a branch → `/docs`” setting can still publish.
+Until Source is GitHub Actions, this repo is still set to **Deploy from a branch → `/docs`**. The Pages workflow therefore copies the secret-baked `dist/` into `docs/` on every `main` build so login works even while that setting stays on. Switching Source to **GitHub Actions** is still the better one-time fix (no extra `/docs` commit).
 
-Without those two secrets the Pages build still succeeds, but the site has no hosted backend — phones cannot join. Hosted passcodes must be **at least 6 characters** (Supabase Auth). The local sample passcode `torch` only works on `npm run dev`.
+If those two secrets are missing the Pages workflow **fails** instead of publishing a UI that cannot sign anyone in. Hosted passcodes must be **at least 6 characters** (Supabase Auth). The local sample passcode `torch` only works on `npm run dev`.
 
 ### Sample table
 

@@ -33,6 +33,8 @@ Fill in the two `VITE_` values, then `npm run dev`. Claim a new table name — t
 
 GitHub Pages can only host the static Vite build. It cannot run the SQLite server, so Pages **requires** the two `VITE_` secrets above.
 
+This repo’s Pages source is still **Deploy from a branch → `/docs`**. The workflow copies each secret-baked build into `docs/` so that setting keeps working. Prefer switching Source to **GitHub Actions** when you can.
+
 1. Push this repo to GitHub.
 2. Settings → Pages → Build and deployment → Source: **GitHub Actions** (required; “Deploy from a branch” / `/docs` makes `actions/deploy-pages` 404).
 3. Repo **Actions secrets** (not Environments): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
