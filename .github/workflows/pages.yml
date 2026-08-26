@@ -29,7 +29,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_HASH_ROUTER: "1"
-          VITE_BASE: ${{ vars.VITE_BASE }}
+          VITE_BASE: ${{ vars.VITE_BASE || '/DND-APP-/' }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

@@ -28,6 +28,18 @@ The Vite app proxies `/api` and `/ws` to the SQLite + WebSocket server on port *
 
 To host the table so phones can join from anywhere, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (see [supabase/README.md](supabase/README.md)). GitHub Pages can serve the static app only — it cannot replace that backend.
 
+Public repo: [jafetmora79-lab/DND-APP-](https://github.com/jafetmora79-lab/DND-APP-). After Pages is enabled, the live URL is [https://jafetmora79-lab.github.io/DND-APP-/](https://jafetmora79-lab.github.io/DND-APP-/).
+
+### GitHub Pages (one-time)
+
+1. Open [Pages settings](https://github.com/jafetmora79-lab/DND-APP-/settings/pages) → **Source** → **GitHub Actions**.
+2. Open [Actions secrets](https://github.com/jafetmora79-lab/DND-APP-/settings/secrets/actions) and add:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+3. Re-run the **GitHub Pages** workflow (or push to `main`).
+
+Without those two secrets the Pages build still succeeds, but the site has no hosted backend — phones cannot join. Hosted passcodes must be **at least 6 characters** (Supabase Auth). The local sample passcode `torch` only works on `npm run dev`.
+
 ### Sample table
 
 A seeded campaign is ready on first boot:
