@@ -118,10 +118,11 @@ export async function parseCharacterPdf(buffer: ArrayBuffer | Uint8Array) {
       name: text(fields, 'Wpn Name', 'Wpn Name 2', 'AttacksSpellcasting'),
       bonus: text(fields, 'Wpn1 AtkBonus', 'Wpn2 AtkBonus'),
       damage: text(fields, 'Wpn1 Damage', 'Wpn2 Damage'),
+      range: '5 ft.',
     },
   ].filter((a) => a.name)
 
-  if (sheet.attacks.length === 0) sheet.attacks = [{ name: '', bonus: '', damage: '' }]
+  if (sheet.attacks.length === 0) sheet.attacks = [{ name: '', bonus: '', damage: '', range: '5 ft.' }]
 
   sheet.spellcastingAbility = (text(fields, 'SpellcastingAbility', 'Spellcasting Ability').toLowerCase().slice(0, 3) ||
     '') as CharacterSheetData['spellcastingAbility']

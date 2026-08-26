@@ -54,6 +54,36 @@ export const CONDITIONS = [
   'Exhaustion 6',
 ] as const
 
+/** Colored rings drawn around map tokens for tracker conditions. Unconscious stands in for sleep. */
+export const CONDITION_RING: Record<(typeof CONDITIONS)[number], string> = {
+  Blinded: '#9ca3af',
+  Charmed: '#f472b6',
+  Deafened: '#78716c',
+  Frightened: '#a78bfa',
+  Grappled: '#fb923c',
+  Incapacitated: '#64748b',
+  Invisible: '#67e8f9',
+  Paralyzed: '#facc15',
+  Petrified: '#a8a29e',
+  Poisoned: '#4ade80',
+  Prone: '#b45309',
+  Restrained: '#f59e0b',
+  Stunned: '#38bdf8',
+  Unconscious: '#818cf8',
+  'Exhaustion 1': '#6b7280',
+  'Exhaustion 2': '#6b7280',
+  'Exhaustion 3': '#6b7280',
+  'Exhaustion 4': '#6b7280',
+  'Exhaustion 5': '#6b7280',
+  'Exhaustion 6': '#6b7280',
+}
+
+export function conditionRingColor(name: string) {
+  if (name in CONDITION_RING) return CONDITION_RING[name as (typeof CONDITIONS)[number]]
+  if (name.toLowerCase().startsWith('exhaustion')) return '#6b7280'
+  return '#c4453c'
+}
+
 export const TOKEN_PALETTE = [
   '#c4453c',
   '#e07030',
@@ -107,7 +137,7 @@ export type Monster = {
   source: 'srd' | 'custom'
 }
 
-export type Attack = { name: string; bonus: string; damage: string }
+export type Attack = { name: string; bonus: string; damage: string; range?: string }
 
 export type CharacterSheetData = {
   className: string
@@ -169,10 +199,22 @@ export type BattleMap = {
   blocked: number[]
 }
 
+export type GridCell = { x: number; y: number }
+
 export type TemplateMonster = {
   bestiaryMonsterId: string
   name: string
   quantity: number
+  startX: number
+  startY: number
+  color: string
+  /** One map cell per copy. When missing, copies cluster from startX/startY. */
+  positions?: GridCell[]
+}
+
+export type TemplateCharacter = {
+  characterId: string
+  name: string
   startX: number
   startY: number
   color: string
@@ -184,6 +226,7 @@ export type EncounterTemplate = {
   mapId: string
   name: string
   monsters: TemplateMonster[]
+  characters?: TemplateCharacter[]
 }
 
 export type Campaign = {
@@ -207,6 +250,7 @@ export type Combatant = {
   turnOrderPosition: number
   color: string
   notes: string
+  constitution: number
 }
 
 export type MapToken = {
@@ -220,6 +264,11 @@ export type MapToken = {
   color: string
   sizeSquares: number
   visibleToPlayers: boolean
+  hpCurrent?: number
+  hpMax?: number
+  hpTemp?: number
+  con?: number
+  conditions?: string[]
 }
 
 export type FogState = {
@@ -283,7 +332,7 @@ export function emptySheet(): CharacterSheetData {
     deathFail: 0,
     abilities,
     savingThrowProf,
-    attacks: [{ name: '', bonus: '', damage: '' }],
+    attacks: [{ name: '', bonus: '', damage: '', range: '5 ft.' }],
     skillProf: {},
     skillExpertise: {},
     spellcastingAbility: '',

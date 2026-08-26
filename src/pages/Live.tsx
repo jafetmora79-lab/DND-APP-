@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Eye, EyeOff, Pause, Play, Sword } from 'lucide-react'
+import { Check, Copy, Eye, EyeOff, Pause, Play, Sword } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CharacterSheet } from '@/components/CharacterSheet'
@@ -8,9 +8,11 @@ import { MapBoard } from '@/components/map/MapBoard'
 import { StatBlock } from '@/components/StatBlock'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
+import { decorateTokens } from '@/lib/combat'
 import { useLive } from '@/lib/realtime'
 import type { EncounterInstance, EncounterSnapshot, EncounterTemplate, FogState, Monster } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { copyText } from '@/lib/copy'
 
 export function Live() {
   const { campaignId } = useParams()
@@ -24,6 +26,7 @@ export function Live() {
   const [addQ, setAddQ] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [copiedJoin, setCopiedJoin] = useState(false)
 
   const load = useCallback(async () => {
     if (!campaignId) return
@@ -132,6 +135,9 @@ export function Live() {
                 <div>
                   <div>{t.name}</div>
                   <div className="text-xs text-muted">{t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')}</div>
+                  {(t.characters?.length ?? 0) > 0 && (
+                    <div className="text-xs text-muted">Starts: {t.characters!.map((c) => c.name).join(', ')}</div>
+                  )}
                 </div>
                 <Button disabled={busy} variant="ember" onClick={() => startFrom(t.id)}>
                   Start
@@ -160,6 +166,21 @@ export function Live() {
           <div className="rounded-md border border-gold/40 bg-panel px-3 py-1 font-mono text-sm tracking-[0.2em] text-gold-2">
             {snap.session?.joinCode ?? '—'}
           </div>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!snap.session?.joinCode}
+            onClick={async () => {
+              if (!snap.session?.joinCode) return
+              const ok = await copyText(snap.session.joinCode)
+              if (!ok) return
+              setCopiedJoin(true)
+              window.setTimeout(() => setCopiedJoin(false), 1600)
+            }}
+          >
+            {copiedJoin ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copiedJoin ? 'Copied' : 'Copy code'}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => api.openSession(campaignId!, instance.id).then(load)}>
             New join code
           </Button>
@@ -228,7 +249,7 @@ export function Live() {
         <main className="relative min-h-[45vh] flex-1">
           <MapBoard
             map={snap.map}
-            tokens={snap.tokens}
+            tokens={decorateTokens(snap.tokens, snap.combatants, snap.characters, monsters)}
             fog={instance.fogState}
             isDm
             selectedId={selected}
@@ -298,6 +319,7 @@ export function Live() {
           {panel === 'tracker' && (
             <p className="text-sm text-muted">
               HP, conditions, and turn order persist with this encounter instance. Pause whenever you want — next session resumes the same fight.
+              Condition colors on the tracker match the rings around tokens (green for Poisoned, indigo for Unconscious / sleeping, and so on).
             </p>
           )}
         </aside>

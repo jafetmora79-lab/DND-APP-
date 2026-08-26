@@ -1,4 +1,4 @@
-import { CONDITIONS, type Combatant } from '@/lib/types'
+import { CONDITIONS, conditionRingColor, type Combatant } from '@/lib/types'
 import { cn, hpColor } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -108,7 +108,11 @@ export function Tracker({ combatants, current, round, isDm, selectedId, onSelect
             {c.conditions.length > 0 && (
               <div className="mt-1 flex flex-wrap gap-1">
                 {c.conditions.map((cond) => (
-                  <span key={cond} className="rounded bg-blood/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink">
+                  <span
+                    key={cond}
+                    className="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-bg"
+                    style={{ background: conditionRingColor(cond) }}
+                  >
                     {cond}
                     {isDm && (
                       <button

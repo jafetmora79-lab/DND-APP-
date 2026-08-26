@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Circle, Group, Layer, Rect, Shape, Stage, Text, Image as KImage } from 'react-konva'
 import useImage from 'use-image'
-import type { BattleMap, FogState, MapToken } from '@/lib/types'
-import { initials, pixelToCell, tokenOccupiesBlocked } from '@/lib/utils'
+import { conditionRingColor, type BattleMap, type FogState, type MapToken } from '@/lib/types'
+import { hpBarFill, initials, pixelToCell, tokenOccupiesBlocked } from '@/lib/utils'
 
 export type MapTool = 'select' | 'reveal' | 'hide' | 'block' | 'open'
 
@@ -12,6 +12,7 @@ type Props = {
   fog: FogState
   isDm: boolean
   selectedId?: string | null
+  highlightIds?: string[]
   tool?: MapTool
   onSelect?: (id: string | null) => void
   onMove?: (id: string, x: number, y: number) => void
@@ -25,7 +26,19 @@ function MapImage({ url, width, height }: { url: string; width: number; height: 
   return <KImage image={img} width={width} height={height} listening={false} />
 }
 
-export function MapBoard({ map, tokens, fog, isDm, selectedId, tool = 'select', onSelect, onMove, onFog, onBlocked }: Props) {
+export function MapBoard({
+  map,
+  tokens,
+  fog,
+  isDm,
+  selectedId,
+  highlightIds = [],
+  tool = 'select',
+  onSelect,
+  onMove,
+  onFog,
+  onBlocked,
+}: Props) {
   const wrap = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 800, h: 600 })
   const [scale, setScale] = useState(0.7)
@@ -121,6 +134,7 @@ export function MapBoard({ map, tokens, fog, isDm, selectedId, tool = 'select', 
           setPos({ x: ptr.x - mousePointTo.x * next, y: ptr.y - mousePointTo.y * next })
         }}
         onMouseDown={(e) => {
+          if (e.target.findAncestor('.token')) return
           const cls = e.target.getClassName()
           if (cls === 'Circle' || cls === 'Text' || cls === 'Group') return
           if (tool === 'select') onSelect?.(null)
@@ -228,9 +242,18 @@ export function MapBoard({ map, tokens, fog, isDm, selectedId, tool = 'select', 
             const r = (t.sizeSquares * map.gridSize) / 2 - 4
             const hidden = fog.enabled && !isDm && !fog.revealed[cellAt(t.x, t.y)]
             if (hidden || (!isDm && !t.visibleToPlayers)) return null
+            const selected = selectedId === t.refId
+            const highlighted = highlightIds.includes(t.refId)
+            const hpMax = t.hpMax ?? 0
+            const hpCurrent = t.hpCurrent ?? hpMax
+            const barW = Math.max(28, r * 1.8)
+            const ratio = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0
+            const rings = (t.conditions ?? []).slice(0, 4)
+            const showHud = Boolean(t.label) || hpMax > 0 || t.con != null
             return (
               <Group
                 key={t.id}
+                name="token"
                 x={t.x}
                 y={t.y}
                 draggable={isDm && tool === 'select'}
@@ -252,7 +275,60 @@ export function MapBoard({ map, tokens, fog, isDm, selectedId, tool = 'select', 
                   onMove?.(t.id, gx, gy)
                 }}
               >
-                {selectedId === t.refId && <Circle radius={r + 5} stroke="#f0d78c" strokeWidth={2} />}
+                {showHud && (
+                  <>
+                    <Text
+                      text={t.label || ''}
+                      y={-r - 28}
+                      width={barW + 24}
+                      offsetX={(barW + 24) / 2}
+                      align="center"
+                      fontSize={10}
+                      fontFamily="Cinzel"
+                      fill="#f0d78c"
+                      listening={false}
+                    />
+                    <Text
+                      text={[hpMax > 0 ? `${hpCurrent}/${hpMax}` : '', t.con != null ? `CON ${t.con}` : '']
+                        .filter(Boolean)
+                        .join('  ')}
+                      y={-r - 16}
+                      width={barW + 28}
+                      offsetX={(barW + 28) / 2}
+                      align="center"
+                      fontSize={8}
+                      fill="#d9d0c0"
+                      listening={false}
+                    />
+                    {hpMax > 0 && (
+                      <>
+                        <Rect x={-barW / 2} y={-r - 7} width={barW} height={4} fill="#1a1410" cornerRadius={2} listening={false} />
+                        <Rect
+                          x={-barW / 2}
+                          y={-r - 7}
+                          width={barW * ratio}
+                          height={4}
+                          fill={hpBarFill(hpCurrent, hpMax)}
+                          cornerRadius={2}
+                          listening={false}
+                        />
+                      </>
+                    )}
+                  </>
+                )}
+                {selected && <Circle radius={r + 6} stroke="#f0d78c" strokeWidth={2} listening={false} />}
+                {highlighted && !selected && (
+                  <Circle radius={r + 7} stroke="#86efac" strokeWidth={2} dash={[6, 4]} listening={false} />
+                )}
+                {rings.map((cond, i) => (
+                  <Circle
+                    key={`${cond}-${i}`}
+                    radius={r + 3 + i * 3}
+                    stroke={conditionRingColor(cond)}
+                    strokeWidth={2.5}
+                    listening={false}
+                  />
+                ))}
                 <Circle radius={r} fill={t.color} stroke="#120e0b" strokeWidth={2} />
                 <Text
                   text={initials(t.label || '?')}

@@ -30,6 +30,7 @@ import {
   now,
   seedBestiaryForDm,
   spawnFromTemplate,
+  resolvePlayerAttack,
 } from './db.ts'
 import { parseCharacterPdf } from './pdf.ts'
 
@@ -176,6 +177,7 @@ function snapshot(campaignId: string) {
       turnOrderPosition: c.turn_order_position,
       color: c.color,
       notes: c.notes,
+      constitution: Number(c.constitution ?? 10),
     })),
     tokens: tokens.map((t) => ({
       id: t.id,
@@ -650,6 +652,7 @@ app.get('/api/campaigns/:id/templates', requireDm, (req, res) => {
       mapId: t.map_id,
       name: t.name,
       monsters: jparse(t.monsters_json as string, []),
+      characters: jparse((t.characters_json as string) || '[]', []),
     })),
   })
 })
@@ -660,15 +663,23 @@ app.post('/api/campaigns/:id/templates', requireDm, (req, res) => {
     return
   }
   const id = ids.id()
-  db.prepare('INSERT INTO encounter_templates (id, campaign_id, map_id, name, monsters_json) VALUES (?,?,?,?,?)').run(
+  db.prepare('INSERT INTO encounter_templates (id, campaign_id, map_id, name, monsters_json, characters_json) VALUES (?,?,?,?,?,?)').run(
     id,
     param(req, 'id'),
     req.body.mapId,
     String(req.body.name || 'Encounter'),
     JSON.stringify(req.body.monsters ?? []),
+    JSON.stringify(req.body.characters ?? []),
   )
   res.json({
-    template: { id, campaignId: param(req, 'id'), mapId: req.body.mapId, name: req.body.name, monsters: req.body.monsters ?? [] },
+    template: {
+      id,
+      campaignId: param(req, 'id'),
+      mapId: req.body.mapId,
+      name: req.body.name,
+      monsters: req.body.monsters ?? [],
+      characters: req.body.characters ?? [],
+    },
   })
 })
 
@@ -678,10 +689,11 @@ app.patch('/api/templates/:id', requireDm, (req, res) => {
     res.status(404).json({ error: 'Not found' })
     return
   }
-  db.prepare('UPDATE encounter_templates SET name=?, map_id=?, monsters_json=? WHERE id=?').run(
+  db.prepare('UPDATE encounter_templates SET name=?, map_id=?, monsters_json=?, characters_json=? WHERE id=?').run(
     req.body.name ?? t.name,
     req.body.mapId ?? t.map_id,
     JSON.stringify(req.body.monsters ?? jparse(t.monsters_json as string, [])),
+    JSON.stringify(req.body.characters ?? jparse((t.characters_json as string) || '[]', [])),
     t.id,
   )
   res.json({ ok: true })
@@ -844,8 +856,8 @@ app.post('/api/instances/:id/combatants', requireDm, (req, res) => {
         const id = i === 0 ? cid : ids.id()
         const name = qty > 1 ? `${src.name} ${i + 1}` : String(src.name)
         db.prepare(
-          `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         ).run(
           id,
           inst.id,
@@ -861,6 +873,7 @@ app.post('/api/instances/:id/combatants', requireDm, (req, res) => {
           maxPos.m + 1 + i,
           req.body.color || '#c4453c',
           '',
+          Number(src.con ?? 10),
         )
         const pos = battle
           ? walkablePixel(battle, 3 + i, 3)
@@ -873,6 +886,34 @@ app.post('/api/instances/:id/combatants', requireDm, (req, res) => {
   }
   pushCampaign(inst.campaign_id as string)
   res.json({ ok: true })
+})
+
+app.post('/api/instances/:id/player-attack', requireUser, (req, res) => {
+  const user = userOf(req)
+  if (user.role !== 'player') {
+    res.status(403).json({ error: 'Players resolve their own attacks from the table' })
+    return
+  }
+  const inst = instanceRow(param(req, 'id'))
+  if (!inst || inst.campaign_id !== user.campaignId) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  try {
+    const result = resolvePlayerAttack({
+      campaignId: user.campaignId,
+      characterId: user.characterId,
+      instanceId: String(inst.id),
+      targetId: String(req.body.targetId ?? ''),
+      attackIndex: Number(req.body.attackIndex),
+      d20: Number(req.body.d20),
+      damage: Number(req.body.damage),
+    })
+    pushCampaign(user.campaignId)
+    res.json(result)
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Attack failed' })
+  }
 })
 
 app.patch('/api/combatants/:id', requireDm, (req, res) => {

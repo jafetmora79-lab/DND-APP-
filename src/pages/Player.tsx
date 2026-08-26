@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { BookOpen, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { CharacterSheet } from '@/components/CharacterSheet'
 import { MapBoard } from '@/components/map/MapBoard'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { decorateTokens, inRangeCombatantIds, parseAttackBonus, parseRangeFeet } from '@/lib/combat'
 import { useLive } from '@/lib/realtime'
-import type { EncounterSnapshot, PlayerCharacter } from '@/lib/types'
+import type { Attack, EncounterSnapshot, PlayerCharacter } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 export function Player() {
@@ -20,6 +22,12 @@ export function Player() {
   const [sheetId, setSheetId] = useState<string | null>(user && user.role === 'player' ? user.characterId : null)
   const [tab, setTab] = useState<'map' | 'tracker'>('map')
   const [error, setError] = useState('')
+  const [pending, setPending] = useState<{ attack: Attack; index: number } | null>(null)
+  const [targetId, setTargetId] = useState<string | null>(null)
+  const [d20, setD20] = useState('')
+  const [damage, setDamage] = useState('')
+  const [attackMsg, setAttackMsg] = useState('')
+  const [busy, setBusy] = useState(false)
 
   const load = useCallback(() => {
     if (!campaignId) return
@@ -37,6 +45,57 @@ export function Player() {
   const whose = snap
     ? [...snap.combatants].sort((a, b) => a.turnOrderPosition - b.turnOrderPosition)[snap.instance?.currentTurnPosition ?? 0]
     : undefined
+  const myCombatant = snap?.combatants.find((c) => c.source === 'character' && c.sourceId === me?.id)
+  const highlightIds = useMemo(() => {
+    if (!snap?.map || !pending || !myCombatant) return []
+    return inRangeCombatantIds(snap.map, snap.tokens, snap.combatants, myCombatant.id, pending.attack)
+  }, [snap, pending, myCombatant])
+  const target = snap?.combatants.find((c) => c.id === targetId)
+  const tokens = snap ? decorateTokens(snap.tokens, snap.combatants, snap.characters) : []
+
+  function pickAttack(attack: Attack, index: number) {
+    setPending({ attack, index })
+    setTargetId(null)
+    setD20('')
+    setDamage('')
+    setAttackMsg('')
+    setDrawer(false)
+    setTab('map')
+  }
+
+  async function submitAttack() {
+    if (!snap?.instance || !pending || !targetId) return
+    const roll = Number(d20)
+    const dmg = Number(damage)
+    if (!Number.isInteger(roll) || roll < 1 || roll > 20) {
+      setAttackMsg('Enter the d20 you rolled at the table (1–20).')
+      return
+    }
+    if (!Number.isFinite(dmg) || dmg < 0) {
+      setAttackMsg('Enter the damage you rolled (0 if you missed or deal none).')
+      return
+    }
+    setBusy(true)
+    try {
+      const r = await api.playerAttack(snap.instance.id, {
+        targetId,
+        attackIndex: pending.index,
+        d20: roll,
+        damage: dmg,
+      })
+      setAttackMsg(r.message)
+      if (r.hit) {
+        setPending(null)
+        setTargetId(null)
+        setD20('')
+        setDamage('')
+      }
+    } catch (e) {
+      setAttackMsg(e instanceof Error ? e.message : 'Attack failed')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   if (!snap) {
     return <div className="p-6 text-muted">{error || 'Connecting to the table…'}</div>
@@ -71,9 +130,29 @@ export function Player() {
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <div className={cn('min-h-0 flex-1', tab === 'tracker' && 'hidden lg:block')}>
+        <div className={cn('relative min-h-0 flex-1', tab === 'tracker' && 'hidden lg:block')}>
           {snap.map && snap.instance ? (
-            <MapBoard map={snap.map} tokens={snap.tokens} fog={snap.instance.fogState} isDm={false} />
+            <MapBoard
+              map={snap.map}
+              tokens={tokens}
+              fog={snap.instance.fogState}
+              isDm={false}
+              selectedId={targetId}
+              highlightIds={highlightIds}
+              onSelect={(id) => {
+                if (!pending) return
+                if (!id) {
+                  setTargetId(null)
+                  return
+                }
+                if (!highlightIds.includes(id)) {
+                  setAttackMsg('That creature is out of range for this attack.')
+                  return
+                }
+                setTargetId(id)
+                setAttackMsg('')
+              }}
+            />
           ) : (
             <div className="flex h-full items-center justify-center p-6 text-center text-muted">
               The DM has not opened an encounter yet. Keep this page open — the map appears when the fight starts.
@@ -98,6 +177,67 @@ export function Player() {
           )}
         </aside>
       </div>
+
+      {me && snap.instance && (
+        <div className="border-t border-line bg-panel px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs uppercase tracking-wider text-muted">Attack</span>
+            {me.sheet.attacks
+              .map((atk, i) => ({ atk, i }))
+              .filter(({ atk }) => atk.name.trim())
+              .map(({ atk, i }) => (
+                <Button
+                  key={`${atk.name}-${i}`}
+                  size="sm"
+                  variant={pending?.index === i ? 'default' : 'outline'}
+                  onClick={() => pickAttack(atk, i)}
+                >
+                  {atk.name} {atk.bonus || ''}
+                </Button>
+              ))}
+            {pending && (
+              <Button size="sm" variant="ghost" onClick={() => { setPending(null); setTargetId(null); setAttackMsg('') }}>
+                Cancel
+              </Button>
+            )}
+          </div>
+          {!myCombatant && (
+            <p className="mt-1 text-xs text-muted">You are not on the map yet. Ask the DM to place your character (or include you on the encounter template).</p>
+          )}
+          {pending && myCombatant && (
+            <div className="mt-2 grid gap-2 md:grid-cols-[1fr_5rem_5rem_auto] md:items-end">
+              <p className="text-sm text-muted">
+                {pending.attack.name} · {parseRangeFeet(pending.attack.range)} ft · {pending.attack.damage || 'damage on the sheet'}
+                {target ? ` → ${target.name} (AC ${target.ac})` : ' → tap a creature with a green ring'}
+              </p>
+              <Input
+                inputMode="numeric"
+                placeholder="d20"
+                value={d20}
+                onChange={(e) => setD20(e.target.value)}
+                aria-label="d20 roll"
+              />
+              <Input
+                inputMode="numeric"
+                placeholder="Dmg"
+                value={damage}
+                onChange={(e) => setDamage(e.target.value)}
+                aria-label="Damage rolled"
+              />
+              <Button disabled={busy || !targetId} onClick={submitAttack}>
+                Resolve
+              </Button>
+            </div>
+          )}
+          {pending && (
+            <p className="mt-1 text-xs text-muted">
+              Roll at the table. Enter the d20 (bonus {parseAttackBonus(pending.attack.bonus) >= 0 ? '+' : ''}
+              {parseAttackBonus(pending.attack.bonus)} is added for you) and the damage you rolled if it hits.
+            </p>
+          )}
+          {attackMsg && <p className="mt-1 text-sm text-gold">{attackMsg}</p>}
+        </div>
+      )}
 
       {drawer && (
         <div className="fixed inset-0 z-40 flex items-end bg-black/60 md:items-stretch md:justify-end">
@@ -126,6 +266,7 @@ export function Player() {
                   character={viewing}
                   canEdit={user?.role === 'player' && viewing.id === user.characterId}
                   onChange={(patch) => api.patchCharacter(viewing.id, patch)}
+                  onUseAttack={user?.role === 'player' && viewing.id === user.characterId ? pickAttack : undefined}
                 />
               )}
             </div>
@@ -135,7 +276,7 @@ export function Player() {
 
       <button
         type="button"
-        className="fixed bottom-4 right-4 rounded-full bg-ember px-4 py-3 text-sm font-medium shadow-lg lg:hidden"
+        className={cn('fixed right-4 rounded-full bg-ember px-4 py-3 text-sm font-medium shadow-lg lg:hidden', me && snap.instance ? 'bottom-28' : 'bottom-4')}
         onClick={() => {
           logout()
           nav('/')
