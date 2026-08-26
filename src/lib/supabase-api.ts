@@ -1,5 +1,5 @@
 import { customAlphabet } from 'nanoid'
-import { tableEmail } from './config'
+import { publicAsset, tableEmail } from './config'
 import { emptySheet, type AuthUser, type BattleMap, type FogState, type Monster, type NamedEntry, type PlayerCharacter } from './types'
 import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
@@ -228,7 +228,7 @@ export const supabaseApi: TableApi = {
     const { error: mapErr } = await db().from('maps').insert({
       campaign_id: data.id,
       name: 'Cragmaw Hideout',
-      image_url: '/maps/cragmaw-hideout.svg',
+      image_url: publicAsset('maps/cragmaw-hideout.svg'),
       grid_size: 70,
       grid_cols: 20,
       grid_rows: 15,

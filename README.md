@@ -32,11 +32,13 @@ Public repo: [jafetmora79-lab/DND-APP-](https://github.com/jafetmora79-lab/DND-A
 
 ### GitHub Pages (one-time)
 
-1. Open [Pages settings](https://github.com/jafetmora79-lab/DND-APP-/settings/pages) → **Source** → **GitHub Actions**.
-2. Open [Actions secrets](https://github.com/jafetmora79-lab/DND-APP-/settings/secrets/actions) and add:
+1. Open [Pages settings](https://github.com/jafetmora79-lab/DND-APP-/settings/pages) → **Build and deployment → Source** → **GitHub Actions** (not “Deploy from a branch” / `/docs`). This is required for `actions/deploy-pages`.
+2. Open [Actions secrets](https://github.com/jafetmora79-lab/DND-APP-/settings/secrets/actions) and add **repository secrets** (not Environments):
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
 3. Re-run the **GitHub Pages** workflow (or push to `main`).
+
+Until Source is GitHub Actions, the workflow also writes the built site to `docs/` so the current “Deploy from a branch → `/docs`” setting can still publish.
 
 Without those two secrets the Pages build still succeeds, but the site has no hosted backend — phones cannot join. Hosted passcodes must be **at least 6 characters** (Supabase Auth). The local sample passcode `torch` only works on `npm run dev`.
 
