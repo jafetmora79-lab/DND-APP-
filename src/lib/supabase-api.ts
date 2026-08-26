@@ -855,7 +855,7 @@ export const supabaseApi: TableApi = {
         encounter_template_id: templateId,
         name: start.name || template.name,
         status: 'active',
-        round_number: 1,
+        round_number: 0,
         current_turn_position: 0,
         fog_state: fog,
         map_id: map.id,
@@ -1092,10 +1092,11 @@ export const supabaseApi: TableApi = {
     const instanceId = String(existing.encounter_instance_id)
     const { data: inst, error: iErr } = await db().from('encounter_instances').select('*').eq('id', instanceId).single()
     throwIf(iErr)
+    if (!inst) throw new Error('Encounter not found')
     const { data: rows, error: cErr } = await db().from('combatants').select('*').eq('encounter_instance_id', instanceId)
     throwIf(cErr)
     const likes = (rows ?? []).map((r) => combatantLikeFromRow(r as Record<string, unknown>))
-    const first = firstActingPosition(likes, Number(inst?.round_number) || 1)
+    const first = firstActingPosition(likes, 1)
     const { error: uErr } = await db()
       .from('encounter_instances')
       .update({ current_turn_position: first.position, round_number: first.round })

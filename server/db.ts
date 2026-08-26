@@ -480,7 +480,7 @@ export function spawnFromTemplate(campaignId: string, templateId: string, nameOr
     templateId,
     opts.name || (template.name as string),
     'active',
-    1,
+    0,
     0,
     JSON.stringify(defaultFog(Number(map.grid_cols), Number(map.grid_rows), Boolean(opts.fog))),
     map.id,
@@ -1197,7 +1197,7 @@ export function beginInstanceRound(instanceId: string) {
   if (!inst) throw new Error('Encounter not found')
   const rows = db.prepare('SELECT * FROM combatants WHERE encounter_instance_id = ?').all(instanceId) as Record<string, unknown>[]
   const likes = rows.map(combatantLikeFromRow)
-  const first = firstActingPosition(likes, Number(inst.round_number) || 1)
+  const first = firstActingPosition(likes, 1)
   db.prepare('UPDATE encounter_instances SET current_turn_position = ?, round_number = ? WHERE id = ?').run(first.position, first.round, instanceId)
   resetTurnEconomyAt(instanceId, first.position)
   appendInstanceActivity(instanceId, `Round ${first.round} begins.`)

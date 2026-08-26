@@ -38,6 +38,14 @@ export function showCombatStage(
   return instance.status !== 'completed'
 }
 
+/** Initiative is still being collected; round 1 has not begun. */
+export function isFightSetup(session: LiveSession | null, instance: EncounterInstance | null) {
+  if (!instance || instance.status === 'completed') return false
+  if (session?.tablePhase === 'victory' || session?.tablePhase === 'defeat') return false
+  if (session?.tablePhase === 'setup') return true
+  return instance.roundNumber === 0
+}
+
 export function showOutcome(session: LiveSession | null): EncounterOutcome | null {
   if (session?.tablePhase === 'victory') return 'won'
   if (session?.tablePhase === 'defeat') return 'lost'
