@@ -3,18 +3,30 @@ import {
   type Ability,
   type Attack,
   type BattleMap,
+  type CharacterSheetData,
   type Combatant,
   type CombatantStats,
   type DeathState,
   type EncounterSnapshot,
   type FogState,
   type MapToken,
+  type Monster,
   type RollMode,
   type TemplateMonster,
   type TurnEconomy,
 } from './types.ts'
 import { monsterTokenLook, playerTokenLook } from './token-look.ts'
-import { abilityMod, FEET_PER_SQUARE, pixelToCell, spreadCells, tokenOccupiesBlocked } from './utils.ts'
+import {
+  abilityMod,
+  chebyshevPath,
+  FEET_PER_SQUARE,
+  pixelToCell,
+  spreadCells,
+  terrainAt,
+  terrainEnterCostFeet,
+  tokenOccupiesBlocked,
+} from './utils.ts'
+import { applyLightingFog } from './vision.ts'
 
 export function parseAttackBonus(bonus: string | undefined) {
   const m = String(bonus ?? '').match(/([+-]?\d+)/)
@@ -41,8 +53,38 @@ export function parseSpeedFeet(raw: unknown) {
 export function movementCostFeet(
   from: { col: number; row: number },
   to: { col: number; row: number },
+  blocked?: number[],
+  cols?: number,
+  rows?: number,
 ) {
-  return chebyshevSquares(from, to) * FEET_PER_SQUARE
+  const path = chebyshevPath(from, to)
+  if (!blocked || cols == null || rows == null) return path.length * FEET_PER_SQUARE
+  let cost = 0
+  for (const cell of path) {
+    const step = terrainEnterCostFeet(terrainAt(blocked, cell.col, cell.row, cols, rows))
+    if (!Number.isFinite(step)) return Infinity
+    cost += step
+  }
+  return cost
+}
+
+export function rollD20() {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const buf = new Uint32Array(1)
+    crypto.getRandomValues(buf)
+    return (buf[0] % 20) + 1
+  }
+  return Math.floor(Math.random() * 20) + 1
+}
+
+export function initiativeBonusFor(
+  combatant: Pick<Combatant, 'source' | 'stats'>,
+  sheet?: CharacterSheetData | null,
+) {
+  if (combatant.source === 'character' && sheet) {
+    return sheet.initiativeBonus ?? abilityMod(sheet.abilities.dex)
+  }
+  return abilityMod(Number(combatant.stats?.dex ?? 10))
 }
 
 export function spendMovement(remaining: number, cost: number) {
@@ -398,12 +440,28 @@ export function tokenHiddenFromPlayers(
 /** Same payload GET /live already sent to players — also used for WebSocket pushes. */
 export function snapshotForPlayer(snap: EncounterSnapshot, characterId?: string | null): EncounterSnapshot {
   const gridSize = snap.map?.gridSize ?? 70
-  const fog = snap.instance?.fogState
+  const fog = applyLightingFog(snap, characterId) ?? snap.instance?.fogState
+  const tokens = snap.tokens.filter((t) => !tokenHiddenFromPlayers(t, fog, gridSize, false))
+  const visibleMonsterIds = new Set<string>()
+  for (const t of tokens) {
+    const c = snap.combatants.find((row) => row.id === t.refId)
+    if (c?.source === 'bestiary' && c.sourceId) visibleMonsterIds.add(c.sourceId)
+  }
   return {
     ...snap,
+    instance: snap.instance ? { ...snap.instance, fogState: fog ?? snap.instance.fogState } : null,
     characters: snap.characters.map((c) => (c.id === characterId ? c : { ...c, personalCode: '••••••••' })),
-    tokens: snap.tokens.filter((t) => !tokenHiddenFromPlayers(t, fog, gridSize, false)),
+    tokens,
+    monsters: (snap.monsters ?? []).filter((m) => visibleMonsterIds.has(m.id)),
   }
+}
+
+export function monsterForCombatant(
+  combatant: Pick<Combatant, 'source' | 'sourceId'> | null | undefined,
+  monsters: Monster[] | undefined,
+) {
+  if (!combatant || combatant.source !== 'bestiary') return null
+  return monsters?.find((m) => m.id === combatant.sourceId) ?? null
 }
 
 export function applyDamage(hpCurrent: number, hpTemp: number, damage: number) {

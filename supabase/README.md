@@ -33,6 +33,8 @@ If it was applied before player combat (activity feed, declare/prompt, player en
 
 If it was applied before campaign flow (skip dead on next turn, player initiative, join fight), also run `migrate-campaign-flow.sql`.
 
+If it was applied before player token tap stat blocks, also run `migrate-vision-terrain.sql`.
+
 ## 3. App env
 
 ```bash

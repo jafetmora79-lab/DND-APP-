@@ -5,10 +5,20 @@ import useImage from 'use-image'
 import { conditionRingColor, type BattleMap, type FogState, type MapToken } from '@/lib/types'
 import { tokenHiddenFromPlayers } from '@/lib/combat'
 import { clampMapScale, fitMapView, touchDistance, zoomAtPoint } from '@/lib/map-view'
-import { hpBarFill, initials, pixelToCell, tokenOccupiesBlocked } from '@/lib/utils'
+import { hpBarFill, initials, pixelToCell, TERRAIN, tokenOccupiesBlocked } from '@/lib/utils'
 import { inkOnToken } from '@/lib/token-look'
 
-export type MapTool = 'select' | 'reveal' | 'hide' | 'block' | 'open'
+export type MapTool = 'select' | 'reveal' | 'hide' | 'block' | 'open' | 'hole' | 'difficult' | 'slippery' | 'fire' | 'water'
+
+const TERRAIN_TOOL: Partial<Record<MapTool, number>> = {
+  open: TERRAIN.OPEN,
+  block: TERRAIN.WALL,
+  hole: TERRAIN.HOLE,
+  difficult: TERRAIN.DIFFICULT,
+  slippery: TERRAIN.SLIPPERY,
+  fire: TERRAIN.FIRE,
+  water: TERRAIN.WATER,
+}
 
 type Props = {
   map: BattleMap
@@ -62,7 +72,7 @@ export function MapBoard({
   const worldW = map.gridCols * map.gridSize
   const worldH = map.gridRows * map.gridSize
   const blocked = map.blocked ?? []
-  const paintingTerrain = tool === 'block' || tool === 'open'
+  const paintingTerrain = Boolean(TERRAIN_TOOL[tool] != null || tool === 'open' || tool === 'block')
   const paintingFog = tool === 'reveal' || tool === 'hide'
 
 
@@ -171,7 +181,7 @@ export function MapBoard({
       next.length = map.gridCols * map.gridRows
       next.fill(0)
     }
-    next[i] = tool === 'block' ? 1 : 0
+    next[i] = TERRAIN_TOOL[tool] ?? 0
     onBlocked(next)
   }
 
@@ -305,22 +315,67 @@ export function MapBoard({
             width={worldW}
             height={worldH}
             sceneFunc={(ctx, shape) => {
-              ctx.fillStyle = 'rgba(96, 28, 22, 0.48)'
-              ctx.strokeStyle = 'rgba(196, 69, 60, 0.85)'
-              ctx.lineWidth = 1.5
+              const g = map.gridSize
               for (let i = 0; i < blocked.length; i++) {
-                if (blocked[i] !== 1) continue
+                const code = blocked[i]
+                if (!code) continue
                 const c = i % map.gridCols
                 const r = Math.floor(i / map.gridCols)
-                const x = c * map.gridSize
-                const y = r * map.gridSize
-                ctx.fillRect(x, y, map.gridSize, map.gridSize)
-                ctx.beginPath()
-                ctx.moveTo(x + 5, y + 5)
-                ctx.lineTo(x + map.gridSize - 5, y + map.gridSize - 5)
-                ctx.moveTo(x + map.gridSize - 5, y + 5)
-                ctx.lineTo(x + 5, y + map.gridSize - 5)
-                ctx.stroke()
+                const x = c * g
+                const y = r * g
+                if (code === TERRAIN.WALL) {
+                  ctx.fillStyle = 'rgba(96, 28, 22, 0.48)'
+                  ctx.strokeStyle = 'rgba(196, 69, 60, 0.85)'
+                  ctx.lineWidth = 1.5
+                  ctx.fillRect(x, y, g, g)
+                  ctx.beginPath()
+                  ctx.moveTo(x + 5, y + 5)
+                  ctx.lineTo(x + g - 5, y + g - 5)
+                  ctx.moveTo(x + g - 5, y + 5)
+                  ctx.lineTo(x + 5, y + g - 5)
+                  ctx.stroke()
+                } else if (code === TERRAIN.HOLE) {
+                  ctx.fillStyle = 'rgba(8, 6, 4, 0.82)'
+                  ctx.fillRect(x, y, g, g)
+                  ctx.strokeStyle = 'rgba(40, 32, 24, 0.95)'
+                  ctx.lineWidth = 2
+                  ctx.strokeRect(x + 4, y + 4, g - 8, g - 8)
+                } else if (code === TERRAIN.DIFFICULT) {
+                  ctx.fillStyle = 'rgba(120, 78, 32, 0.32)'
+                  ctx.fillRect(x, y, g, g)
+                  ctx.fillStyle = 'rgba(90, 58, 24, 0.55)'
+                  for (let d = 8; d < g; d += 10) {
+                    ctx.fillRect(x + d, y + 6, 3, g - 12)
+                  }
+                } else if (code === TERRAIN.SLIPPERY) {
+                  ctx.fillStyle = 'rgba(160, 210, 230, 0.28)'
+                  ctx.fillRect(x, y, g, g)
+                  ctx.strokeStyle = 'rgba(200, 230, 245, 0.7)'
+                  ctx.lineWidth = 1
+                  ctx.beginPath()
+                  ctx.moveTo(x + 6, y + g - 8)
+                  ctx.lineTo(x + g - 8, y + 6)
+                  ctx.stroke()
+                } else if (code === TERRAIN.FIRE) {
+                  ctx.fillStyle = 'rgba(196, 69, 60, 0.28)'
+                  ctx.fillRect(x, y, g, g)
+                  ctx.fillStyle = 'rgba(232, 140, 48, 0.7)'
+                  ctx.beginPath()
+                  ctx.moveTo(x + g / 2, y + 8)
+                  ctx.lineTo(x + g - 10, y + g - 10)
+                  ctx.lineTo(x + 10, y + g - 10)
+                  ctx.closePath()
+                  ctx.fill()
+                } else if (code === TERRAIN.WATER) {
+                  ctx.fillStyle = 'rgba(56, 110, 168, 0.32)'
+                  ctx.fillRect(x, y, g, g)
+                  ctx.strokeStyle = 'rgba(120, 170, 220, 0.75)'
+                  ctx.lineWidth = 1.25
+                  ctx.beginPath()
+                  ctx.moveTo(x + 6, y + g / 2)
+                  ctx.quadraticCurveTo(x + g / 2, y + g / 2 - 6, x + g - 6, y + g / 2)
+                  ctx.stroke()
+                }
               }
               ctx.fillStrokeShape(shape)
             }}

@@ -1,11 +1,13 @@
 import { parseCombatantStats, parseDeathState } from './combat.ts'
 import type { Combatant, CombatantStats, DeathState } from './types.ts'
+import type { Lighting } from './vision.ts'
 
 export const SURPRISED = 'Surprised'
 
 export type StartFightOpts = {
   name?: string
   fog?: boolean
+  lighting?: Lighting
   surpriseParty?: boolean
   surpriseMonsters?: boolean
 }

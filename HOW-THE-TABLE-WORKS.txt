@@ -78,15 +78,16 @@ a personal code from Prep.
     sheets stay visible. Optional short rest: type the HP recovered from hit
     dice (the app never rolls). DM can:
       - Start the next ready encounter template (checklist: who is placed,
-        fog, surprise)
+        Day/Night/Inside, surprise)
       - Resume a paused fight
       - Upload a new scene picture and caption
     Ready templates show a check when they have a map and at least one monster.
 
   Setup (after Start, before round 1)
-    The map and tracker open. Monster inits are typed by the DM. Players
-    submit their d20; Dex (or the sheet initiative bonus) is added. Sort
-    breaks ties by Dex then name. Begin round 1 starts combat. Corpses and
+    The map and tracker open. An initiative popup walks each monster and
+    player. Enter the d20 from the table, or let the app roll — Dex (or the
+    sheet initiative bonus) is added. The DM can roll remaining monsters.
+    Sort breaks ties by Dex then name. Begin round 1 starts combat. Corpses and
     surprised creatures are skipped. Dying PCs still get a turn for death
     saves. Table / Pause during initiative keeps the fight in setup — Resume
     does not skip to round 1.
@@ -112,7 +113,9 @@ a personal code from Prep.
 MAPS
   - Square grid. One square = 5 feet.
   - Blank grid or a picture as the background.
-  - Paint blocked squares (walls, pits). Tokens cannot stop on those.
+  - Paint walls (block sight and walking), holes, difficult ground, ice,
+    fire, and water. Tokens cannot stop on walls or holes. Difficult / ice /
+    fire / water cost 10 ft per square.
   - Typical size is something like 20×15. You can go smaller or larger.
 
 BESTIARY
@@ -202,8 +205,11 @@ C) What does NOT add them
 MAP
   - Pan, zoom, drag tokens. Tokens snap to 5-ft squares.
   - Dropping on a blocked square snaps the token back.
-  - Fog: Reveal / Hide / toggle. Players only see revealed squares when fog
-    is on. The DM still sees dimmed hidden squares.
+  - Fog / lighting: Day (no fog), Night (fog on — each player sees out to
+    their character's darkvision, and walls block line of sight), Inside
+    (same, with a long range so rooms matter more than darkness). Reveal /
+    Hide still paint extra hidden squares. Players only see revealed squares
+    when fog is on. The DM overlay shows the party's combined vision.
 
 TRACKER
   - Initiative, current / max / temp HP, conditions, next turn, Skip, Sort,
@@ -276,7 +282,8 @@ place players.
 If you want the extra columns anyway, supabase/migrate-encounter-play.sql
 and migrate-campaign-table.sql are still there. For skip-dead turns, player
 initiative, and Join this fight on existing hosted projects, also run
-migrate-campaign-flow.sql, then:
+migrate-campaign-flow.sql. For player monster stat blocks on token tap, also
+run migrate-vision-terrain.sql, then:
 
   notify pgrst, 'reload schema';
 
@@ -289,18 +296,19 @@ Local SQLite adds missing columns automatically on boot.
   1. DM: Start → Hearthkeeper / torch (or your own table).
   2. Open the campaign. Prep → Characters: confirm names, colors, codes.
      Copy personal codes to the players.
-  3. Prep → Maps: make or open the battle map. Paint blocked squares.
+  3. Prep → Maps: make or open the battle map. Paint walls and other terrain.
   4. Prep → Encounters: name it, pick the map, add monsters, Place each
      player, drag them, SAVE.
   5. Open Live. Copy the join code. Players join with that code + personal
      code. You are all at the tavern table.
-  6. Start the ready encounter. Checklist: who is placed, fog, surprise.
-     Tokens appear where you placed them. Missing someone? Use + Name or
-     Join this fight.
-  7. Roll initiative at the real table. Players submit their d20. DM types
-     monster totals, Sort, Begin round 1.
-  8. Fight: move tokens, attack with d20 + damage, paint fog if you want.
-     Next turn skips the dead.
+  6. Start the ready encounter. Checklist: who is placed, Day/Night/Inside,
+     surprise. Tokens appear where you placed them. Missing someone? Use
+     + Name or Join this fight.
+  7. Initiative popup walks each creature. Enter the table d20 or let the
+     app roll (Dex is added). Sort and begin round 1.
+  8. Fight: move tokens, attack with d20 + damage, Day/Night/Inside for fog.
+     Players see out to darkvision at night; walls block sight. Next turn
+     skips the dead. Tap a monster token to open its stat block.
   9. Finalize Won or Lost (loot holder optional). Back at the tavern. Short
      rest HP is typed on the hub. Next encounter when ready, or Pause / Table
      to pick up later.

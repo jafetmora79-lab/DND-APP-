@@ -6,6 +6,7 @@ import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
 import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter, abilityMod } from './utils'
 import { afterHpChange, clampMovementRemaining, combatantStatsFromMonster, combatantStatsFromSheet, emptyTurnEconomy, formatDiceUsed, movementCostFeet, parseCombatantStats, parseDeathState, parseSpeedFeet, parseTurnEconomy, resolveDeathSave, snapshotForPlayer, specCopyCell, spendMovement, statsForLiveCombatant, tokenCell } from './combat'
+import { lightingFromStart, makeStartFog } from './vision'
 import { attackActivityLines, parseActivity, parsePrompt } from './combat-activity'
 import { sessionFromRow } from './session'
 import { applyEncounterRewards, parseHub } from './campaign-hub'
@@ -841,13 +842,8 @@ export const supabaseApi: TableApi = {
     throwIf(tErr)
     const { data: map, error: mErr } = await db().from('maps').select('*').eq('id', template.map_id).single()
     throwIf(mErr)
-    const hidden = Boolean(start.fog)
-    const fog: FogState = {
-      cols: Number(map.grid_cols),
-      rows: Number(map.grid_rows),
-      enabled: hidden,
-      revealed: Array.from({ length: Number(map.grid_cols) * Number(map.grid_rows) }, () => (hidden ? 0 : 1)),
-    }
+    const lighting = lightingFromStart(start)
+    const fog: FogState = makeStartFog(Number(map.grid_cols), Number(map.grid_rows), lighting)
     const { data: inst, error: iErr } = await db()
       .from('encounter_instances')
       .insert({
@@ -1188,7 +1184,7 @@ export const supabaseApi: TableApi = {
     const missingBestiaryIds = [
       ...new Set(
         combatants
-          .filter((c) => c.source === 'bestiary' && !statsForLiveCombatant(c as { stats_json?: unknown; source?: unknown }, null))
+          .filter((c) => c.source === 'bestiary')
           .map((c) => String(c.source_id ?? ''))
           .filter(Boolean),
       ),
@@ -1196,7 +1192,7 @@ export const supabaseApi: TableApi = {
     const bestiaryP = missingBestiaryIds.length
       ? db()
           .from('bestiary_monsters')
-          .select('id, str, dex, con, int, wis, cha, saving_throws')
+          .select('*')
           .in('id', missingBestiaryIds)
       : Promise.resolve({ data: [] as Record<string, unknown>[] })
     const [mapRes, accessRes, bestiaryRes] = await Promise.all([mapP, accessP, bestiaryP])
@@ -1265,6 +1261,7 @@ export const supabaseApi: TableApi = {
         visibleToPlayers: Boolean(t.visible_to_players),
       })),
       characters: chars,
+      monsters: [...bestiaryById.values()].map((row) => monsterFromRow(row)),
     }
     if (dmRes.data) return snap
     return snapshotForPlayer(snap, accessRes.data?.character_id as string | undefined)
@@ -1534,10 +1531,11 @@ export const supabaseApi: TableApi = {
       throwIf(tErr)
       const { data: inst } = await db().from('encounter_instances').select('*').eq('id', token.encounter_instance_id).maybeSingle()
       let gridSize = 70
+      let battle: BattleMap | undefined
       if (inst?.map_id) {
         const { data: map } = await db().from('maps').select('*').eq('id', inst.map_id).maybeSingle()
         if (map) {
-          const battle = mapFromRow(map as Record<string, unknown>)
+          battle = mapFromRow(map as Record<string, unknown>)
           gridSize = battle.gridSize
           const { col, row } = pixelToCell(Number(body.x), Number(body.y), battle.gridSize)
           if (tokenOccupiesBlocked(battle.blocked, col, row, battle.gridCols, battle.gridRows, Number(token.size_squares ?? 1))) {
@@ -1553,7 +1551,11 @@ export const supabaseApi: TableApi = {
         const cost = movementCostFeet(
           tokenCell({ x: Number(token.x), y: Number(token.y) }, gridSize),
           tokenCell({ x: Number(body.x), y: Number(body.y) }, gridSize),
+          battle?.blocked,
+          battle?.gridCols,
+          battle?.gridRows,
         )
+        if (!Number.isFinite(cost)) throw new Error('That path is blocked')
         const spent = spendMovement(Number((comb as { movement_remaining?: number }).movement_remaining ?? (comb as { speed_feet?: number }).speed_feet ?? 30), cost)
         if (!spent.ok) throw new Error(spent.error)
         const { error: mvErr } = await db().from('combatants').update({ movement_remaining: spent.remaining }).eq('id', comb.id)

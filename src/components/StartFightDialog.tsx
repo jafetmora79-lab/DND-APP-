@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { useT } from '@/lib/i18n'
 import type { EncounterTemplate, PlayerCharacter } from '@/lib/types'
 import type { StartFightOpts } from '@/lib/turn-flow'
+import type { Lighting } from '@/lib/vision'
 
 type Props = {
   template: EncounterTemplate
@@ -13,7 +15,8 @@ type Props = {
 }
 
 export function StartFightDialog({ template, characters, busy, warnActiveFight, onCancel, onConfirm }: Props) {
-  const [fog, setFog] = useState(false)
+  const { t } = useT()
+  const [lighting, setLighting] = useState<Lighting>('day')
   const [surpriseParty, setSurpriseParty] = useState(false)
   const [surpriseMonsters, setSurpriseMonsters] = useState(false)
   const placed = new Set((template.characters ?? []).map((c) => c.characterId))
@@ -47,11 +50,20 @@ export function StartFightDialog({ template, characters, busy, warnActiveFight, 
             {template.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ') || 'No monsters'}
           </p>
         </section>
-        <label className="mt-4 flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={fog} onChange={(e) => setFog(e.target.checked)} />
-          Start hidden (fog on, nothing revealed)
-        </label>
-        <label className="mt-2 flex items-center gap-2 text-sm">
+        <section className="mt-4">
+          <h3 className="text-xs uppercase tracking-wider text-muted">{t('start.lighting')}</h3>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {(['day', 'night', 'interior'] as const).map((mode) => (
+              <Button key={mode} size="sm" variant={lighting === mode ? 'default' : 'outline'} onClick={() => setLighting(mode)}>
+                {t(`map.${mode === 'interior' ? 'interior' : mode}`)}
+              </Button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            {lighting === 'day' ? t('start.dayHint') : lighting === 'night' ? t('start.nightHint') : t('start.interiorHint')}
+          </p>
+        </section>
+        <label className="mt-3 flex items-center gap-2 text-sm">
           <input type="checkbox" checked={surpriseParty} onChange={(e) => setSurpriseParty(e.target.checked)} />
           Surprise the party (they skip round 1)
         </label>
@@ -69,7 +81,7 @@ export function StartFightDialog({ template, characters, busy, warnActiveFight, 
           <Button
             variant="ember"
             disabled={busy || warnActiveFight}
-            onClick={() => onConfirm({ fog, surpriseParty, surpriseMonsters })}
+            onClick={() => onConfirm({ lighting, fog: lighting !== 'day', surpriseParty, surpriseMonsters })}
           >
             Open the board
           </Button>

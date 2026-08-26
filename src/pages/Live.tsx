@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Check, Copy, Eye, EyeOff, Flag, Pause, Play, Sword, Trophy } from 'lucide-react'
+import { Check, Copy, Eye, EyeOff, Flag, Home, Moon, Pause, Play, Sun, Sword, Trophy } from 'lucide-react'
 import { AttackBar } from '@/components/AttackBar'
 import { CombatActivityFeed } from '@/components/CombatActivityFeed'
+import { InitiativePopup } from '@/components/InitiativePopup'
 import { SaveBar } from '@/components/SaveBar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +16,7 @@ import { TableHub } from '@/components/TableHub'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
 import { attacksFromMonster, canTakeAttacks, decorateTokens, effectiveRollMode, inRangeCombatantIds } from '@/lib/combat'
+import { LanguageToggle, useT } from '@/lib/i18n'
 import { useLive } from '@/lib/realtime'
 import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
 import { ABILITIES, ABILITY_LABELS, type Ability, type Attack, type EncounterInstance, type EncounterSnapshot, type EncounterTemplate, type FogState, type Monster, type RollMode } from '@/lib/types'
@@ -22,9 +24,11 @@ import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
 import { markBeatForTemplate, parseHub, sortTemplates } from '@/lib/campaign-hub'
 import { asCombatantLike, standingEnemies, type StartFightOpts } from '@/lib/turn-flow'
+import { applyLightingFog, fogWithLighting, parseLighting, type Lighting } from '@/lib/vision'
 
 export function Live() {
   const { campaignId } = useParams()
+  const { t } = useT()
   const [snap, setSnap] = useState<EncounterSnapshot | null>(null)
   const [templates, setTemplates] = useState<EncounterTemplate[]>([])
   const [instances, setInstances] = useState<EncounterInstance[]>([])
@@ -52,6 +56,7 @@ export function Live() {
   const [hudTab, setHudTab] = useState<'map' | 'tracker' | 'sheet'>('map')
   const [saveAbility, setSaveAbility] = useState<Ability>('dex')
   const [saveDc, setSaveDc] = useState('13')
+  const [initOpen, setInitOpen] = useState(true)
   const captionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback(async () => {
@@ -80,8 +85,8 @@ export function Live() {
   const selectedCharacter = selectedCombatant?.source === 'character' ? snap?.characters.find((c) => c.id === selectedCombatant.sourceId) : snap?.characters.find((c) => c.id === selected)
   const selectedMonster = useMemo(() => {
     if (!selectedCombatant || selectedCombatant.source !== 'bestiary') return null
-    return monsters.find((m) => m.id === selectedCombatant.sourceId) ?? null
-  }, [monsters, selectedCombatant])
+    return snap?.monsters?.find((m) => m.id === selectedCombatant.sourceId) ?? monsters.find((m) => m.id === selectedCombatant.sourceId) ?? null
+  }, [monsters, selectedCombatant, snap?.monsters])
   const attackerAttacks = useMemo<Attack[]>(() => {
     if (!selectedCombatant) return []
     if (selectedCombatant.source === 'character') {
@@ -332,6 +337,13 @@ export function Live() {
   const outcome = showOutcome(snap?.session ?? null)
   const setup = isFightSetup(snap?.session ?? null, instance ?? null)
   const hubCharacter = snap?.characters.find((c) => c.id === sheetId) ?? snap?.characters[0]
+  const displayFog = snap ? applyLightingFog(snap) ?? instance?.fogState : instance?.fogState
+  const lighting = parseLighting(instance?.fogState.lighting)
+
+  function onLighting(next: Lighting) {
+    if (!instance) return
+    onFog(fogWithLighting(instance.fogState, next))
+  }
 
   if (!snap) {
     return <div className="p-8 text-muted">{error || 'Loading the table…'}</div>
@@ -463,19 +475,24 @@ export function Live() {
             {setup ? 'setup' : instance.status}
           </span>
           <div className="ml-auto hidden items-center gap-2 lg:flex">
+            <LanguageToggle />
             {joinActions}
             {tableActions}
           </div>
         </div>
         <div className="flex gap-2 overflow-x-auto px-3 pb-2 lg:hidden">
+          <LanguageToggle />
           {joinActions}
           {tableActions}
         </div>
       </header>
       {error && <p className="shrink-0 border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
       {setup && !outcome && (
-        <p className="shrink-0 border-b border-line bg-gold/10 px-3 py-2 text-sm">
-          Roll initiative at the table. Type monster totals here; players enter their d20 on their phones. Sort (Dex breaks ties), then Begin round 1.
+        <p className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-gold/10 px-3 py-2 text-sm">
+          <span className="flex-1">Roll initiative. The popup walks each creature; you can enter the table d20 or let the app roll. Dex is added. Attacks still use physical dice.</span>
+          <Button size="sm" variant="outline" onClick={() => setInitOpen(true)}>
+            {t('init.open')}
+          </Button>
         </p>
       )}
       {!setup && !outcome && standingEnemies((snap.combatants ?? []).map(asCombatantLike)).length === 0 && snap.combatants.some((c) => c.source === 'bestiary') && (
@@ -665,7 +682,7 @@ export function Live() {
           <MapBoard
             map={snap.map}
             tokens={decorateTokens(snap.tokens, snap.combatants)}
-            fog={instance.fogState}
+            fog={displayFog ?? instance.fogState}
             isDm
             selectedId={targetId ?? selected}
             highlightIds={highlightIds}
@@ -710,7 +727,28 @@ export function Live() {
           />
           <div className="absolute left-2 top-2 z-10 flex max-w-[calc(100%-3.5rem)] flex-wrap gap-1">
             <Button size="sm" variant={tool === 'select' ? 'default' : 'outline'} onClick={() => setTool('select')}>
-              <Sword className="h-4 w-4" /> Move
+              <Sword className="h-4 w-4" /> {t('map.move')}
+            </Button>
+            <Button
+              size="sm"
+              variant={lighting === 'day' ? 'default' : 'outline'}
+              onClick={() => onLighting('day')}
+            >
+              <Sun className="h-4 w-4" /> {t('map.day')}
+            </Button>
+            <Button
+              size="sm"
+              variant={lighting === 'night' ? 'default' : 'outline'}
+              onClick={() => onLighting('night')}
+            >
+              <Moon className="h-4 w-4" /> {t('map.night')}
+            </Button>
+            <Button
+              size="sm"
+              variant={lighting === 'interior' ? 'default' : 'outline'}
+              onClick={() => onLighting('interior')}
+            >
+              <Home className="h-4 w-4" /> {t('map.interior')}
             </Button>
             <Button
               size="sm"
@@ -720,7 +758,7 @@ export function Live() {
                 setTool('reveal')
               }}
             >
-              <Eye className="h-4 w-4" /> Reveal
+              <Eye className="h-4 w-4" /> {t('map.reveal')}
             </Button>
             <Button
               size="sm"
@@ -730,7 +768,7 @@ export function Live() {
                 setTool('hide')
               }}
             >
-              <EyeOff className="h-4 w-4" /> Hide
+              <EyeOff className="h-4 w-4" /> {t('map.hide')}
             </Button>
             <Button
               size="sm"
@@ -742,7 +780,7 @@ export function Live() {
                 })
               }
             >
-              Fog {instance.fogState.enabled ? 'on' : 'off'}
+              {instance.fogState.enabled ? t('map.fogOn') : t('map.fogOff')}
             </Button>
           </div>
         </main>
@@ -827,6 +865,17 @@ export function Live() {
           />
           <SaveBar combatants={snap.combatants} selectedId={selected} characters={snap.characters} monster={selectedMonster} compact />
         </div>
+      )}
+      {setup && initOpen && campaignId && (
+        <InitiativePopup
+          instanceId={instance.id}
+          campaignId={campaignId}
+          combatants={snap.combatants}
+          characters={snap.characters}
+          isDm
+          onSettled={refreshLive}
+          onClose={() => setInitOpen(false)}
+        />
       )}
       {outcome && (
         <EncounterOutcomeOverlay

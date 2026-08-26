@@ -4,13 +4,14 @@ import { fileURLToPath } from 'node:url'
 import bcrypt from 'bcryptjs'
 import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
-import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type CombatDeclareKind, type CombatSpendSlot, type FogState, type NamedEntry } from '../src/lib/types.ts'
+import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type CombatDeclareKind, type CombatSpendSlot, type NamedEntry } from '../src/lib/types.ts'
 import { abilityMod, cellCenter, parseBlockedCells, playerStartOrigin, proficiencyBonus, spreadCells, tokenCellKeys, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
 import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, characterSaveBonus, combatantStatsFromMonster, combatantStatsFromSheet, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, isAttackInRange, movementCostFeet, parseAttackBonus, parseCombatantStats, parseDeathState, parseRangeFeet, parseRollMode, parseSpeedFeet, parseTurnEconomy, pickUsedD20, resolveDeathSave, resolveSavingThrow, saveBonusForCombatant, spendMovement, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { appendActivity, parseActivity, parsePrompt } from '../src/lib/combat-activity.ts'
 import { loadSrdMonsters } from './srd.ts'
 import { applyEncounterRewards, emptyBrief, parseHub } from '../src/lib/campaign-hub.ts'
 import { unpackTemplateJson } from '../src/lib/template-json.ts'
+import { lightingFromStart, makeStartFog } from '../src/lib/vision.ts'
 import {
   SURPRISED,
   combatantLikeFromRow,
@@ -434,15 +435,6 @@ export function seedBestiaryForDm(dmId: string) {
   return monsters.length
 }
 
-function defaultFog(cols: number, rows: number, hidden = false): FogState {
-  return {
-    cols,
-    rows,
-    enabled: hidden,
-    revealed: Array.from({ length: cols * rows }, () => (hidden ? 0 : 1)),
-  }
-}
-
 function applySurprise(instanceId: string, surpriseParty: boolean, surpriseMonsters: boolean) {
   if (!surpriseParty && !surpriseMonsters) return
   const rows = db.prepare('SELECT id, source, conditions_json FROM combatants WHERE encounter_instance_id = ?').all(instanceId) as {
@@ -482,7 +474,7 @@ export function spawnFromTemplate(campaignId: string, templateId: string, nameOr
     'active',
     0,
     0,
-    JSON.stringify(defaultFog(Number(map.grid_cols), Number(map.grid_rows), Boolean(opts.fog))),
+    JSON.stringify(makeStartFog(Number(map.grid_cols), Number(map.grid_rows), lightingFromStart(opts))),
     map.id,
   )
 
@@ -1012,7 +1004,16 @@ export function resolvePromptSave(opts: { instanceId: string; combatantId: strin
 }
 
 /** Spend walk speed when the current-turn combatant moves. Off-turn moves do not consume. */
-export function consumeTurnMovement(instanceId: string, combatantId: string, from: { x: number; y: number }, to: { x: number; y: number }, gridSize: number) {
+export function consumeTurnMovement(
+  instanceId: string,
+  combatantId: string,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  gridSize: number,
+  blocked?: number[],
+  cols?: number,
+  rows?: number,
+) {
   const inst = db.prepare('SELECT current_turn_position FROM encounter_instances WHERE id = ?').get(instanceId) as
     | { current_turn_position?: number }
     | undefined
@@ -1021,7 +1022,8 @@ export function consumeTurnMovement(instanceId: string, combatantId: string, fro
     | undefined
   if (!inst || !c) throw new Error('Combatant not found')
   if (Number(c.turn_order_position) !== Number(inst.current_turn_position)) return
-  const cost = movementCostFeet(tokenCell(from, gridSize), tokenCell(to, gridSize))
+  const cost = movementCostFeet(tokenCell(from, gridSize), tokenCell(to, gridSize), blocked, cols, rows)
+  if (!Number.isFinite(cost)) throw new Error('That path is blocked')
   const spent = spendMovement(Number(c.movement_remaining ?? c.speed_feet ?? 30), cost)
   if (!spent.ok) throw new Error(spent.error)
   db.prepare('UPDATE combatants SET movement_remaining = ? WHERE id = ?').run(spent.remaining, combatantId)

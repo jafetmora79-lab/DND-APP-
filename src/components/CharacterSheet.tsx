@@ -186,6 +186,20 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
               <Field label="Speed">
                 <Input disabled={!canEdit} value={sheet.speed} onChange={(e) => patchSheet({ speed: e.target.value })} />
               </Field>
+              <Field label="Darkvision (ft)">
+                <Input
+                  type="number"
+                  min={0}
+                  disabled={!canEdit}
+                  placeholder="auto"
+                  value={sheet.darkvisionFt ?? ''}
+                  onChange={(e) => {
+                    const raw = e.target.value
+                    if (raw === '') patchSheet({ darkvisionFt: null })
+                    else patchSheet({ darkvisionFt: Math.max(0, Number(raw) || 0) })
+                  }}
+                />
+              </Field>
             </div>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <Field label="Death successes">
