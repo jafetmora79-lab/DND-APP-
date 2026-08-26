@@ -259,6 +259,7 @@ alter table public.encounter_instances add column if not exists prompt_json json
 drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int);
 drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int, uuid);
 drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int, uuid, int, text);
+drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int, uuid, int, text, int);
 
 create or replace function public.resolve_player_attack(
   p_instance uuid,
@@ -268,7 +269,8 @@ create or replace function public.resolve_player_attack(
   p_damage int,
   p_attacker uuid default null,
   p_d20_b int default null,
-  p_roll_mode text default 'normal'
+  p_roll_mode text default 'normal',
+  p_cover int default 0
 )
 returns json
 language plpgsql
@@ -303,6 +305,9 @@ declare
   used_d20 int;
   mode text;
   dice_note text;
+  cover int;
+  effective_ac int;
+  hiding boolean;
 begin
   if auth.uid() is null then
     raise exception 'Sign-in required';
@@ -423,7 +428,8 @@ begin
   fumble := p_d20 <= 1;
   attacker_adv := coalesce(attacker.advantage_against_json, '[]'::jsonb);
   target_adv := coalesce(target.advantage_against_json, '[]'::jsonb);
-  had_adv := attacker_adv @> to_jsonb(target.id::text);
+  hiding := coalesce(attacker.conditions_json, '[]'::jsonb) @> '"Hiding"'::jsonb;
+  had_adv := (attacker_adv @> to_jsonb(target.id::text)) or hiding;
   mode := coalesce(nullif(p_roll_mode, ''), 'normal');
   if had_adv and mode = 'disadvantage' then mode := 'normal'; end if;
   if had_adv and mode = 'normal' then mode := 'advantage'; end if;
@@ -440,6 +446,8 @@ begin
   total := used_d20 + bonus;
   crit := used_d20 >= 20;
   fumble := used_d20 <= 1;
+  cover := greatest(0, coalesce(p_cover, 0));
+  effective_ac := target.ac + cover;
   attacker_adv := coalesce((
     select jsonb_agg(to_jsonb(x))
     from jsonb_array_elements_text(attacker_adv) x
@@ -453,10 +461,17 @@ begin
   elsif crit then
     hit := true;
   else
-    hit := total > target.ac;
+    hit := total > effective_ac;
   end if;
   update public.combatants set advantage_against_json = attacker_adv where id = attacker.id;
   update public.combatants set advantage_against_json = target_adv where id = target.id;
+  update public.combatants
+    set conditions_json = coalesce((
+          select jsonb_agg(to_jsonb(x))
+          from jsonb_array_elements_text(coalesce(conditions_json, '[]'::jsonb)) x
+          where lower(x) <> 'hiding'
+        ), '[]'::jsonb)
+    where id in (attacker.id, target.id);
   update public.combatants
     set turn_economy_json = jsonb_set(coalesce(turn_economy_json, '{}'::jsonb), '{action}', 'true'::jsonb)
     where id = attacker.id;
@@ -465,7 +480,7 @@ begin
     if fumble then
       msg := format('%s. Natural 1 against %s — miss. %s has advantage against %s next turn.', dice_note, target.name, target.name, attacker.name);
     else
-      msg := format('%s. %s vs AC %s — need higher than %s to hit %s.', dice_note, total, target.ac, target.ac, target.name);
+      msg := format('%s. %s vs AC %s — need higher than %s to hit %s.', dice_note, total, effective_ac, effective_ac, target.name);
     end if;
     return json_build_object(
       'hit', false,
@@ -476,7 +491,7 @@ begin
       'd20', used_d20,
       'd20b', p_d20_b,
       'total', total,
-      'ac', target.ac,
+      'ac', effective_ac,
       'damage', 0,
       'hpCurrent', target.hp_current,
       'hpTemp', target.hp_temp,
@@ -537,7 +552,7 @@ begin
   if crit then
     msg := format('%s. Natural 20! %s damage to %s (%s HP left).', dice_note, p_damage, target.name, new_hp);
   else
-    msg := format('%s. Hit %s (%s beats AC %s) for %s damage (%s HP left).', dice_note, target.name, total, target.ac, p_damage, new_hp);
+    msg := format('%s. Hit %s (%s beats AC %s) for %s damage (%s HP left).', dice_note, target.name, total, effective_ac, p_damage, new_hp);
   end if;
 
   return json_build_object(
@@ -549,7 +564,7 @@ begin
     'd20', used_d20,
     'd20b', p_d20_b,
     'total', total,
-    'ac', target.ac,
+    'ac', effective_ac,
     'damage', p_damage,
     'hpCurrent', new_hp,
     'hpTemp', new_temp,
@@ -559,7 +574,7 @@ begin
 end;
 $$;
 
-grant execute on function public.resolve_player_attack(uuid, uuid, int, int, int, uuid, int, text) to authenticated;
+grant execute on function public.resolve_player_attack(uuid, uuid, int, int, int, uuid, int, text, int) to authenticated;
 
 create or replace function public.resolve_death_save(p_combatant uuid, p_d20 int)
 returns json
@@ -1051,8 +1066,7 @@ begin
     if not (cond @> '"Disengaging"'::jsonb) then cond := cond || jsonb_build_array('Disengaging'); end if;
     txt := format('%s used Disengage.', c.name);
   elsif kind = 'hide' then
-    if not (cond @> '"Hiding"'::jsonb) then cond := cond || jsonb_build_array('Hiding'); end if;
-    txt := format('%s used Hide.', c.name);
+    raise exception 'Enter the d20 you rolled for Stealth (1–20).';
   elsif kind = 'help' then
     if p_target is null then raise exception 'Pick an ally to Help.'; end if;
     select * into ally from public.combatants where id = p_target and encounter_instance_id = inst.id;
@@ -1069,10 +1083,88 @@ begin
   else
     raise exception 'Unknown action';
   end if;
+  if kind in ('dash', 'help', 'other', 'custom') then
+    cond := coalesce((
+      select jsonb_agg(to_jsonb(x))
+      from jsonb_array_elements_text(coalesce(cond, '[]'::jsonb)) x
+      where lower(x) <> 'hiding'
+    ), '[]'::jsonb);
+  end if;
   econ := jsonb_set(econ, array[slot], 'true'::jsonb);
   update public.combatants
     set conditions_json = cond, turn_economy_json = econ, movement_remaining = remaining
     where id = c.id;
+  perform public.push_combat_activity(inst.id, txt);
+  return json_build_object('text', txt);
+end;
+$$;
+
+create or replace function public.apply_hide_result(
+  p_instance uuid,
+  p_combatant uuid,
+  p_success boolean,
+  p_text text default '',
+  p_spend_action boolean default false,
+  p_slot text default 'action'
+)
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  inst record;
+  c record;
+  is_dm boolean;
+  cond jsonb;
+  econ jsonb;
+  slot text;
+  txt text;
+begin
+  if auth.uid() is null then raise exception 'Sign-in required'; end if;
+  select * into inst from public.encounter_instances where id = p_instance;
+  if not found then raise exception 'Encounter not found'; end if;
+  is_dm := public.is_dm_of_campaign(inst.campaign_id);
+  if is_dm then
+    select * into c from public.combatants where id = p_combatant and encounter_instance_id = inst.id;
+  else
+    if not public.plays_in_campaign(inst.campaign_id) then raise exception 'Not allowed'; end if;
+    select * into c from public.combatants where id = p_combatant and encounter_instance_id = inst.id;
+    if not found then raise exception 'Combatant not found'; end if;
+    if c.source is distinct from 'character' or not exists (
+      select 1 from public.character_access a
+      where a.user_id = auth.uid() and a.campaign_id = inst.campaign_id and a.character_id::text = c.source_id
+    ) then
+      raise exception 'Not allowed';
+    end if;
+  end if;
+  if not found then raise exception 'Combatant not found'; end if;
+  if p_spend_action then
+    if c.turn_order_position is distinct from inst.current_turn_position then
+      raise exception 'Wait for your turn.';
+    end if;
+    slot := case when p_slot in ('bonus', 'reaction') then p_slot else 'action' end;
+    econ := coalesce(c.turn_economy_json, '{}'::jsonb);
+    if coalesce((econ->>slot)::boolean, false) then
+      raise exception 'Your % is already used.', slot;
+    end if;
+    econ := jsonb_set(econ, array[slot], 'true'::jsonb);
+  else
+    if not is_dm then raise exception 'Not allowed'; end if;
+    econ := coalesce(c.turn_economy_json, '{}'::jsonb);
+  end if;
+  cond := coalesce((
+    select jsonb_agg(to_jsonb(x))
+    from jsonb_array_elements_text(coalesce(c.conditions_json, '[]'::jsonb)) x
+    where lower(x) <> 'hiding'
+  ), '[]'::jsonb);
+  if p_success then
+    cond := cond || jsonb_build_array('Hiding');
+  end if;
+  update public.combatants
+    set conditions_json = cond, turn_economy_json = econ
+    where id = c.id;
+  txt := coalesce(nullif(trim(p_text), ''), format('%s %s.', c.name, case when p_success then 'is hidden' else 'failed to hide' end));
   perform public.push_combat_activity(inst.id, txt);
   return json_build_object('text', txt);
 end;
@@ -1436,6 +1528,7 @@ $$;
 
 grant execute on function public.append_combat_activity(uuid, text) to authenticated;
 grant execute on function public.declare_combat_action(uuid, text, text, uuid, uuid, text, text) to authenticated;
+grant execute on function public.apply_hide_result(uuid, uuid, boolean, text, boolean, text) to authenticated;
 grant execute on function public.set_combat_prompt(uuid, jsonb) to authenticated;
 grant execute on function public.answer_combat_prompt(uuid, boolean, int, text) to authenticated;
 grant execute on function public.player_advance_turn(uuid, int) to authenticated;

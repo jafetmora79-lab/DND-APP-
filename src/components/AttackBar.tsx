@@ -11,6 +11,7 @@ type Props = {
   onCancel: () => void
   targetName?: string
   targetAc?: number
+  coverBonus?: number
   hasAdvantage?: boolean
   disabled?: boolean
   disabledReason?: string
@@ -35,6 +36,7 @@ export function AttackBar({
   onCancel,
   targetName,
   targetAc,
+  coverBonus = 0,
   hasAdvantage,
   disabled,
   disabledReason,
@@ -85,13 +87,17 @@ export function AttackBar({
                 {m === 'normal' ? 'Normal' : m === 'advantage' ? 'Advantage' : 'Disadvantage'}
               </Button>
             ))}
-            {hasAdvantage && <span className="self-center text-xs text-gold">Stored advantage vs this target</span>}
+            {hasAdvantage && (
+              <span className="self-center text-xs text-gold">
+                {coverBonus ? 'Advantage vs this target' : 'Stored advantage vs this target'}
+              </span>
+            )}
           </div>
           <div className={cn('mt-2 grid gap-2 md:items-end', twoDice ? 'md:grid-cols-[1fr_4.5rem_4.5rem_4.5rem_auto]' : 'md:grid-cols-[1fr_5rem_5rem_auto]')}>
             <p className="text-sm text-muted">
               {pending.name} · {parseRangeFeet(pending.range)} ft · {pending.damage || 'damage on the sheet'}
               {targetName != null && targetAc != null
-                ? ` → ${targetName} (AC ${targetAc} — must roll higher)`
+                ? ` → ${targetName} (AC ${targetAc}${coverBonus ? ` · cover +${coverBonus}` : ''} — must roll higher)`
                 : ' → tap a creature with a green ring'}
             </p>
             <Input inputMode="numeric" placeholder={twoDice ? 'd20 a' : 'd20'} value={d20} onChange={(e) => onD20(e.target.value)} aria-label="d20 roll" />

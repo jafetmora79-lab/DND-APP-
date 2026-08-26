@@ -35,6 +35,8 @@ If it was applied before campaign flow (skip dead on next turn, player initiativ
 
 If it was applied before player token tap stat blocks, also run `migrate-vision-terrain.sql`.
 
+If it was applied before cover terrain and Hide, also run `migrate-cover-hide.sql`.
+
 ## 3. App env
 
 ```bash

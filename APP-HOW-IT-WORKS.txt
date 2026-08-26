@@ -89,9 +89,11 @@ PREP LIBRARY
 MAPS
   Square grid. One square = 5 feet. Typical 20×15, size is editable.
   Blank grid or a background picture.
-  Paint walls (block walking and sight), holes, difficult, ice, fire, water.
+  Paint walls (block walking and sight), holes, difficult, ice, fire, water,
+  half cover (+2 AC / Dex), three-quarters cover (+5).
   Tokens cannot stop on walls or holes. Difficult/ice/fire/water cost 10 ft.
-  Map maker is on the 5-ft grid only (no hex, no freehand walls).
+  Cover is walkable and does not block sight. Map maker is on the 5-ft grid
+  only (no hex, no freehand walls).
 
 BESTIARY
   Shared across every campaign at that DM table.
@@ -196,8 +198,28 @@ FOG
   you walk around it. Reveal/Hide still paint extra hidden squares.
   When fog is on, players do not see unrevealed squares (solid black).
   DM overlay shows the party's combined vision.
-  Player live payloads omit tokens in unrevealed fog and tokens marked
-  not visible to players. Tracker still lists combatants.
+  Player live payloads omit tokens in unrevealed fog, tokens marked
+  not visible to players, and tokens with Hiding (except the owner's).
+  Tracker still lists combatants.
+
+COVER
+  Map maker paints half cover (trees, +2 AC / Dex saves) and three-quarters
+  cover (crates, +5). The attacker-to-target line uses the same supercover
+  trace as fog walls; origin square is skipped; the target's square counts.
+  Cover does not block walking or sight. Full cover is a wall in the way.
+
+CHECK BAR
+  Same bar as the old Save bar, plus Skill. Pick Save or Skill, DC, table d20.
+  Dex saves add cover if a line from the current turn (or the target's cell)
+  crosses cover. Stealth can "Apply as Hide" (needs no enemy line of sight;
+  DC is highest enemy passive Perception).
+
+HIDE
+  Attempt only when no opposite-side creature has wall line of sight.
+  Stealth vs that DC. Success: Hiding condition; token masked from other
+  players like fog. Attacking while hidden uses advantage. Attacking,
+  being attacked, Dash / Help / Other / Custom, or walking into enemy LOS
+  reveals. Dodge and Disengage keep Hidden.
 
 TRACKER
   Round, whose turn, initiative, AC, HP (current / max / temp), conditions.
@@ -234,14 +256,13 @@ ATTACKS
   Range is parsed from the attack. SRD “range 80/320 ft.” uses 80 ft (the
   normal range), not melee 5 ft.
   Unconscious / dying / dead cannot take a normal attack.
+  Cover on the line to the target is added to AC.
 
-SAVING THROWS
-  Save bar: pick ability, DC, enter d20, Resolve. Shows modifier and
-  success/failure.
-  PCs: ability mod + proficiency if the save is proficient.
-  Monsters: combatant stats_json copied at spawn (scores + save text).
-  Players can resolve a monster save from the live combatant without the
-  bestiary in their snapshot.
+CHECK BAR
+  Save or Skill, DC, enter d20, Resolve. Shows modifier and success/failure.
+  PCs: ability mod + proficiency / expertise.
+  Monsters: combatant stats_json and skills / senses text.
+  Stealth + Apply as Hide writes the Hiding condition when the roll succeeds.
 
 DEATH / 0 HP
   Hitting 0 HP applies Unconscious.
@@ -258,7 +279,7 @@ HEADER (DM)
 
 PLAYERS IN COMBAT
   Map + Tracker tabs on phones; both columns on large screens.
-  Sheet drawer. Attack bar + Save bar.
+  Sheet drawer. Attack bar + Check bar.
   Leave is in the header (not a floating button over the bars).
   Header shows round and whose turn, plus own HP.
   Not on the map: Join this fight. Setup: submit initiative d20.
@@ -326,6 +347,7 @@ HOSTED SQL CHEAT SHEET (EXISTING PROJECTS)
   migrate-campaign-mvp.sql        hub_json, combatant stats_json
   migrate-per-turn-movement.sql   speed_feet, movement_remaining
   migrate-vision-terrain.sql      player read of fight bestiary rows
+  migrate-cover-hide.sql          cover AC, Hide RPC (apply_hide_result)
 
 Then: notify pgrst, 'reload schema';
 

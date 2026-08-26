@@ -27,6 +27,7 @@ import {
   tokenOccupiesBlocked,
 } from './utils.ts'
 import { applyLightingFog } from './vision.ts'
+import { isHiding } from './stealth.ts'
 
 export function parseAttackBonus(bonus: string | undefined) {
   const m = String(bonus ?? '').match(/([+-]?\d+)/)
@@ -420,15 +421,21 @@ export function attacksFromMonster(monster: { actions?: { name: string; desc: st
   return parsed.length ? parsed : [{ name: 'Strike', bonus: '+0', damage: '', range: '5 ft.' }]
 }
 
-/** Player map: hide tokens the DM marked invisible, or that sit in unrevealed fog. */
+/** Player map: hide tokens the DM marked invisible, that sit in unrevealed fog, or that are Hidden from this viewer. */
 export function tokenHiddenFromPlayers(
-  token: Pick<MapToken, 'x' | 'y' | 'visibleToPlayers'>,
+  token: Pick<MapToken, 'x' | 'y' | 'visibleToPlayers' | 'refId'>,
   fog: FogState | null | undefined,
   gridSize: number,
   isDm: boolean,
+  opts?: { viewerCharacterId?: string | null; combatants?: Combatant[] },
 ) {
   if (isDm) return false
   if (!token.visibleToPlayers) return true
+  const owner = opts?.combatants?.find((c) => c.id === token.refId)
+  if (owner && isHiding(owner)) {
+    const mine = owner.source === 'character' && owner.sourceId === opts?.viewerCharacterId
+    if (!mine) return true
+  }
   if (!fog?.enabled) return false
   const cell = Math.max(1, gridSize)
   const c = Math.floor(token.x / cell)
@@ -441,7 +448,9 @@ export function tokenHiddenFromPlayers(
 export function snapshotForPlayer(snap: EncounterSnapshot, characterId?: string | null): EncounterSnapshot {
   const gridSize = snap.map?.gridSize ?? 70
   const fog = applyLightingFog(snap, characterId) ?? snap.instance?.fogState
-  const tokens = snap.tokens.filter((t) => !tokenHiddenFromPlayers(t, fog, gridSize, false))
+  const tokens = snap.tokens.filter((t) =>
+    !tokenHiddenFromPlayers(t, fog, gridSize, false, { viewerCharacterId: characterId, combatants: snap.combatants }),
+  )
   const visibleMonsterIds = new Set<string>()
   for (const t of tokens) {
     const c = snap.combatants.find((row) => row.id === t.refId)
@@ -454,6 +463,10 @@ export function snapshotForPlayer(snap: EncounterSnapshot, characterId?: string 
     tokens,
     monsters: (snap.monsters ?? []).filter((m) => visibleMonsterIds.has(m.id)),
   }
+}
+
+export function hasHiddenAdvantage(attacker: Pick<Combatant, 'conditions' | 'advantageAgainst'>, targetId: string) {
+  return Boolean(attacker.advantageAgainst?.includes(targetId) || isHiding(attacker))
 }
 
 export function monsterForCombatant(

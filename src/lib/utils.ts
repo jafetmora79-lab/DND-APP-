@@ -142,6 +142,8 @@ export const TERRAIN = {
   SLIPPERY: 4,
   FIRE: 5,
   WATER: 6,
+  HALF_COVER: 7,
+  THREE_QUARTER_COVER: 8,
 } as const
 
 export type TerrainCode = (typeof TERRAIN)[keyof typeof TERRAIN]
@@ -154,6 +156,8 @@ export const TERRAIN_LABEL: Record<number, string> = {
   [TERRAIN.SLIPPERY]: 'Slippery',
   [TERRAIN.FIRE]: 'Fire',
   [TERRAIN.WATER]: 'Water',
+  [TERRAIN.HALF_COVER]: 'Half cover',
+  [TERRAIN.THREE_QUARTER_COVER]: 'Three-quarters cover',
 }
 
 export function emptyBlocked(cols: number, rows: number): number[] {
@@ -164,7 +168,7 @@ export function normalizeTerrainCode(raw: unknown): number {
   if (raw === true || raw === '1') return TERRAIN.WALL
   const n = Math.round(Number(raw))
   if (!Number.isFinite(n) || n <= 0) return TERRAIN.OPEN
-  if (n > TERRAIN.WATER) return TERRAIN.OPEN
+  if (n > TERRAIN.THREE_QUARTER_COVER) return TERRAIN.OPEN
   return n
 }
 
@@ -187,6 +191,13 @@ export function isImpassableTerrain(code: number) {
 
 export function isOpaqueTerrain(code: number) {
   return code === TERRAIN.WALL
+}
+
+/** 5e half cover +2, three-quarters +5. Walls are full cover (LOS), not an AC bonus. */
+export function coverBonusForTerrain(code: number) {
+  if (code === TERRAIN.THREE_QUARTER_COVER) return 5
+  if (code === TERRAIN.HALF_COVER) return 2
+  return 0
 }
 
 /** Feet spent to enter this square. Walls and holes are not walkable. */

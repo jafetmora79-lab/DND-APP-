@@ -4,14 +4,15 @@ import { fileURLToPath } from 'node:url'
 import bcrypt from 'bcryptjs'
 import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
-import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type CombatDeclareKind, type CombatSpendSlot, type NamedEntry } from '../src/lib/types.ts'
+import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type Combatant, type CombatDeclareKind, type CombatSpendSlot, type MapToken, type NamedEntry } from '../src/lib/types.ts'
 import { abilityMod, cellCenter, parseBlockedCells, playerStartOrigin, proficiencyBonus, spreadCells, tokenCellKeys, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
-import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, characterSaveBonus, combatantStatsFromMonster, combatantStatsFromSheet, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, isAttackInRange, movementCostFeet, parseAttackBonus, parseCombatantStats, parseDeathState, parseRangeFeet, parseRollMode, parseSpeedFeet, parseTurnEconomy, pickUsedD20, resolveDeathSave, resolveSavingThrow, saveBonusForCombatant, spendMovement, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
+import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, characterSaveBonus, combatantStatsFromMonster, combatantStatsFromSheet, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, hasHiddenAdvantage, isAttackInRange, movementCostFeet, parseAttackBonus, parseCombatantStats, parseDeathState, parseRangeFeet, parseRollMode, parseSpeedFeet, parseTurnEconomy, pickUsedD20, resolveDeathSave, resolveSavingThrow, saveBonusForCombatant, spendMovement, specCopyCell, statsForLiveCombatant, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { appendActivity, parseActivity, parsePrompt } from '../src/lib/combat-activity.ts'
 import { loadSrdMonsters } from './srd.ts'
 import { applyEncounterRewards, emptyBrief, parseHub } from '../src/lib/campaign-hub.ts'
 import { unpackTemplateJson } from '../src/lib/template-json.ts'
-import { lightingFromStart, makeStartFog } from '../src/lib/vision.ts'
+import { coverBonusAlongLine, lightingFromStart, makeStartFog } from '../src/lib/vision.ts'
+import { actionRevealsHiding, hidingBrokenByWatchers, isHiding, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from '../src/lib/stealth.ts'
 import {
   SURPRISED,
   combatantLikeFromRow,
@@ -372,6 +373,108 @@ export function characterFromRow(row: Record<string, unknown>) {
   }
 }
 
+function tokenFromDb(t: Record<string, unknown>): MapToken {
+  return {
+    id: String(t.id),
+    encounterInstanceId: String(t.encounter_instance_id),
+    x: Number(t.x),
+    y: Number(t.y),
+    refType: (t.ref_type as MapToken['refType']) ?? 'combatant',
+    refId: String(t.ref_id),
+    label: String(t.label ?? ''),
+    color: String(t.color ?? ''),
+    sizeSquares: Number(t.size_squares ?? 1),
+    visibleToPlayers: Boolean(t.visible_to_players),
+  }
+}
+
+function combatantFromDb(c: Record<string, unknown>, monster?: Parameters<typeof statsForLiveCombatant>[1]): Combatant {
+  return {
+    id: String(c.id),
+    encounterInstanceId: String(c.encounter_instance_id),
+    name: String(c.name),
+    source: c.source === 'character' ? 'character' : 'bestiary',
+    sourceId: String(c.source_id ?? ''),
+    initiative: Number(c.initiative),
+    hpCurrent: Number(c.hp_current),
+    hpMax: Number(c.hp_max),
+    hpTemp: Number(c.hp_temp),
+    ac: Number(c.ac),
+    conditions: jparse<string[]>((c.conditions_json as string) || '[]', []),
+    turnOrderPosition: Number(c.turn_order_position),
+    color: String(c.color ?? ''),
+    notes: String(c.notes ?? ''),
+    constitution: Number(c.constitution ?? 10),
+    stats: statsForLiveCombatant(c, monster),
+    advantageAgainst: jparse<string[]>((c.advantage_against_json as string) || '[]', []),
+    deathState: parseDeathState(c.death_state),
+    deathSuccess: Number(c.death_success ?? 0),
+    deathFail: Number(c.death_fail ?? 0),
+    turnEconomy: parseTurnEconomy(jparse((c.turn_economy_json as string) || '{}', {})),
+    speedFeet: parseSpeedFeet(c.speed_feet ?? 30),
+    movementRemaining: Number.isFinite(Number(c.movement_remaining))
+      ? Math.max(0, Number(c.movement_remaining))
+      : parseSpeedFeet(c.speed_feet ?? 30),
+  }
+}
+
+function loadFightPieces(instanceId: string) {
+  const inst = db.prepare('SELECT * FROM encounter_instances WHERE id = ?').get(instanceId) as Record<string, unknown> | undefined
+  if (!inst) throw new Error('Encounter not found')
+  const mapRow = inst.map_id ? (db.prepare('SELECT * FROM maps WHERE id = ?').get(inst.map_id) as Record<string, unknown> | undefined) : undefined
+  const map = mapRow ? mapFromDb(mapRow) : null
+  const rawCombatants = db.prepare('SELECT * FROM combatants WHERE encounter_instance_id = ?').all(instanceId) as Record<string, unknown>[]
+  const monsterIds = [...new Set(rawCombatants.filter((c) => c.source === 'bestiary').map((c) => String(c.source_id)).filter(Boolean))]
+  const monsters =
+    monsterIds.length > 0
+      ? (db.prepare(`SELECT * FROM bestiary_monsters WHERE id IN (${monsterIds.map(() => '?').join(',')})`).all(...monsterIds) as Record<string, unknown>[]).map(
+          monsterFromRow,
+        )
+      : []
+  const monsterById = new Map(monsters.map((m) => [m.id, m]))
+  const combatants = rawCombatants.map((c) => combatantFromDb(c, c.source === 'bestiary' ? monsterById.get(String(c.source_id)) : null))
+  const tokens = (db.prepare('SELECT * FROM tokens_on_map WHERE encounter_instance_id = ?').all(instanceId) as Record<string, unknown>[]).map(tokenFromDb)
+  const characters = (db.prepare('SELECT * FROM player_characters WHERE campaign_id = ?').all(inst.campaign_id) as Record<string, unknown>[]).map(characterFromRow)
+  return { inst, map, combatants, tokens, characters, monsters }
+}
+
+function writeConditions(combatantId: string, conditions: string[]) {
+  db.prepare('UPDATE combatants SET conditions_json = ? WHERE id = ?').run(JSON.stringify(conditions), combatantId)
+}
+
+export function applyHideResult(opts: { instanceId: string; combatantId: string; success: boolean; text: string }) {
+  const c = db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(opts.combatantId, opts.instanceId) as
+    | Record<string, unknown>
+    | undefined
+  if (!c) throw new Error('Combatant not found')
+  const conditions = jparse<string[]>((c.conditions_json as string) || '[]', [])
+  writeConditions(String(c.id), opts.success ? withHiding(conditions) : withoutHiding(conditions))
+  if (opts.text) appendInstanceActivity(opts.instanceId, opts.text)
+  return { text: opts.text }
+}
+
+export function revealHidingIfSeen(instanceId: string, combatantId: string) {
+  let pieces: ReturnType<typeof loadFightPieces>
+  try {
+    pieces = loadFightPieces(instanceId)
+  } catch {
+    return
+  }
+  if (!pieces.map) return
+  const hider = pieces.combatants.find((c) => c.id === combatantId)
+  if (!hider || !hidingBrokenByWatchers(hider, pieces.combatants, pieces.tokens, pieces.map)) return
+  writeConditions(hider.id, withoutHiding(hider.conditions))
+  appendInstanceActivity(instanceId, `${hider.name} is no longer hidden.`)
+}
+
+function clearHiding(combatantId: string, conditions: string[], instanceId: string, name: string) {
+  if (!isHiding({ conditions })) return conditions
+  const next = withoutHiding(conditions)
+  writeConditions(combatantId, next)
+  appendInstanceActivity(instanceId, `${name} is no longer hidden.`)
+  return next
+}
+
 export function insertMonster(
   dmId: string,
   m: Omit<ReturnType<typeof loadSrdMonsters>[number], 'source'> & { id?: string; source: 'srd' | 'custom' },
@@ -684,18 +787,27 @@ export function resolveCombatAttack(opts: {
     .prepare('SELECT * FROM tokens_on_map WHERE encounter_instance_id = ? AND ref_id = ?')
     .get(instanceId, target.id) as Record<string, unknown> | undefined
   if (!fromTok || !toTok || !map) throw new Error('Both creatures need to be on the map')
-  const gridSize = Number(map.grid_size)
+  const battle = mapFromDb(map)
+  const gridSize = battle.gridSize
+  const fromCell = tokenCell({ x: Number(fromTok.x), y: Number(fromTok.y) }, gridSize)
+  const toCell = tokenCell({ x: Number(toTok.x), y: Number(toTok.y) }, gridSize)
   const inRange = isAttackInRange(
-    { ...tokenCell({ x: Number(fromTok.x), y: Number(fromTok.y) }, gridSize), size: Number(fromTok.size_squares ?? 1) },
-    { ...tokenCell({ x: Number(toTok.x), y: Number(toTok.y) }, gridSize), size: Number(toTok.size_squares ?? 1) },
+    { ...fromCell, size: Number(fromTok.size_squares ?? 1) },
+    { ...toCell, size: Number(toTok.size_squares ?? 1) },
     parseRangeFeet(attack.range),
   )
   if (!opts.skipRange && !inRange) throw new Error(`That creature is out of range (${parseRangeFeet(attack.range)} ft)`)
   const bonus = parseAttackBonus(attack.bonus)
-  const ac = Number(target.ac)
+  const cover = coverBonusAlongLine(battle.blocked, battle.gridCols, battle.gridRows, fromCell, toCell)
+  const ac = Number(target.ac) + cover
+  const attackerConditions = jparse<string[]>((attacker.conditions_json as string) || '[]', [])
+  const targetConditions = jparse<string[]>((target.conditions_json as string) || '[]', [])
   const attackerAdv = jparse<string[]>((attacker.advantage_against_json as string) || '[]', [])
   const targetAdv = jparse<string[]>((target.advantage_against_json as string) || '[]', [])
-  const hadAdvantage = attackerAdv.includes(String(target.id))
+  const hadAdvantage = hasHiddenAdvantage(
+    { conditions: attackerConditions, advantageAgainst: attackerAdv },
+    String(target.id),
+  )
   const mode = effectiveRollMode(requested, hadAdvantage)
   const dice = pickUsedD20(d20, mode === 'normal' ? undefined : d20b, mode)
   const outcome = attackOutcome(dice.used, bonus, ac)
@@ -705,6 +817,9 @@ export function resolveCombatAttack(opts: {
   const nextTargetAdv = outcome === 'fumble' ? grantAdvantage(targetAdv, String(attacker.id)) : targetAdv
   db.prepare('UPDATE combatants SET advantage_against_json = ? WHERE id = ?').run(JSON.stringify(nextAttackerAdv), attacker.id)
   db.prepare('UPDATE combatants SET advantage_against_json = ? WHERE id = ?').run(JSON.stringify(nextTargetAdv), target.id)
+  clearHiding(String(attacker.id), attackerConditions, instanceId, String(attacker.name))
+  clearHiding(String(target.id), targetConditions, instanceId, String(target.name))
+  const coverNote = cover ? ` (cover +${cover})` : ''
   const fumbleNote =
     outcome === 'fumble' ? ` ${target.name} has advantage against ${attacker.name} next turn.` : ''
   const modeNote = mode === 'normal' ? '' : ` (${mode})`
@@ -743,7 +858,7 @@ export function resolveCombatAttack(opts: {
       message:
         outcome === 'fumble'
           ? `${diceNote}${modeNote}. Natural 1 against ${target.name} — miss.${fumbleNote}`
-          : `${diceNote}${modeNote}. ${total} vs AC ${ac} — need higher than ${ac} to hit ${target.name}.${hadAdvantage ? ' (advantage used)' : ''}`,
+          : `${diceNote}${modeNote}. ${total} vs AC ${ac}${coverNote} — need higher than ${ac} to hit ${target.name}.${hadAdvantage ? ' (advantage used)' : ''}`,
     }
   }
   const prevHp = Number(target.hp_current)
@@ -777,7 +892,7 @@ export function resolveCombatAttack(opts: {
     targetName: String(target.name),
     message: crit
       ? `${diceNote}${modeNote}. Natural 20! ${damage} damage to ${target.name} (${next.hpCurrent} HP left).`
-      : `${diceNote}${modeNote}. Hit ${target.name} (${total} beats AC ${ac}) for ${damage} damage (${next.hpCurrent} HP left).`,
+      : `${diceNote}${modeNote}. Hit ${target.name} (${total} beats AC ${ac}${coverNote}) for ${damage} damage (${next.hpCurrent} HP left).`,
   }
 }
 
@@ -915,6 +1030,7 @@ export function applyDeclaredAction(opts: {
   targetId?: string
   other?: string
   custom?: string
+  d20?: number
 }) {
   const inst = db.prepare('SELECT * FROM encounter_instances WHERE id = ?').get(opts.instanceId) as Record<string, unknown> | undefined
   const c = db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(opts.combatantId, opts.instanceId) as
@@ -925,11 +1041,12 @@ export function applyDeclaredAction(opts: {
   const slot: CombatSpendSlot = opts.slot === 'bonus' ? 'bonus' : opts.slot === 'reaction' ? 'reaction' : 'action'
   const econ = parseTurnEconomy(jparse((c.turn_economy_json as string) || '{}', {}))
   if (econ[slot]) throw new Error(`Your ${slot} is already used.`)
-  const conditions = jparse<string[]>((c.conditions_json as string) || '[]', [])
+  let conditions = jparse<string[]>((c.conditions_json as string) || '[]', [])
   const speed = parseSpeedFeet(c.speed_feet ?? 30)
   let remaining = Number.isFinite(Number(c.movement_remaining)) ? Math.max(0, Number(c.movement_remaining)) : speed
   const kind = String(opts.kind || '') as CombatDeclareKind
   const name = String(c.name)
+  const wasHiding = isHiding({ conditions })
   let text = ''
   if (kind === 'dash') {
     remaining += speed
@@ -941,8 +1058,27 @@ export function applyDeclaredAction(opts: {
     if (!conditions.includes('Disengaging')) conditions.push('Disengaging')
     text = `${name} used Disengage.`
   } else if (kind === 'hide') {
-    if (!conditions.includes('Hiding')) conditions.push('Hiding')
-    text = `${name} used Hide.`
+    const d20 = Number(opts.d20)
+    if (!Number.isInteger(d20) || d20 < 1 || d20 > 20) throw new Error('Enter the d20 you rolled for Stealth (1–20).')
+    const pieces = loadFightPieces(opts.instanceId)
+    if (!pieces.map) throw new Error('Need the map to hide.')
+    const hider = pieces.combatants.find((row) => row.id === String(c.id))
+    if (!hider) throw new Error('Combatant not found')
+    const monster = hider.source === 'bestiary' ? pieces.monsters.find((m) => m.id === hider.sourceId) ?? null : null
+    const result = resolveHideAttempt({
+      hider,
+      combatants: pieces.combatants,
+      tokens: pieces.tokens,
+      map: pieces.map,
+      characters: pieces.characters,
+      monsters: pieces.monsters,
+      d20,
+      sheet: sheetForHide(hider, pieces.characters),
+      monster,
+    })
+    if (!result.ok) throw new Error(result.message)
+    conditions = result.success ? withHiding(conditions) : withoutHiding(conditions)
+    text = result.message
   } else if (kind === 'help') {
     const ally = opts.targetId
       ? (db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(opts.targetId, opts.instanceId) as
@@ -958,6 +1094,10 @@ export function applyDeclaredAction(opts: {
     text = `${name} declared: ${label}.`
   } else {
     throw new Error('Unknown action')
+  }
+  if (actionRevealsHiding(kind) && wasHiding) {
+    conditions = withoutHiding(conditions)
+    text += ' No longer hidden.'
   }
   econ[slot] = true
   db.prepare('UPDATE combatants SET conditions_json = ?, turn_economy_json = ?, movement_remaining = ? WHERE id = ?').run(

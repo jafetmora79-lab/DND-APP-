@@ -45,6 +45,8 @@ import {
   consumeTurnMovement,
   appendInstanceActivity,
   applyDeclaredAction,
+  applyHideResult,
+  revealHidingIfSeen,
   instanceActivity,
   setInstancePrompt,
   resolvePromptSave,
@@ -1448,11 +1450,32 @@ app.post('/api/instances/:id/declare', requireUser, (req, res) => {
       targetId: req.body.targetId,
       other: req.body.other,
       custom: req.body.custom,
+      d20: req.body.d20 == null || req.body.d20 === '' ? undefined : Number(req.body.d20),
     })
     pushCampaign(inst.campaign_id as string)
     res.json(r)
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'Could not declare' })
+  }
+})
+
+app.post('/api/instances/:id/apply-hide', requireDm, (req, res) => {
+  const inst = instanceRow(param(req, 'id'))
+  if (!inst || !campaignOwned(inst.campaign_id as string, userOf(req).id)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  try {
+    const r = applyHideResult({
+      instanceId: String(inst.id),
+      combatantId: String(req.body.combatantId ?? ''),
+      success: Boolean(req.body.success),
+      text: String(req.body.text ?? ''),
+    })
+    pushCampaign(inst.campaign_id as string)
+    res.json(r)
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not hide' })
   }
 })
 
@@ -1640,6 +1663,7 @@ app.patch('/api/tokens/:id', requireUser, (req, res) => {
     req.body.sizeSquares ?? t.size_squares,
     t.id,
   )
+  if (moving && combatant) revealHidingIfSeen(String(inst.id), String(combatant.id))
   pushCampaign(inst.campaign_id as string)
   res.json({ ok: true })
 })
