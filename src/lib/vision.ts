@@ -7,7 +7,7 @@ import type {
   MapToken,
   PlayerCharacter,
 } from './types.ts'
-import { coverBonusForTerrain, FEET_PER_SQUARE, isOpaqueTerrain, MAX_GRID_DIM, pixelToCell, terrainAt } from './utils.ts'
+import { coverBonusForTerrain, FEET_PER_SQUARE, isOpaqueTerrain, MAX_GRID_DIM, pixelToCell, terrainAt, tokenOccupiedCells } from './utils.ts'
 
 export const LIGHTINGS = ['day', 'night', 'interior'] as const
 export type Lighting = (typeof LIGHTINGS)[number]
@@ -220,7 +220,11 @@ export function visionRevealedForCharacter(snap: EncounterSnapshot, characterId:
     origin,
     rangeSquares: visionRangeSquares(lighting, sheet, characterId ? characterBlinded(snap, characterId) : false),
   })
-  return andHidden(mask, fog.revealed)
+  const revealed = andHidden(mask, fog.revealed)
+  for (const cell of tokenOccupiedCells(token, map.gridSize, cols, rows)) {
+    revealed[cell.row * cols + cell.col] = 1
+  }
+  return revealed
 }
 
 export function partyVisionRevealed(snap: EncounterSnapshot): number[] {

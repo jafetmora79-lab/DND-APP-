@@ -314,6 +314,28 @@ export function pixelToCell(x: number, y: number, gridSize: number) {
   }
 }
 
+/** Squares a token occupies, origin at the top-left cell from pixelToCell. */
+export function tokenOccupiedCells(
+  token: { x: number; y: number; sizeSquares?: number },
+  gridSize: number,
+  cols?: number,
+  rows?: number,
+) {
+  const { col, row } = pixelToCell(token.x, token.y, gridSize)
+  const size = Math.max(1, token.sizeSquares ?? 1)
+  const cells: { col: number; row: number }[] = []
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      const cc = col + c
+      const rr = row + r
+      if (cols != null && (cc < 0 || cc >= cols)) continue
+      if (rows != null && (rr < 0 || rr >= rows)) continue
+      cells.push({ col: cc, row: rr })
+    }
+  }
+  return cells
+}
+
 /** Default party start: near the south-center of the map, not a hardcoded row 10. */
 export function playerStartOrigin(cols: number, rows: number) {
   return {

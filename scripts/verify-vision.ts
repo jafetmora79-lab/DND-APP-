@@ -224,4 +224,111 @@ check('player snapshot applies night vision from the character token', () => {
   assert.deepEqual(snap.tokens.map((t) => t.id), ['t1'])
 })
 
+check('player snapshot always keeps your token and the square you stand on', () => {
+  const sheet = emptySheet()
+  sheet.darkvisionFt = 0
+  const n = 4
+  const fog = { cols: n, rows: 1, lighting: 'night' as const, enabled: true, revealed: [0, 0, 0, 0] }
+  const snap = snapshotForPlayer(
+    {
+      campaign: { id: 'c', dmAccountId: 'd', name: 'T', hub: emptyHub() },
+      session: null,
+      instance: {
+        id: 'i',
+        campaignId: 'c',
+        encounterTemplateId: null,
+        name: 'F',
+        status: 'active',
+        roundNumber: 1,
+        currentTurnPosition: 0,
+        fogState: fog,
+        mapId: 'm',
+        activity: [],
+        prompt: null,
+      },
+      map: {
+        id: 'm',
+        campaignId: 'c',
+        name: 'M',
+        imageUrl: '',
+        gridCols: n,
+        gridRows: 1,
+        gridSize: 70,
+        gridType: 'square',
+        blocked: [0, 0, 0, 0],
+      },
+      combatants: [
+        {
+          id: 'me-c',
+          encounterInstanceId: 'i',
+          name: 'Berno',
+          source: 'character',
+          sourceId: 'me',
+          initiative: 10,
+          hpCurrent: 21,
+          hpMax: 21,
+          hpTemp: 0,
+          ac: 15,
+          conditions: [],
+          turnOrderPosition: 0,
+          color: '#6',
+          notes: '',
+          constitution: 12,
+          stats: null,
+          advantageAgainst: [],
+          deathState: 'ok',
+          deathSuccess: 0,
+          deathFail: 0,
+          turnEconomy: { action: false, bonus: false, reaction: false, movement: false },
+          speedFeet: 30,
+          movementRemaining: 30,
+        },
+      ],
+      tokens: [
+        {
+          id: 'mine',
+          encounterInstanceId: 'i',
+          x: 35,
+          y: 35,
+          refType: 'combatant',
+          refId: 'me-c',
+          label: 'Berno',
+          color: '#6',
+          sizeSquares: 1,
+          visibleToPlayers: true,
+        },
+        {
+          id: 'other',
+          encounterInstanceId: 'i',
+          x: 105,
+          y: 35,
+          refType: 'combatant',
+          refId: 'gob',
+          label: 'Goblin',
+          color: '#c',
+          sizeSquares: 1,
+          visibleToPlayers: true,
+        },
+      ],
+      characters: [
+        {
+          id: 'me',
+          campaignId: 'c',
+          personalCode: 'X',
+          ownerDisplayName: 'Nico',
+          name: 'Berno',
+          tokenColor: '#6',
+          sourcePdfUrl: null,
+          sheet,
+        },
+      ],
+      monsters: [],
+    },
+    'me',
+  )
+  assert.equal(snap.instance?.fogState.revealed[0], 1)
+  assert.equal(snap.tokens.some((t) => t.id === 'mine'), true)
+  assert.equal(snap.tokens.some((t) => t.id === 'other'), false)
+})
+
 console.log('all vision/terrain checks passed')
