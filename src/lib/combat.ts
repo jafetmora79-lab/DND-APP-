@@ -1,4 +1,5 @@
 import type { Attack, BattleMap, Combatant, MapToken, TemplateMonster } from './types.ts'
+import { monsterTokenLook, playerTokenLook } from './token-look.ts'
 import { FEET_PER_SQUARE, pixelToCell, spreadCells, tokenOccupiesBlocked } from './utils.ts'
 
 export function parseAttackBonus(bonus: string | undefined) {
@@ -122,9 +123,12 @@ export function decorateTokens(tokens: MapToken[], combatants: Combatant[]): Map
   return tokens.map((t) => {
     const c = combatants.find((x) => x.id === t.refId)
     if (!c) return t
+    const look = c.source === 'character' ? playerTokenLook(c.color) : monsterTokenLook(c.name)
     return {
       ...t,
       label: c.name || t.label,
+      color: look.from,
+      color2: look.to,
       hpCurrent: c.hpCurrent,
       hpMax: c.hpMax,
       hpTemp: c.hpTemp,

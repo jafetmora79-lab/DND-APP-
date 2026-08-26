@@ -1,4 +1,7 @@
 -- Run in the SQL Editor if schema.sql was already applied. Safe to re-run.
+-- After this runs, also execute:  notify pgrst, 'reload schema';
+-- (included at the bottom). If the app still says last_outcome is missing from the
+-- schema cache, run that notify line again, then refresh the site.
 
 alter table public.live_sessions add column if not exists table_phase text not null default 'table';
 alter table public.live_sessions add column if not exists ambiance_image_url text;

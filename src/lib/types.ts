@@ -270,6 +270,7 @@ export type MapToken = {
   hpMax?: number
   hpTemp?: number
   ac?: number
+  color2?: string
   conditions?: string[]
 }
 

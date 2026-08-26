@@ -18,7 +18,62 @@ function db() {
 }
 
 function throwIf(error: { message: string } | null) {
-  if (error) throw new Error(error.message)
+  if (!error) return
+  if (/schema cache/i.test(error.message)) {
+    const col = error.message.match(/'([^']+)' column/i)?.[1]
+    if (col) omittedSessionCols.add(col)
+    throw new Error(
+      `Could not find ${col ? `'${col}'` : 'a column'} on live_sessions. In the Supabase SQL Editor run migrate-campaign-table.sql, then: notify pgrst, 'reload schema';`,
+    )
+  }
+  throw new Error(error.message)
+}
+
+const omittedSessionCols = new Set<string>()
+
+function stripSessionCols(row: Record<string, unknown>) {
+  const next = { ...row }
+  for (const col of omittedSessionCols) delete next[col]
+  return next
+}
+
+function schemaColumn(message: string) {
+  return message.match(/'([^']+)' column/i)?.[1] ?? null
+}
+
+async function insertLiveSession(row: Record<string, unknown>) {
+  let payload = stripSessionCols(row)
+  for (let i = 0; i < 6; i++) {
+    const { data, error } = await db().from('live_sessions').insert(payload).select().single()
+    if (!error) return data
+    if (!/schema cache/i.test(error.message)) throwIf(error)
+    const col = schemaColumn(error.message)
+    if (col) omittedSessionCols.add(col)
+    if (col && col in payload) {
+      delete payload[col]
+      continue
+    }
+    throwIf(error)
+  }
+  throw new Error('Could not open the live session')
+}
+
+async function updateLiveSession(id: string, patch: Record<string, unknown>) {
+  let payload = stripSessionCols(patch)
+  for (let i = 0; i < 6; i++) {
+    if (Object.keys(payload).length === 0) return { id }
+    const { data, error } = await db().from('live_sessions').update(payload).eq('id', id).select().single()
+    if (!error) return data
+    if (!/schema cache/i.test(error.message)) throwIf(error)
+    const col = schemaColumn(error.message)
+    if (col) omittedSessionCols.add(col)
+    if (col && col in payload) {
+      delete payload[col]
+      continue
+    }
+    throwIf(error)
+  }
+  throw new Error('Could not update the live session')
 }
 
 function monsterFromRow(row: Record<string, unknown>): Monster {
@@ -768,17 +823,13 @@ export const supabaseApi: TableApi = {
     }
     if (!existing) {
       const code = joinCode()
-      const { data, error } = await db()
-        .from('live_sessions')
-        .insert({
-          join_code: code,
-          campaign_id: campaignId,
-          encounter_instance_id: encounterInstanceId,
-          table_phase: encounterInstanceId ? 'combat' : 'table',
-        })
-        .select()
-        .single()
-      throwIf(error)
+      const data = await insertLiveSession({
+        join_code: code,
+        campaign_id: campaignId,
+        encounter_instance_id: encounterInstanceId,
+        table_phase: encounterInstanceId ? 'combat' : 'table',
+        ...(encounterInstanceId ? { last_outcome: null } : {}),
+      })
       return { session: { joinCode: String(data.join_code) } }
     }
     const patch: Record<string, unknown> = {}
@@ -786,9 +837,8 @@ export const supabaseApi: TableApi = {
     patch.encounter_instance_id = encounterInstanceId
     patch.table_phase = encounterInstanceId ? 'combat' : 'table'
     if (encounterInstanceId) patch.last_outcome = null
-    const { data, error } = await db().from('live_sessions').update(patch).eq('id', existing.id).select().single()
-    throwIf(error)
-    return { session: { joinCode: String(data.join_code) } }
+    const data = await updateLiveSession(String(existing.id), patch)
+    return { session: { joinCode: String(data.join_code ?? existing.join_code) } }
   },
 
   async ensureSession(campaignId) {
@@ -801,12 +851,12 @@ export const supabaseApi: TableApi = {
       .maybeSingle()
     if (existing) return { session: { joinCode: String(existing.join_code) } }
     const code = joinCode()
-    const { data, error } = await db()
-      .from('live_sessions')
-      .insert({ join_code: code, campaign_id: campaignId, encounter_instance_id: null, table_phase: 'table' })
-      .select()
-      .single()
-    throwIf(error)
+    const data = await insertLiveSession({
+      join_code: code,
+      campaign_id: campaignId,
+      encounter_instance_id: null,
+      table_phase: 'table',
+    })
     return { session: { joinCode: String(data.join_code) } }
   },
 
@@ -824,8 +874,7 @@ export const supabaseApi: TableApi = {
     if (body.ambianceCaption != null) patch.ambiance_caption = body.ambianceCaption
     if (body.ambianceImageUrl !== undefined) patch.ambiance_image_url = body.ambianceImageUrl
     if (Object.keys(patch).length === 0) return {}
-    const { error } = await db().from('live_sessions').update(patch).eq('id', existing.id)
-    throwIf(error)
+    await updateLiveSession(String(existing.id), patch)
     return {}
   },
 
@@ -850,8 +899,7 @@ export const supabaseApi: TableApi = {
       )
     }
     const { data: pub } = db().storage.from('maps').getPublicUrl(path)
-    const { error } = await db().from('live_sessions').update({ ambiance_image_url: pub.publicUrl }).eq('id', existing.id)
-    throwIf(error)
+    await updateLiveSession(String(existing.id), { ambiance_image_url: pub.publicUrl })
     return {}
   },
 
@@ -872,11 +920,10 @@ export const supabaseApi: TableApi = {
         .eq('id', existing.encounter_instance_id)
       throwIf(stErr)
     }
-    const { error } = await db()
-      .from('live_sessions')
-      .update({ table_phase: outcome === 'won' ? 'victory' : 'defeat', last_outcome: outcome })
-      .eq('id', existing.id)
-    throwIf(error)
+    await updateLiveSession(String(existing.id), {
+      table_phase: outcome === 'won' ? 'victory' : 'defeat',
+      last_outcome: outcome,
+    })
     return {}
   },
 
@@ -890,11 +937,7 @@ export const supabaseApi: TableApi = {
       .maybeSingle()
     throwIf(loadErr)
     if (!existing) throw new Error('No live session')
-    const { error } = await db()
-      .from('live_sessions')
-      .update({ encounter_instance_id: null, table_phase: 'table' })
-      .eq('id', existing.id)
-    throwIf(error)
+    await updateLiveSession(String(existing.id), { encounter_instance_id: null, table_phase: 'table' })
     return {}
   },
 

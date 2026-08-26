@@ -3,6 +3,7 @@ import { Circle, Group, Layer, Rect, Shape, Stage, Text, Image as KImage } from 
 import useImage from 'use-image'
 import { conditionRingColor, type BattleMap, type FogState, type MapToken } from '@/lib/types'
 import { hpBarFill, initials, pixelToCell, tokenOccupiesBlocked } from '@/lib/utils'
+import { inkOnToken } from '@/lib/token-look'
 
 export type MapTool = 'select' | 'reveal' | 'hide' | 'block' | 'open'
 
@@ -279,13 +280,13 @@ export function MapBoard({
                   <>
                     <Text
                       text={t.label || ''}
-                      y={-r - 28}
-                      width={barW + 24}
-                      offsetX={(barW + 24) / 2}
+                      y={-r - 30}
+                      width={Math.max(72, r * 3)}
+                      offsetX={Math.max(72, r * 3) / 2}
                       align="center"
-                      fontSize={10}
+                      fontSize={11}
                       fontFamily="Cinzel"
-                      fill="#f0d78c"
+                      fill="#d6b16a"
                       listening={false}
                     />
                     <Text
@@ -293,11 +294,12 @@ export function MapBoard({
                         .filter(Boolean)
                         .join('  ')}
                       y={-r - 16}
-                      width={barW + 28}
-                      offsetX={(barW + 28) / 2}
+                      width={Math.max(72, r * 3)}
+                      offsetX={Math.max(72, r * 3) / 2}
                       align="center"
-                      fontSize={8}
-                      fill="#d9d0c0"
+                      fontSize={9}
+                      fontFamily="Inter"
+                      fill="#e8ddc8"
                       listening={false}
                     />
                     {hpMax > 0 && (
@@ -316,7 +318,7 @@ export function MapBoard({
                     )}
                   </>
                 )}
-                {selected && <Circle radius={r + 6} stroke="#f0d78c" strokeWidth={2} listening={false} />}
+                {selected && <Circle radius={r + 6} stroke="#d6b16a" strokeWidth={2} listening={false} />}
                 {highlighted && !selected && (
                   <Circle radius={r + 7} stroke="#86efac" strokeWidth={2} dash={[6, 4]} listening={false} />
                 )}
@@ -329,16 +331,27 @@ export function MapBoard({
                     listening={false}
                   />
                 ))}
-                <Circle radius={r} fill={t.color} stroke="#120e0b" strokeWidth={2} />
+                <Circle
+                  radius={r}
+                  fill={t.color2 ? undefined : t.color}
+                  fillLinearGradientStartPoint={t.color2 ? { x: -r, y: -r } : undefined}
+                  fillLinearGradientEndPoint={t.color2 ? { x: r, y: r } : undefined}
+                  fillLinearGradientColorStops={t.color2 ? [0, t.color, 1, t.color2] : undefined}
+                  stroke="#11100E"
+                  strokeWidth={2}
+                />
                 <Text
                   text={initials(t.label || '?')}
                   width={r * 2}
+                  height={r * 2}
                   offsetX={r}
-                  offsetY={8}
+                  offsetY={r}
                   align="center"
-                  fontSize={Math.max(10, r / 2)}
+                  verticalAlign="middle"
+                  fontSize={Math.max(11, r * 0.52)}
                   fontFamily="Cinzel"
-                  fill="#120e0b"
+                  fontStyle="bold"
+                  fill={inkOnToken(t.color)}
                   listening={false}
                 />
               </Group>
