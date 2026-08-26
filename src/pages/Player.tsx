@@ -192,6 +192,7 @@ export function Player() {
           <BookOpen className="h-4 w-4" /> Sheets
         </Button>
       </header>
+      {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
 
       <div className="flex gap-1 border-b border-line px-2 py-1 lg:hidden">
         <button type="button" className={cn('rounded px-3 py-1 text-sm', tab === 'map' ? 'bg-gold text-bg' : 'text-muted')} onClick={() => setTab('map')}>
@@ -211,6 +212,7 @@ export function Player() {
             isDm={false}
             selectedId={targetId ?? focusId}
             highlightIds={highlightIds}
+            dragRefIds={myCombatant && whose?.id === myCombatant.id ? [myCombatant.id] : []}
             onSelect={(id) => {
               if (!pending) {
                 setFocusId(id)
@@ -228,6 +230,20 @@ export function Player() {
               setFocusId(id)
               setAttackMsg('')
             }}
+            onMove={
+              myCombatant
+                ? async (id, x, y) => {
+                    try {
+                      await api.moveToken(id, { x, y })
+                      setError('')
+                    } catch (e) {
+                      const msg = e instanceof Error ? e.message : 'Could not move'
+                      setError(msg)
+                      throw e instanceof Error ? e : new Error(msg)
+                    }
+                  }
+                : undefined
+            }
           />
         </div>
         <aside className={cn('w-full overflow-y-auto border-line p-3 lg:block lg:w-72 lg:border-l', tab === 'map' ? 'hidden lg:block' : 'block')}>

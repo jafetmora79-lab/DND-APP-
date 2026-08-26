@@ -5,7 +5,7 @@ import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
 import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter } from './utils'
-import { afterHpChange, combatantStatsFromMonster, emptyTurnEconomy, parseDeathState, parseTurnEconomy, resolveDeathSave, specCopyCell, statsForLiveCombatant } from './combat'
+import { afterHpChange, clampMovementRemaining, combatantStatsFromMonster, emptyTurnEconomy, movementCostFeet, parseDeathState, parseSpeedFeet, parseTurnEconomy, resolveDeathSave, specCopyCell, spendMovement, statsForLiveCombatant, tokenCell } from './combat'
 import { sessionFromRow } from './session'
 import { applyEncounterRewards, parseHub } from './campaign-hub'
 import { packTemplateBody, templateFromRow, unpackTemplateJson } from './template-json'
@@ -329,6 +329,8 @@ async function insertCharacterCombatant(instanceId: string, characterId: string,
     color: mapped.tokenColor,
     notes: '',
     constitution: mapped.sheet.abilities.con,
+    speed_feet: parseSpeedFeet(mapped.sheet.speed),
+    movement_remaining: parseSpeedFeet(mapped.sheet.speed),
   })
   await insertCharacterToken(instanceId, String(comb.id), mapped.name, mapped.tokenColor, battle, startX, startY)
 }
@@ -852,6 +854,8 @@ export const supabaseApi: TableApi = {
           notes: '',
           constitution: Number(src.con ?? 10),
           stats_json: combatantStatsFromMonster(src as Record<string, unknown>),
+          speed_feet: parseSpeedFeet(src.speed),
+          movement_remaining: parseSpeedFeet(src.speed),
         })
         const { col, row: r } = specCopyCell(spec, i, placed)
         const size = tokenSizeSquares(String(src.size ?? 'Medium'))
@@ -1136,6 +1140,10 @@ export const supabaseApi: TableApi = {
         deathSuccess: Number((c as { death_success?: number }).death_success ?? 0),
         deathFail: Number((c as { death_fail?: number }).death_fail ?? 0),
         turnEconomy: parseTurnEconomy((c as { turn_economy_json?: unknown }).turn_economy_json),
+        speedFeet: parseSpeedFeet((c as { speed_feet?: unknown }).speed_feet ?? 30),
+        movementRemaining: Number.isFinite(Number((c as { movement_remaining?: unknown }).movement_remaining))
+          ? Math.max(0, Number((c as { movement_remaining?: unknown }).movement_remaining))
+          : parseSpeedFeet((c as { speed_feet?: unknown }).speed_feet ?? 30),
       })),
       tokens: (tokens ?? []).map((t) => ({
         id: String(t.id),
@@ -1199,6 +1207,8 @@ export const supabaseApi: TableApi = {
           notes: '',
           constitution: Number(src.con ?? 10),
           stats_json: combatantStatsFromMonster(src as Record<string, unknown>),
+          speed_feet: parseSpeedFeet(src.speed),
+          movement_remaining: parseSpeedFeet(src.speed),
         })
         const pos = battle ? walkablePixel(battle, 3 + i, 3) : { x: cell * (3 + i) + cell / 2, y: cell * 3 + cell / 2 }
         await db().from('tokens_on_map').insert({
@@ -1233,6 +1243,8 @@ export const supabaseApi: TableApi = {
     if (body.deathSuccess != null) patch.death_success = body.deathSuccess
     if (body.deathFail != null) patch.death_fail = body.deathFail
     if (body.turnEconomy != null) patch.turn_economy_json = parseTurnEconomy(body.turnEconomy)
+    if (body.speedFeet != null) patch.speed_feet = parseSpeedFeet(body.speedFeet)
+    if (body.movementRemaining != null) patch.movement_remaining = clampMovementRemaining(body.movementRemaining)
     const prevHp = body.hpCurrent != null ? Number((await db().from('combatants').select('hp_current').eq('id', id).maybeSingle()).data?.hp_current ?? 0) : 0
     const { data, error } = await db().from('combatants').update(patch).eq('id', id).select().single()
     throwIf(error)
@@ -1284,11 +1296,16 @@ export const supabaseApi: TableApi = {
     throwIf(uErr)
     const { data: up } = await db()
       .from('combatants')
-      .select('id')
+      .select('id, speed_feet')
       .eq('encounter_instance_id', id)
       .eq('turn_order_position', pos)
       .maybeSingle()
-    if (up) await db().from('combatants').update({ turn_economy_json: emptyTurnEconomy() }).eq('id', up.id)
+    if (up) {
+      await db()
+        .from('combatants')
+        .update({ turn_economy_json: emptyTurnEconomy(), movement_remaining: parseSpeedFeet(up.speed_feet ?? 30) })
+        .eq('id', up.id)
+    }
     return {}
   },
 
@@ -1299,7 +1316,13 @@ export const supabaseApi: TableApi = {
     await Promise.all(rows.map((r, i) => db().from('combatants').update({ turn_order_position: i }).eq('id', r.id)))
     await db().from('encounter_instances').update({ current_turn_position: 0 }).eq('id', id)
     const first = rows[0]
-    if (first) await db().from('combatants').update({ turn_economy_json: emptyTurnEconomy() }).eq('id', first.id)
+    if (first) {
+      const { data: row } = await db().from('combatants').select('speed_feet').eq('id', first.id).maybeSingle()
+      await db()
+        .from('combatants')
+        .update({ turn_economy_json: emptyTurnEconomy(), movement_remaining: parseSpeedFeet(row?.speed_feet ?? 30) })
+        .eq('id', first.id)
+    }
     return {}
   },
 
@@ -1312,16 +1335,32 @@ export const supabaseApi: TableApi = {
     if (body.x != null && body.y != null) {
       const { data: token, error: tErr } = await db().from('tokens_on_map').select('*').eq('id', id).single()
       throwIf(tErr)
-      const { data: inst } = await db().from('encounter_instances').select('map_id').eq('id', token.encounter_instance_id).maybeSingle()
+      const { data: inst } = await db().from('encounter_instances').select('*').eq('id', token.encounter_instance_id).maybeSingle()
+      let gridSize = 70
       if (inst?.map_id) {
         const { data: map } = await db().from('maps').select('*').eq('id', inst.map_id).maybeSingle()
         if (map) {
           const battle = mapFromRow(map as Record<string, unknown>)
+          gridSize = battle.gridSize
           const { col, row } = pixelToCell(Number(body.x), Number(body.y), battle.gridSize)
           if (tokenOccupiesBlocked(battle.blocked, col, row, battle.gridCols, battle.gridRows, Number(token.size_squares ?? 1))) {
             throw new Error('That square is blocked')
           }
         }
+      }
+      const { error: rpcErr } = await db().rpc('move_combatant_token', { p_token: id, p_x: body.x, p_y: body.y })
+      if (!rpcErr) return {}
+      if (!/could not find|does not exist|schema cache|move_combatant_token/i.test(rpcErr.message)) throwIf(rpcErr)
+      const { data: comb } = await db().from('combatants').select('*').eq('id', token.ref_id).maybeSingle()
+      if (comb && Number(comb.turn_order_position) === Number(inst?.current_turn_position)) {
+        const cost = movementCostFeet(
+          tokenCell({ x: Number(token.x), y: Number(token.y) }, gridSize),
+          tokenCell({ x: Number(body.x), y: Number(body.y) }, gridSize),
+        )
+        const spent = spendMovement(Number((comb as { movement_remaining?: number }).movement_remaining ?? (comb as { speed_feet?: number }).speed_feet ?? 30), cost)
+        if (!spent.ok) throw new Error(spent.error)
+        const { error: mvErr } = await db().from('combatants').update({ movement_remaining: spent.remaining }).eq('id', comb.id)
+        throwIf(mvErr)
       }
     }
     const { error } = await db()

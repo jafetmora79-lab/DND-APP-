@@ -352,6 +352,10 @@ export type Combatant = {
   deathSuccess: number
   deathFail: number
   turnEconomy: TurnEconomy
+  /** Walk speed in feet, copied from the sheet or bestiary at spawn. */
+  speedFeet: number
+  /** Feet of movement left this turn. Resets to speedFeet when this combatant's turn begins. */
+  movementRemaining: number
 }
 
 export type MapToken = {

@@ -187,6 +187,42 @@ export function Tracker({
                 ))}
               </select>
             )}
+            <div className="mt-1 text-[10px] uppercase tracking-wide text-muted">
+              Move {c.movementRemaining ?? 0} / {c.speedFeet ?? 30} ft
+            </div>
+            {isDm && selectedId === c.id && (
+              <div className="mt-1 flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  className="rounded border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted"
+                  onClick={() => onPatch(c.id, { movementRemaining: (c.movementRemaining ?? 0) + 5 })}
+                >
+                  +5 ft
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted"
+                  onClick={() => onPatch(c.id, { movementRemaining: (c.movementRemaining ?? 0) + 30 })}
+                >
+                  +30 ft
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted"
+                  onClick={() => onPatch(c.id, { movementRemaining: c.speedFeet ?? 30 })}
+                >
+                  Reset
+                </button>
+                <input
+                  className="h-7 w-14 rounded border border-line bg-bg px-1 text-xs"
+                  type="number"
+                  min={0}
+                  value={c.movementRemaining ?? 0}
+                  onChange={(e) => onPatch(c.id, { movementRemaining: Number(e.target.value) || 0 })}
+                  aria-label="Movement remaining"
+                />
+              </div>
+            )}
             {canEcon && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {ECON.map(({ key, label }) => (

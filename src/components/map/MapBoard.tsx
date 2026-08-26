@@ -16,10 +16,12 @@ type Props = {
   highlightIds?: string[]
   tool?: MapTool
   onSelect?: (id: string | null) => void
-  onMove?: (id: string, x: number, y: number) => void
+  onMove?: (id: string, x: number, y: number) => void | Promise<void>
   onFog?: (fog: FogState) => void
   onBlocked?: (blocked: number[]) => void
   onCellClick?: (col: number, row: number) => void
+  /** Combatant ids the current user may drag. DM can drag every token when onMove is set. */
+  dragRefIds?: string[]
 }
 
 function MapImage({ url, width, height }: { url: string; width: number; height: number }) {
@@ -41,6 +43,7 @@ export function MapBoard({
   onFog,
   onBlocked,
   onCellClick,
+  dragRefIds = [],
 }: Props) {
   const wrap = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 800, h: 600 })
@@ -272,6 +275,7 @@ export function MapBoard({
             const rings = (t.conditions ?? []).slice(0, 4)
             const showHud = Boolean(t.label) || hpMax > 0 || t.ac != null
             const downed = Boolean(t.statusLabel) || (t.conditions ?? []).includes('Unconscious')
+            const canDrag = Boolean(onMove) && tool === 'select' && (isDm || dragRefIds.includes(t.refId))
             return (
               <Group
                 key={t.id}
@@ -279,23 +283,27 @@ export function MapBoard({
                 x={t.x}
                 y={t.y}
                 opacity={downed ? 0.82 : 1}
-                draggable={isDm && tool === 'select'}
+                draggable={canDrag}
                 onClick={() => onSelect?.(t.refId)}
                 onTap={() => onSelect?.(t.refId)}
                 onDragStart={() => {
                   dragOrigin.current[t.id] = { x: t.x, y: t.y }
                 }}
-                onDragEnd={(e) => {
+                onDragEnd={async (e) => {
                   const gx = Math.round((e.target.x() - map.gridSize / 2) / map.gridSize) * map.gridSize + map.gridSize / 2
                   const gy = Math.round((e.target.y() - map.gridSize / 2) / map.gridSize) * map.gridSize + map.gridSize / 2
                   const { col, row } = pixelToCell(gx, gy, map.gridSize)
+                  const origin = dragOrigin.current[t.id]
                   if (tokenOccupiesBlocked(blocked, col, row, map.gridCols, map.gridRows, t.sizeSquares)) {
-                    const origin = dragOrigin.current[t.id]
                     if (origin) e.target.position(origin)
                     return
                   }
                   e.target.position({ x: gx, y: gy })
-                  onMove?.(t.id, gx, gy)
+                  try {
+                    await onMove?.(t.id, gx, gy)
+                  } catch {
+                    if (origin) e.target.position(origin)
+                  }
                 }}
               >
                 {showHud && (

@@ -29,6 +29,39 @@ export function chebyshevSquares(a: { col: number; row: number }, b: { col: numb
   return Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row))
 }
 
+/** First number in a speed string ("30 ft.", "25 ft., fly 60 ft."). Default 30. */
+export function parseSpeedFeet(raw: unknown) {
+  const m = String(raw ?? '').match(/(\d+)/)
+  const n = m ? Number(m[1]) : 30
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 30
+}
+
+export function movementCostFeet(
+  from: { col: number; row: number },
+  to: { col: number; row: number },
+) {
+  return chebyshevSquares(from, to) * FEET_PER_SQUARE
+}
+
+export function spendMovement(remaining: number, cost: number) {
+  const left = Math.max(0, Math.round(Number(remaining) || 0))
+  const need = Math.max(0, Math.round(Number(cost) || 0))
+  if (need === 0) return { ok: true as const, remaining: left }
+  if (need > left) {
+    return {
+      ok: false as const,
+      remaining: left,
+      error: `Not enough movement (${left} ft left, need ${need} ft).`,
+    }
+  }
+  return { ok: true as const, remaining: left - need }
+}
+
+export function clampMovementRemaining(raw: unknown) {
+  const n = Math.round(Number(raw))
+  return Number.isFinite(n) ? Math.max(0, n) : 0
+}
+
 export function minTokenDistanceSquares(
   a: { col: number; row: number; size?: number },
   b: { col: number; row: number; size?: number },

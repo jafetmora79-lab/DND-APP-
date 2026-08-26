@@ -6,7 +6,7 @@ import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
 import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type FogState, type NamedEntry } from '../src/lib/types.ts'
 import { cellCenter, parseBlockedCells, playerStartOrigin, spreadCells, tokenCellKeys, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
-import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, combatantStatsFromMonster, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, isAttackInRange, parseAttackBonus, parseDeathState, parseRangeFeet, parseRollMode, parseTurnEconomy, pickUsedD20, resolveDeathSave, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
+import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, combatantStatsFromMonster, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, isAttackInRange, movementCostFeet, parseAttackBonus, parseDeathState, parseRangeFeet, parseRollMode, parseSpeedFeet, parseTurnEconomy, pickUsedD20, resolveDeathSave, spendMovement, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { loadSrdMonsters } from './srd.ts'
 import { applyEncounterRewards, emptyBrief, parseHub } from '../src/lib/campaign-hub.ts'
 import { unpackTemplateJson } from '../src/lib/template-json.ts'
@@ -147,6 +147,8 @@ CREATE TABLE IF NOT EXISTS combatants (
   death_fail INTEGER NOT NULL DEFAULT 0,
   turn_economy_json TEXT NOT NULL DEFAULT '{"action":false,"bonus":false,"reaction":false,"movement":false}',
   stats_json TEXT,
+  speed_feet INTEGER NOT NULL DEFAULT 30,
+  movement_remaining INTEGER NOT NULL DEFAULT 30,
   FOREIGN KEY (encounter_instance_id) REFERENCES encounter_instances(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS tokens_on_map (
@@ -227,6 +229,16 @@ try {
   /* already present */
 }
 try {
+  db.exec(`ALTER TABLE combatants ADD COLUMN speed_feet INTEGER NOT NULL DEFAULT 30`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE combatants ADD COLUMN movement_remaining INTEGER NOT NULL DEFAULT 30`)
+} catch {
+  /* already present */
+}
+try {
   db.exec(`ALTER TABLE live_sessions ADD COLUMN table_phase TEXT NOT NULL DEFAULT 'table'`)
 } catch {
   /* already present */
@@ -254,6 +266,11 @@ try {
 
 export function now() {
   return Date.now()
+}
+
+function speedPair(raw: unknown) {
+  const speedFeet = parseSpeedFeet(raw)
+  return { speedFeet, movementRemaining: speedFeet }
 }
 
 export function mapFromDb(row: Record<string, unknown>): BattleMap {
@@ -439,9 +456,11 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
     for (let i = 0; i < spec.quantity; i++) {
       const cid = ids.id()
       const label = spec.quantity > 1 ? `${spec.name} ${i + 1}` : spec.name
+      const stats = combatantStatsFromMonster(src)
+      const speed = speedPair(src.speed)
       db.prepare(
-        `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution, stats_json)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution, stats_json, speed_feet, movement_remaining)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).run(
         cid,
         instanceId,
@@ -458,7 +477,9 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
         spec.color,
         '',
         Number(src.con ?? 10),
-        JSON.stringify(combatantStatsFromMonster(src)),
+        JSON.stringify(stats),
+        speed.speedFeet,
+        speed.movementRemaining,
       )
       const { col, row } = specCopyCell(spec, i, placed)
       const size = tokenSizeSquares(String(src.size ?? 'Medium'))
@@ -546,13 +567,14 @@ export function addCharacterCombatant(instanceId: string, characterId: string, s
     return existing
   }
   const sheet = jparse<CharacterSheetData>(ch.sheet_json as string, emptySheet())
+  const speed = speedPair(sheet.speed)
   const maxPos = db.prepare('SELECT COALESCE(MAX(turn_order_position), -1) as m FROM combatants WHERE encounter_instance_id = ?').get(instanceId) as {
     m: number
   }
   const cid = ids.id()
   db.prepare(
-    `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution, speed_feet, movement_remaining)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     cid,
     instanceId,
@@ -569,6 +591,8 @@ export function addCharacterCombatant(instanceId: string, characterId: string, s
     ch.token_color,
     '',
     sheet.abilities.con,
+    speed.speedFeet,
+    speed.movementRemaining,
   )
   placeCharacterToken(instanceId, cid, String(ch.name), String(ch.token_color), map, start)
   return { id: cid }
@@ -793,16 +817,37 @@ export function resetCombatDeath(combatantId: string) {
 
 export function resetTurnEconomyAt(instanceId: string, turnOrderPosition: number) {
   const row = db
-    .prepare('SELECT id FROM combatants WHERE encounter_instance_id = ? AND turn_order_position = ?')
-    .get(instanceId, turnOrderPosition) as { id: string } | undefined
+    .prepare('SELECT id, speed_feet FROM combatants WHERE encounter_instance_id = ? AND turn_order_position = ?')
+    .get(instanceId, turnOrderPosition) as { id: string; speed_feet?: number } | undefined
   if (!row) return
-  db.prepare('UPDATE combatants SET turn_economy_json = ? WHERE id = ?').run(JSON.stringify(emptyTurnEconomy()), row.id)
+  const speed = parseSpeedFeet(row.speed_feet ?? 30)
+  db.prepare('UPDATE combatants SET turn_economy_json = ?, movement_remaining = ? WHERE id = ?').run(
+    JSON.stringify(emptyTurnEconomy()),
+    speed,
+    row.id,
+  )
 }
 
 export function setCombatTurnEconomy(combatantId: string, economy: unknown) {
   const row = db.prepare('SELECT id FROM combatants WHERE id = ?').get(combatantId) as { id: string } | undefined
   if (!row) throw new Error('Combatant not found')
   db.prepare('UPDATE combatants SET turn_economy_json = ? WHERE id = ?').run(JSON.stringify(parseTurnEconomy(economy)), combatantId)
+}
+
+/** Spend walk speed when the current-turn combatant moves. Off-turn moves do not consume. */
+export function consumeTurnMovement(instanceId: string, combatantId: string, from: { x: number; y: number }, to: { x: number; y: number }, gridSize: number) {
+  const inst = db.prepare('SELECT current_turn_position FROM encounter_instances WHERE id = ?').get(instanceId) as
+    | { current_turn_position?: number }
+    | undefined
+  const c = db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(combatantId, instanceId) as
+    | Record<string, unknown>
+    | undefined
+  if (!inst || !c) throw new Error('Combatant not found')
+  if (Number(c.turn_order_position) !== Number(inst.current_turn_position)) return
+  const cost = movementCostFeet(tokenCell(from, gridSize), tokenCell(to, gridSize))
+  const spent = spendMovement(Number(c.movement_remaining ?? c.speed_feet ?? 30), cost)
+  if (!spent.ok) throw new Error(spent.error)
+  db.prepare('UPDATE combatants SET movement_remaining = ? WHERE id = ?').run(spent.remaining, combatantId)
 }
 
 export function applyHpKnockout(combatantId: string, prevHp: number, nextHp: number) {
