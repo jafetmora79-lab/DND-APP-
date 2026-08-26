@@ -1,12 +1,13 @@
 import { customAlphabet } from 'nanoid'
 import { publicAsset, tableEmail } from './config'
-import { emptySheet, type AuthUser, type BattleMap, type FogState, type Monster, type NamedEntry, type PlayerCharacter } from './types'
+import { emptySheet, type AuthUser, type BattleMap, type FogState, type Monster, type NamedEntry, type PlayerCharacter, type TemplateCharacter, type TemplateMonster } from './types'
 import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
 import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter } from './utils'
 import { specCopyCell } from './combat'
 import { sessionFromRow } from './session'
+import { packMonstersJson, unpackTemplateJson } from './template-json'
 import type { TableApi } from './local-api'
 
 const joinCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6)
@@ -30,6 +31,8 @@ function throwIf(error: { message: string } | null) {
 }
 
 const omittedSessionCols = new Set<string>()
+const omittedTemplateCols = new Set<string>()
+let embedPlayersInMonsters = false
 
 function stripSessionCols(row: Record<string, unknown>) {
   const next = { ...row }
@@ -663,78 +666,71 @@ export const supabaseApi: TableApi = {
     const { data, error } = await db().from('encounter_templates').select('*').eq('campaign_id', campaignId)
     throwIf(error)
     return {
-      templates: (data ?? []).map((t) => ({
-        id: String(t.id),
-        campaignId: String(t.campaign_id),
-        mapId: String(t.map_id),
-        name: String(t.name),
-        monsters: t.monsters_json ?? [],
-        characters: t.characters_json ?? [],
-      })),
+      templates: (data ?? []).map((t) => {
+        const packed = unpackTemplateJson(t as { monsters_json?: unknown; characters_json?: unknown })
+        return {
+          id: String(t.id),
+          campaignId: String(t.campaign_id),
+          mapId: String(t.map_id),
+          name: String(t.name),
+          monsters: packed.monsters,
+          characters: packed.characters,
+        }
+      }),
     }
   },
 
   async saveTemplate(campaignId, body) {
-    const payload = {
-      name: body.name,
-      map_id: body.mapId,
-      monsters_json: body.monsters ?? [],
-      characters_json: body.characters ?? [],
-    }
-    const wantedChars = (body.characters ?? []) as unknown[]
-    if (body.id) {
-      const { error } = await db().from('encounter_templates').update(payload).eq('id', body.id)
-      if (error && /characters_json/.test(error.message)) {
-        if (wantedChars.length > 0) {
-          throw new Error(
-            "Could not save player starting squares. In the Supabase SQL Editor run migrate-encounter-play.sql, then: notify pgrst, 'reload schema';",
-          )
-        }
-        const { error: retry } = await db()
-          .from('encounter_templates')
-          .update({ name: body.name, map_id: body.mapId, monsters_json: body.monsters ?? [] })
-          .eq('id', body.id)
-        throwIf(retry)
-        return {}
+    const monsters = (body.monsters ?? []) as TemplateMonster[]
+    const characters = (body.characters ?? []) as TemplateCharacter[]
+    const row = (): Record<string, unknown> => {
+      const payload: Record<string, unknown> = {
+        name: body.name,
+        map_id: body.mapId,
+        monsters_json: packMonstersJson(monsters, characters, embedPlayersInMonsters),
       }
-      throwIf(error)
-      return {}
+      if (!omittedTemplateCols.has('characters_json')) payload.characters_json = characters
+      return payload
     }
-    const { data, error } = await db().from('encounter_templates').insert({ campaign_id: campaignId, ...payload }).select().single()
-    if (error && /characters_json/.test(error.message)) {
-      if (wantedChars.length > 0) {
-        throw new Error(
-          "Could not save player starting squares. In the Supabase SQL Editor run migrate-encounter-play.sql, then: notify pgrst, 'reload schema';",
-        )
-      }
-      const { data: retry, error: retryErr } = await db()
-        .from('encounter_templates')
-        .insert({ campaign_id: campaignId, map_id: body.mapId, name: body.name, monsters_json: body.monsters ?? [] })
-        .select()
-        .single()
-      throwIf(retryErr)
+    const mapSaved = (data: Record<string, unknown>) => {
+      const packed = unpackTemplateJson(data)
       return {
         template: {
-          id: String(retry.id),
+          id: String(data.id),
           campaignId,
-          mapId: String(retry.map_id),
-          name: String(retry.name),
-          monsters: retry.monsters_json ?? [],
-          characters: [],
+          mapId: String(data.map_id),
+          name: String(data.name),
+          monsters: packed.monsters,
+          characters: packed.characters,
         },
       }
     }
-    throwIf(error)
-    return {
-      template: {
-        id: String(data.id),
-        campaignId,
-        mapId: String(data.map_id),
-        name: String(data.name),
-        monsters: data.monsters_json ?? [],
-        characters: data.characters_json ?? [],
-      },
+    const rememberMissingCharactersCol = (message: string) => {
+      if (!/characters_json/.test(message)) return false
+      omittedTemplateCols.add('characters_json')
+      embedPlayersInMonsters = true
+      return true
     }
+    if (body.id) {
+      for (let i = 0; i < 4; i++) {
+        const { error } = await db().from('encounter_templates').update(row()).eq('id', body.id)
+        if (!error) return {}
+        if (rememberMissingCharactersCol(error.message)) continue
+        throwIf(error)
+      }
+      throw new Error('Could not save the encounter.')
+    }
+    for (let i = 0; i < 4; i++) {
+      const { data, error } = await db()
+        .from('encounter_templates')
+        .insert({ campaign_id: campaignId, ...row() })
+        .select()
+        .single()
+      if (!error) return mapSaved(data as Record<string, unknown>)
+      if (rememberMissingCharactersCol(error.message)) continue
+      throwIf(error)
+    }
+    throw new Error('Could not save the encounter.')
   },
 
   async deleteTemplate(id) {
@@ -787,15 +783,8 @@ export const supabaseApi: TableApi = {
       .select()
       .single()
     throwIf(iErr)
-    const specs = (template.monsters_json ?? []) as {
-      bestiaryMonsterId: string
-      name: string
-      quantity: number
-      startX: number
-      startY: number
-      color: string
-      positions?: { x: number; y: number }[]
-    }[]
+    const packed = unpackTemplateJson(template as { monsters_json?: unknown; characters_json?: unknown })
+    const specs = packed.monsters
     let order = 0
     let placed = 0
     const battle = mapFromRow(map as Record<string, unknown>)
@@ -838,7 +827,7 @@ export const supabaseApi: TableApi = {
         placed++
       }
     }
-    const starters = (template.characters_json ?? []) as { characterId: string; startX: number; startY: number }[]
+    const starters = packed.characters
     for (const spec of starters) {
       await insertCharacterCombatant(String(inst.id), spec.characterId, spec.startX, spec.startY, order++)
     }

@@ -241,18 +241,16 @@ unconscious, etc.) wrap the token.
 9. DATA THAT MUST BE SAVED / MIGRATED
 -------------------------------------
 
-Encounter templates store:
-  - map id
-  - monsters_json (each species: id, quantity, start squares, per-copy positions)
-  - characters_json (each player: character id, name, start square, color)
+Encounter templates store a map id, the monster list, and player starting
+squares. On hosted Supabase the dedicated characters_json column may be
+missing from older projects. The app still saves player starts in that case
+(inside the same JSON as the monsters). You do not need to run SQL just to
+place players.
 
-If a hosted project was created before characters_json existed, saving player
-starts will tell you to run supabase/migrate-encounter-play.sql and then:
+If you want the extra columns anyway, supabase/migrate-encounter-play.sql
+and migrate-campaign-table.sql are still there, followed by:
 
   notify pgrst, 'reload schema';
-
-The same pattern applies to later campaign-table columns (last_outcome, scene
-fields) via supabase/migrate-campaign-table.sql.
 
 Local SQLite adds missing columns automatically on boot.
 
@@ -280,7 +278,6 @@ If a player token never appears, check in this order:
   - On the template: was Place on map used AND Save clicked?
   - Did Start use that same template?
   - During combat: did + Name report an error at the top of the live page?
-  - Hosted: did save mention migrate-encounter-play.sql / schema cache?
 
 
 11. WHAT THIS APP DELIBERATELY DOES NOT DO
