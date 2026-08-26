@@ -9,7 +9,7 @@ In the Supabase dashboard:
 1. **Authentication → Providers → Email** — turn **off** “Confirm email” (table-name + passcode login has no inbox).
 2. **Authentication → Providers → Anonymous** — **enable** (players join with a personal code, not an email).
 3. Copy **Project URL** and **anon public** key from **Settings → API**.
-4. **Storage → New bucket** named `maps`, set to **public** (or run `storage-bucket.sql`).
+4. **Storage → New buckets** named `maps` and `pdfs`, both **public** (or run `storage-bucket.sql`). Character sheet PDFs upload to `pdfs`, falling back to `maps/character-pdfs/` if that bucket is missing.
 
 Do not put the `service_role` key in the frontend.
 
@@ -17,7 +17,7 @@ Do not put the `service_role` key in the frontend.
 
 Run `schema.sql` once in **SQL Editor**.
 
-That creates tables, row-level security, the `join_table` / `peek_join` RPCs, realtime publication, and a public `maps` storage bucket.
+That creates tables, row-level security, the `join_table` / `peek_join` RPCs, realtime publication, and public `maps` + `pdfs` storage buckets.
 
 ## 3. App env
 

@@ -4,7 +4,7 @@ import { emptySheet, type AuthUser, type BattleMap, type FogState, type Monster,
 import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
-import { tokenSizeSquares } from './utils'
+import { tokenSizeSquares, templateTokenCell } from './utils'
 import type { TableApi } from './local-api'
 
 const joinCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6)
@@ -141,6 +141,30 @@ async function seedBestiary(dmId: string) {
     const { error } = await db().from('bestiary_monsters').insert(rows.slice(i, i + 80))
     throwIf(error)
   }
+}
+
+async function uploadCharacterPdf(campaignId: string, characterId: string, file: File) {
+  const safeName = file.name.replace(/[^\w.-]+/g, '_') || 'character.pdf'
+  const relative = `${campaignId}/${characterId}/${safeName}`
+  const attempts = [
+    { bucket: 'pdfs', path: relative },
+    { bucket: 'maps', path: `character-pdfs/${relative}` },
+  ] as const
+  let last = 'Storage upload failed'
+  for (const attempt of attempts) {
+    const { error } = await db().storage.from(attempt.bucket).upload(attempt.path, file, {
+      upsert: true,
+      contentType: 'application/pdf',
+    })
+    if (!error) {
+      return db().storage.from(attempt.bucket).getPublicUrl(attempt.path).data.publicUrl
+    }
+    last = error.message
+    if (!/not found|does not exist/i.test(error.message)) throw new Error(error.message)
+  }
+  throw new Error(
+    `${last}. Create a public Storage bucket named "pdfs" (or keep using "maps") so character PDFs can be stored.`,
+  )
 }
 
 async function hideCodes(campaignId: string, list: PlayerCharacter[]) {
@@ -397,9 +421,15 @@ export const supabaseApi: TableApi = {
     const mapped = characterFromRow(cur as Record<string, unknown>)
     const name = parsed.characterName || mapped.name
     const owner = parsed.playerName || mapped.ownerDisplayName
+    const sourcePdfUrl = await uploadCharacterPdf(mapped.campaignId, id, file)
     const { data, error } = await db()
       .from('player_characters')
-      .update({ name, owner_display_name: owner, sheet_json: { ...mapped.sheet, ...parsed.sheet } })
+      .update({
+        name,
+        owner_display_name: owner,
+        sheet_json: { ...mapped.sheet, ...parsed.sheet },
+        source_pdf_url: sourcePdfUrl,
+      })
       .eq('id', id)
       .select()
       .single()
@@ -533,8 +563,7 @@ export const supabaseApi: TableApi = {
           .select()
           .single()
         throwIf(cErr)
-        const col = spec.startX || 2 + (placed % 8)
-        const row = spec.startY || 2 + Math.floor(placed / 8)
+        const { col, row } = templateTokenCell(spec, i, placed)
         const { error: tokErr } = await db().from('tokens_on_map').insert({
           encounter_instance_id: inst.id,
           x: col * cell + cell / 2,
