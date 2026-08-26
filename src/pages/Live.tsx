@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Check, Copy, Eye, EyeOff, Flag, Pause, Play, Sword, Trophy } from 'lucide-react'
 import { AttackBar } from '@/components/AttackBar'
+import { SaveBar } from '@/components/SaveBar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CharacterSheet } from '@/components/CharacterSheet'
@@ -11,10 +12,10 @@ import { StatBlock } from '@/components/StatBlock'
 import { TableHub } from '@/components/TableHub'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
-import { attacksFromMonster, decorateTokens, inRangeCombatantIds } from '@/lib/combat'
+import { attacksFromMonster, canTakeAttacks, decorateTokens, effectiveRollMode, inRangeCombatantIds } from '@/lib/combat'
 import { useLive } from '@/lib/realtime'
 import { showCombatStage, showOutcome } from '@/lib/session'
-import type { Attack, EncounterInstance, EncounterSnapshot, EncounterTemplate, FogState, Monster } from '@/lib/types'
+import type { Attack, EncounterInstance, EncounterSnapshot, EncounterTemplate, FogState, Monster, RollMode } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
 
@@ -35,6 +36,8 @@ export function Live() {
   const [pending, setPending] = useState<{ attack: Attack; index: number } | null>(null)
   const [targetId, setTargetId] = useState<string | null>(null)
   const [d20, setD20] = useState('')
+  const [d20b, setD20b] = useState('')
+  const [rollMode, setRollMode] = useState<RollMode>('normal')
   const [damage, setDamage] = useState('')
   const [attackMsg, setAttackMsg] = useState('')
   const [attackBusy, setAttackBusy] = useState(false)
@@ -89,6 +92,7 @@ export function Live() {
     setPending({ attack, index })
     setTargetId(null)
     setD20('')
+    setD20b('')
     setDamage('')
     setAttackMsg('')
     setTool('select')
@@ -96,10 +100,17 @@ export function Live() {
 
   async function submitAttack() {
     if (!instance || !pending || !targetId || !selectedCombatant) return
+    const hasAdv = selectedCombatant.advantageAgainst?.includes(targetId)
+    const mode = effectiveRollMode(rollMode, Boolean(hasAdv))
     const roll = Number(d20)
+    const rollb = Number(d20b)
     const dmg = Number(damage)
     if (!Number.isInteger(roll) || roll < 1 || roll > 20) {
       setAttackMsg('Enter the d20 you rolled at the table (1–20).')
+      return
+    }
+    if (mode !== 'normal' && (!Number.isInteger(rollb) || rollb < 1 || rollb > 20)) {
+      setAttackMsg('Enter both d20s for advantage or disadvantage.')
       return
     }
     if (!Number.isFinite(dmg) || dmg < 0) {
@@ -113,6 +124,8 @@ export function Live() {
         targetId,
         attackIndex: pending.index,
         d20: roll,
+        d20b: mode === 'normal' ? undefined : rollb,
+        rollMode: mode,
         damage: dmg,
       })
       setAttackMsg(r.message)
@@ -120,6 +133,7 @@ export function Live() {
         setPending(null)
         setTargetId(null)
         setD20('')
+        setD20b('')
         setDamage('')
       }
     } catch (e) {
@@ -421,9 +435,21 @@ export function Live() {
               const c = snap.combatants.find((x) => x.id === id)
               setPanel(c?.source === 'character' ? 'sheet' : 'stat')
             }}
-            onPatch={(id, body) => api.patchCombatant(id, body)}
+            onPatch={(id, body) => {
+              if (body.turnEconomy) void api.setTurnEconomy(id, body.turnEconomy as { action: boolean; bonus: boolean; reaction: boolean; movement: boolean })
+              else void api.patchCombatant(id, body)
+            }}
             onNext={() => api.nextTurn(instance.id)}
             onSort={() => api.sortInit(instance.id)}
+            onDeathSave={(id, d20v) => {
+              void api.deathSave(id, { d20: d20v }).then((r) => {
+                setAttackMsg(r.message)
+                void load()
+              }).catch((e) => setError(e instanceof Error ? e.message : 'Death save failed'))
+            }}
+            onResetDeath={(id) => {
+              void api.resetDeath(id).then(() => load())
+            }}
             onReorder={(dir, id) => {
               const ordered = [...snap.combatants].sort((a, b) => a.turnOrderPosition - b.turnOrderPosition)
               const i = ordered.findIndex((c) => c.id === id)
@@ -562,27 +588,46 @@ export function Live() {
         </aside>
       </div>
       {selectedCombatant && (
-        <AttackBar
-          attacks={attackerAttacks}
-          pendingIndex={pending?.index ?? null}
-          onPick={pickAttack}
-          onCancel={() => {
-            setPending(null)
-            setTargetId(null)
-            setAttackMsg('')
-          }}
-          targetName={attackTarget?.name}
-          targetAc={attackTarget?.ac}
-          hasAdvantage={Boolean(targetId && selectedCombatant.advantageAgainst?.includes(targetId))}
-          d20={d20}
-          damage={damage}
-          onD20={setD20}
-          onDamage={setDamage}
-          onResolve={submitAttack}
-          canResolve={Boolean(targetId)}
-          busy={attackBusy}
-          message={attackMsg}
-        />
+        <>
+          <AttackBar
+            attacks={attackerAttacks}
+            pendingIndex={pending?.index ?? null}
+            onPick={pickAttack}
+            onCancel={() => {
+              setPending(null)
+              setTargetId(null)
+              setAttackMsg('')
+            }}
+            targetName={attackTarget?.name}
+            targetAc={attackTarget?.ac}
+            hasAdvantage={Boolean(targetId && selectedCombatant.advantageAgainst?.includes(targetId))}
+            disabled={!canTakeAttacks(selectedCombatant)}
+            disabledReason={
+              !canTakeAttacks(selectedCombatant)
+                ? selectedCombatant.deathState === 'dead'
+                  ? `${selectedCombatant.name} is dead.`
+                  : `${selectedCombatant.name} cannot take a normal attack (${selectedCombatant.deathState === 'ok' ? selectedCombatant.conditions.join(', ') || 'incapacitated' : selectedCombatant.deathState}).`
+                : undefined
+            }
+            rollMode={
+              targetId && selectedCombatant.advantageAgainst?.includes(targetId) && rollMode === 'normal'
+                ? 'advantage'
+                : rollMode
+            }
+            onRollMode={setRollMode}
+            d20={d20}
+            d20b={d20b}
+            damage={damage}
+            onD20={setD20}
+            onD20b={setD20b}
+            onDamage={setDamage}
+            onResolve={submitAttack}
+            canResolve={Boolean(targetId)}
+            busy={attackBusy}
+            message={attackMsg}
+          />
+          <SaveBar combatants={snap.combatants} selectedId={selected} characters={snap.characters} monster={selectedMonster} compact />
+        </>
       )}
       {outcome && (
         <EncounterOutcomeOverlay

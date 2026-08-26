@@ -271,12 +271,14 @@ export function MapBoard({
             const ratio = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0
             const rings = (t.conditions ?? []).slice(0, 4)
             const showHud = Boolean(t.label) || hpMax > 0 || t.ac != null
+            const downed = Boolean(t.statusLabel) || (t.conditions ?? []).includes('Unconscious')
             return (
               <Group
                 key={t.id}
                 name="token"
                 x={t.x}
                 y={t.y}
+                opacity={downed ? 0.82 : 1}
                 draggable={isDm && tool === 'select'}
                 onClick={() => onSelect?.(t.refId)}
                 onTap={() => onSelect?.(t.refId)}
@@ -374,6 +376,19 @@ export function MapBoard({
                   fill={inkOnToken(t.color)}
                   listening={false}
                 />
+                {t.statusLabel && (
+                  <Text
+                    text={t.statusLabel}
+                    y={r + 4}
+                    width={Math.max(72, r * 3)}
+                    offsetX={Math.max(72, r * 3) / 2}
+                    align="center"
+                    fontSize={9}
+                    fontFamily="Inter"
+                    fill={t.statusLabel === 'Dead' ? '#c4453c' : '#818cf8'}
+                    listening={false}
+                  />
+                )}
               </Group>
             )
           })}

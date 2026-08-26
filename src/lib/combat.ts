@@ -1,6 +1,17 @@
-import type { Attack, BattleMap, Combatant, MapToken, TemplateMonster } from './types.ts'
+import {
+  ABILITY_LABELS,
+  type Ability,
+  type Attack,
+  type BattleMap,
+  type Combatant,
+  type DeathState,
+  type MapToken,
+  type RollMode,
+  type TemplateMonster,
+  type TurnEconomy,
+} from './types.ts'
 import { monsterTokenLook, playerTokenLook } from './token-look.ts'
-import { FEET_PER_SQUARE, pixelToCell, spreadCells, tokenOccupiesBlocked } from './utils.ts'
+import { abilityMod, FEET_PER_SQUARE, pixelToCell, spreadCells, tokenOccupiesBlocked } from './utils.ts'
 
 export function parseAttackBonus(bonus: string | undefined) {
   const m = String(bonus ?? '').match(/([+-]?\d+)/)
@@ -51,7 +62,174 @@ export function isAttackInRange(
 export function attackOutcome(d20: number, bonus: number, ac: number): 'crit' | 'hit' | 'fumble' | 'miss' {
   if (d20 <= 1) return 'fumble'
   if (d20 >= 20) return 'crit'
+  // House rule (keep): total must be strictly higher than AC. Equal to AC misses.
   return d20 + bonus > ac ? 'hit' : 'miss'
+}
+
+export function emptyTurnEconomy(): TurnEconomy {
+  return { action: false, bonus: false, reaction: false, movement: false }
+}
+
+export function parseTurnEconomy(raw: unknown): TurnEconomy {
+  const base = emptyTurnEconomy()
+  if (!raw || typeof raw !== 'object') return base
+  const o = raw as Record<string, unknown>
+  return {
+    action: Boolean(o.action),
+    bonus: Boolean(o.bonus),
+    reaction: Boolean(o.reaction),
+    movement: Boolean(o.movement),
+  }
+}
+
+export function parseDeathState(raw: unknown): DeathState {
+  const v = String(raw ?? 'ok')
+  if (v === 'dying' || v === 'stable' || v === 'dead') return v
+  return 'ok'
+}
+
+export function parseRollMode(raw: unknown): RollMode {
+  const v = String(raw ?? 'normal')
+  if (v === 'advantage' || v === 'disadvantage') return v
+  return 'normal'
+}
+
+/** Stored fumble-advantage plus an explicit disadvantage cancel to a normal roll (5e). */
+export function effectiveRollMode(requested: RollMode, hadStoredAdvantage: boolean): RollMode {
+  if (hadStoredAdvantage && requested === 'disadvantage') return 'normal'
+  if (hadStoredAdvantage && requested === 'normal') return 'advantage'
+  return requested
+}
+
+export function pickUsedD20(d20: number, d20b: number | undefined, mode: RollMode) {
+  if (mode === 'normal' || d20b == null) {
+    return { used: d20, a: d20, b: null as number | null }
+  }
+  const used = mode === 'advantage' ? Math.max(d20, d20b) : Math.min(d20, d20b)
+  return { used, a: d20, b: d20b }
+}
+
+export function formatDiceUsed(a: number, b: number | null, used: number) {
+  if (b == null) return `${used}`
+  return `${a} / ${b} → ${used} used`
+}
+
+export function canTakeAttacks(c: Pick<Combatant, 'conditions' | 'deathState'>) {
+  if (c.deathState === 'dying' || c.deathState === 'stable' || c.deathState === 'dead') return false
+  const block = ['Unconscious', 'Paralyzed', 'Stunned', 'Incapacitated', 'Petrified']
+  return !c.conditions.some((x) => block.includes(x))
+}
+
+export function characterSaveBonus(abilityScore: number, proficient: boolean, proficiencyBonus: number) {
+  return abilityMod(abilityScore) + (proficient ? proficiencyBonus : 0)
+}
+
+export function monsterSaveBonus(savingThrows: string, ability: Ability, abilityScore: number) {
+  const label = ABILITY_LABELS[ability]
+  const m = String(savingThrows ?? '').match(new RegExp(`${label}\\s*([+-]\\d+)`, 'i'))
+  if (m) return Number(m[1])
+  return abilityMod(abilityScore)
+}
+
+export function resolveSavingThrow(opts: { d20: number; modifier: number; dc: number }) {
+  const { d20, modifier, dc } = opts
+  if (!Number.isInteger(d20) || d20 < 1 || d20 > 20) throw new Error('d20 must be between 1 and 20')
+  const total = d20 + modifier
+  const success = total >= dc
+  return {
+    d20,
+    modifier,
+    total,
+    dc,
+    success,
+    message: `${d20} ${modifier >= 0 ? '+' : '−'}${Math.abs(modifier)} = ${total} vs DC ${dc} — ${success ? 'success' : 'failure'}`,
+  }
+}
+
+export function afterHpChange(opts: {
+  source: 'character' | 'bestiary'
+  prevHp: number
+  nextHp: number
+  conditions: string[]
+  deathState: DeathState
+  deathSuccess: number
+  deathFail: number
+  extraDeathFails?: number
+}) {
+  const conditions = opts.conditions.slice()
+  let { deathState, deathSuccess, deathFail } = opts
+  const addUnconscious = () => {
+    if (!conditions.includes('Unconscious')) conditions.push('Unconscious')
+  }
+  const dropUnconscious = () => {
+    const i = conditions.indexOf('Unconscious')
+    if (i >= 0) conditions.splice(i, 1)
+  }
+  if (opts.nextHp > 0) {
+    dropUnconscious()
+    if (deathState !== 'ok') {
+      deathState = 'ok'
+      deathSuccess = 0
+      deathFail = 0
+    }
+    return { conditions, deathState, deathSuccess, deathFail }
+  }
+  addUnconscious()
+  if (opts.source !== 'character' || deathState === 'dead') {
+    return { conditions, deathState: deathState === 'dead' ? 'dead' : deathState, deathSuccess, deathFail }
+  }
+  if (opts.prevHp > 0 && deathState === 'ok') {
+    deathState = 'dying'
+    deathSuccess = 0
+    deathFail = 0
+  } else if (deathState === 'dying') {
+    deathFail = Math.min(3, deathFail + Math.max(1, opts.extraDeathFails ?? 1))
+    if (deathFail >= 3) deathState = 'dead'
+  } else if (deathState === 'stable') {
+    deathState = 'dying'
+    deathSuccess = 0
+    deathFail = Math.min(3, Math.max(1, opts.extraDeathFails ?? 1))
+  }
+  return { conditions, deathState, deathSuccess, deathFail }
+}
+
+export function resolveDeathSave(d20: number, current: { deathSuccess: number; deathFail: number; deathState: DeathState }) {
+  if (!Number.isInteger(d20) || d20 < 1 || d20 > 20) throw new Error('d20 must be between 1 and 20')
+  let { deathSuccess, deathFail, deathState } = current
+  if (deathState === 'dead') {
+    return { deathSuccess, deathFail, deathState, hpCurrent: 0, message: 'Already dead.', revived: false }
+  }
+  if (deathState !== 'dying') {
+    deathState = 'dying'
+  }
+  let revived = false
+  let hpCurrent = 0
+  let message: string
+  if (d20 >= 20) {
+    hpCurrent = 1
+    deathState = 'ok'
+    deathSuccess = 0
+    deathFail = 0
+    revived = true
+    message = 'Natural 20 — regain 1 HP and wake.'
+  } else if (d20 <= 1) {
+    deathFail = Math.min(3, deathFail + 2)
+    message = 'Natural 1 — two death-save failures.'
+  } else if (d20 >= 10) {
+    deathSuccess = Math.min(3, deathSuccess + 1)
+    message = `${d20} — death save success (${deathSuccess}/3).`
+  } else {
+    deathFail = Math.min(3, deathFail + 1)
+    message = `${d20} — death save failure (${deathFail}/3).`
+  }
+  if (!revived && deathFail >= 3) {
+    deathState = 'dead'
+    message = `${message} Dead.`
+  } else if (!revived && deathSuccess >= 3) {
+    deathState = 'stable'
+    message = `${message} Stabilized.`
+  }
+  return { deathSuccess, deathFail, deathState, hpCurrent, message, revived }
 }
 
 export function grantAdvantage(list: string[] | undefined, vsId: string) {
@@ -134,6 +312,16 @@ export function decorateTokens(tokens: MapToken[], combatants: Combatant[]): Map
       hpTemp: c.hpTemp,
       ac: c.ac,
       conditions: c.conditions,
+      statusLabel:
+        c.deathState === 'dead'
+          ? 'Dead'
+          : c.deathState === 'dying'
+            ? 'Dying'
+            : c.deathState === 'stable'
+              ? 'Stable'
+              : c.conditions.includes('Unconscious')
+                ? 'Unconscious'
+                : undefined,
     }
   })
 }
@@ -164,6 +352,9 @@ export type PlayerAttackResult = {
   crit: boolean
   fumble: boolean
   hadAdvantage: boolean
+  rollMode: RollMode
+  d20: number
+  d20b: number | null
   total: number
   ac: number
   damage: number

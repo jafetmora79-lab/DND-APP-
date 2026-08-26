@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { BookOpen, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AttackBar } from '@/components/AttackBar'
+import { SaveBar } from '@/components/SaveBar'
 import { CharacterSheet } from '@/components/CharacterSheet'
 import { EncounterOutcomeOverlay } from '@/components/EncounterOutcome'
 import { MapBoard } from '@/components/map/MapBoard'
@@ -10,10 +11,10 @@ import { TableHub } from '@/components/TableHub'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { decorateTokens, inRangeCombatantIds } from '@/lib/combat'
+import { canTakeAttacks, decorateTokens, effectiveRollMode, inRangeCombatantIds } from '@/lib/combat'
 import { useLive } from '@/lib/realtime'
 import { showCombatStage, showOutcome } from '@/lib/session'
-import type { Attack, EncounterSnapshot, PlayerCharacter } from '@/lib/types'
+import type { Attack, EncounterSnapshot, PlayerCharacter, RollMode } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 export function Player() {
@@ -28,9 +29,12 @@ export function Player() {
   const [pending, setPending] = useState<{ attack: Attack; index: number } | null>(null)
   const [targetId, setTargetId] = useState<string | null>(null)
   const [d20, setD20] = useState('')
+  const [d20b, setD20b] = useState('')
+  const [rollMode, setRollMode] = useState<RollMode>('normal')
   const [damage, setDamage] = useState('')
   const [attackMsg, setAttackMsg] = useState('')
   const [busy, setBusy] = useState(false)
+  const [focusId, setFocusId] = useState<string | null>(null)
 
   const load = useCallback(() => {
     if (!campaignId) return
@@ -49,6 +53,7 @@ export function Player() {
     ? [...snap.combatants].sort((a, b) => a.turnOrderPosition - b.turnOrderPosition)[snap.instance?.currentTurnPosition ?? 0]
     : undefined
   const myCombatant = snap?.combatants.find((c) => c.source === 'character' && c.sourceId === me?.id)
+  const saveTargetId = focusId ?? myCombatant?.id ?? null
   const highlightIds = useMemo(() => {
     if (!snap?.map || !pending || !myCombatant) return []
     return inRangeCombatantIds(snap.map, snap.tokens, snap.combatants, myCombatant.id, pending.attack)
@@ -62,6 +67,7 @@ export function Player() {
     setPending({ attack, index })
     setTargetId(null)
     setD20('')
+    setD20b('')
     setDamage('')
     setAttackMsg('')
     setDrawer(false)
@@ -70,10 +76,17 @@ export function Player() {
 
   async function submitAttack() {
     if (!snap?.instance || !pending || !targetId) return
+    const hasAdv = Boolean(targetId && myCombatant?.advantageAgainst?.includes(targetId))
+    const mode = effectiveRollMode(rollMode, hasAdv)
     const roll = Number(d20)
+    const rollb = Number(d20b)
     const dmg = Number(damage)
     if (!Number.isInteger(roll) || roll < 1 || roll > 20) {
       setAttackMsg('Enter the d20 you rolled at the table (1–20).')
+      return
+    }
+    if (mode !== 'normal' && (!Number.isInteger(rollb) || rollb < 1 || rollb > 20)) {
+      setAttackMsg('Enter both d20s for advantage or disadvantage.')
       return
     }
     if (!Number.isFinite(dmg) || dmg < 0) {
@@ -86,6 +99,8 @@ export function Player() {
         targetId,
         attackIndex: pending.index,
         d20: roll,
+        d20b: mode === 'normal' ? undefined : rollb,
+        rollMode: mode,
         damage: dmg,
       })
       setAttackMsg(r.message)
@@ -93,6 +108,7 @@ export function Player() {
         setPending(null)
         setTargetId(null)
         setD20('')
+        setD20b('')
         setDamage('')
       }
     } catch (e) {
@@ -191,10 +207,13 @@ export function Player() {
             tokens={tokens}
             fog={snap.instance.fogState}
             isDm={false}
-            selectedId={targetId}
+            selectedId={targetId ?? focusId}
             highlightIds={highlightIds}
             onSelect={(id) => {
-              if (!pending) return
+              if (!pending) {
+                setFocusId(id)
+                return
+              }
               if (!id) {
                 setTargetId(null)
                 return
@@ -204,6 +223,7 @@ export function Player() {
                 return
               }
               setTargetId(id)
+              setFocusId(id)
               setAttackMsg('')
             }}
           />
@@ -214,11 +234,28 @@ export function Player() {
             current={snap.instance.currentTurnPosition}
             round={snap.instance.roundNumber}
             isDm={false}
-            onSelect={() => undefined}
-            onPatch={() => undefined}
+            selectedId={saveTargetId}
+            economyId={myCombatant?.id}
+            onSelect={(id) => setFocusId(id)}
+            onPatch={(id, body) => {
+              if (!myCombatant || id !== myCombatant.id) return
+              if (body.turnEconomy) {
+                void api.setTurnEconomy(id, body.turnEconomy as { action: boolean; bonus: boolean; reaction: boolean; movement: boolean })
+              }
+            }}
             onNext={() => undefined}
             onSort={() => undefined}
             onReorder={() => undefined}
+            onDeathSave={(id, d20v) => {
+              if (!myCombatant || id !== myCombatant.id) return
+              void api
+                .deathSave(id, { d20: d20v })
+                .then((r) => {
+                  setAttackMsg(r.message)
+                  load()
+                })
+                .catch((e) => setAttackMsg(e instanceof Error ? e.message : 'Death save failed'))
+            }}
           />
         </aside>
       </div>
@@ -242,15 +279,32 @@ export function Player() {
             targetName={target?.name}
             targetAc={target?.ac}
             hasAdvantage={Boolean(targetId && myCombatant?.advantageAgainst?.includes(targetId))}
+            disabled={!myCombatant || !canTakeAttacks(myCombatant)}
+            disabledReason={
+              !myCombatant
+                ? undefined
+                : !canTakeAttacks(myCombatant)
+                  ? myCombatant.deathState === 'dead'
+                    ? 'You are dead.'
+                    : `You cannot take a normal attack (${myCombatant.deathState === 'ok' ? myCombatant.conditions.join(', ') || 'incapacitated' : myCombatant.deathState}).`
+                  : undefined
+            }
+            rollMode={
+              targetId && myCombatant?.advantageAgainst?.includes(targetId) && rollMode === 'normal' ? 'advantage' : rollMode
+            }
+            onRollMode={setRollMode}
             d20={d20}
+            d20b={d20b}
             damage={damage}
             onD20={setD20}
+            onD20b={setD20b}
             onDamage={setDamage}
             onResolve={submitAttack}
             canResolve={Boolean(targetId)}
             busy={busy}
             message={attackMsg}
           />
+          <SaveBar combatants={snap.combatants} selectedId={saveTargetId} characters={snap.characters} monster={null} compact />
         </>
       )}
 
@@ -284,7 +338,7 @@ export function Player() {
 
       <button
         type="button"
-        className={cn('fixed right-4 rounded-full bg-ember px-4 py-3 text-sm font-medium shadow-lg lg:hidden', me ? 'bottom-28' : 'bottom-4')}
+        className={cn('fixed right-4 rounded-full bg-ember px-4 py-3 text-sm font-medium shadow-lg lg:hidden', me ? 'bottom-36' : 'bottom-4')}
         onClick={() => {
           logout()
           nav('/')

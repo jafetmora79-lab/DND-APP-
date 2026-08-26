@@ -175,6 +175,14 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
                 <Input disabled={!canEdit} value={sheet.speed} onChange={(e) => patchSheet({ speed: e.target.value })} />
               </Field>
             </div>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <Field label="Death successes">
+                <Input type="number" min={0} max={3} disabled={!canEdit} value={sheet.deathSuccess} onChange={(e) => patchSheet({ deathSuccess: Math.max(0, Math.min(3, Number(e.target.value))) })} />
+              </Field>
+              <Field label="Death failures">
+                <Input type="number" min={0} max={3} disabled={!canEdit} value={sheet.deathFail} onChange={(e) => patchSheet({ deathFail: Math.max(0, Math.min(3, Number(e.target.value))) })} />
+              </Field>
+            </div>
             <p className="text-sm text-muted">
               Proficiency bonus {signed(pb)} · Initiative {signed(sheet.initiativeBonus ?? abilityMod(sheet.abilities.dex))} · Passive Perception{' '}
               {10 +
@@ -262,6 +270,106 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
                 </Button>
               )}
             </div>
+            <div>
+              <div className="mb-2 text-xs uppercase tracking-wider text-muted">Resources</div>
+              <p className="mb-2 text-xs text-muted">Spell slots, Second Wind, Rage, or anything with uses. Short/long rest reset current to max.</p>
+              {(sheet.resources ?? []).map((res, i) => (
+                <div key={i} className="mb-2 grid grid-cols-2 gap-1 sm:grid-cols-[1fr_3.5rem_3.5rem_6rem_auto] sm:items-center">
+                  <Input
+                    disabled={!canEdit}
+                    placeholder="Name"
+                    value={res.name}
+                    onChange={(e) => {
+                      const resources = (sheet.resources ?? []).slice()
+                      resources[i] = { ...res, name: e.target.value }
+                      patchSheet({ resources })
+                    }}
+                  />
+                  <Input
+                    type="number"
+                    disabled={!canEdit}
+                    value={res.current}
+                    onChange={(e) => {
+                      const resources = (sheet.resources ?? []).slice()
+                      resources[i] = { ...res, current: Number(e.target.value) }
+                      patchSheet({ resources })
+                    }}
+                    aria-label="Current"
+                  />
+                  <Input
+                    type="number"
+                    disabled={!canEdit}
+                    value={res.max}
+                    onChange={(e) => {
+                      const resources = (sheet.resources ?? []).slice()
+                      resources[i] = { ...res, max: Number(e.target.value) }
+                      patchSheet({ resources })
+                    }}
+                    aria-label="Max"
+                  />
+                  <select
+                    className="h-10 rounded-md border border-line bg-bg px-1 text-xs"
+                    disabled={!canEdit}
+                    value={res.reset}
+                    onChange={(e) => {
+                      const resources = (sheet.resources ?? []).slice()
+                      resources[i] = { ...res, reset: e.target.value as typeof res.reset }
+                      patchSheet({ resources })
+                    }}
+                  >
+                    <option value="short">Short rest</option>
+                    <option value="long">Long rest</option>
+                    <option value="manual">Manual</option>
+                  </select>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      className="text-blood"
+                      onClick={() => patchSheet({ resources: (sheet.resources ?? []).filter((_, j) => j !== i) })}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              {canEdit && (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      patchSheet({ resources: [...(sheet.resources ?? []), { name: '', current: 1, max: 1, reset: 'long' }] })
+                    }
+                  >
+                    Add resource
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      patchSheet({
+                        resources: (sheet.resources ?? []).map((r) =>
+                          r.reset === 'short' || r.reset === 'long' ? { ...r, current: r.max } : r,
+                        ),
+                      })
+                    }
+                  >
+                    Short rest
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      patchSheet({
+                        resources: (sheet.resources ?? []).map((r) => (r.reset === 'manual' ? r : { ...r, current: r.max })),
+                      })
+                    }
+                  >
+                    Long rest
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -327,17 +435,31 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
             </div>
             <div className="grid grid-cols-3 gap-2 md:grid-cols-9">
               {sheet.spellSlots.map((max, i) => (
-                <Field key={i} label={`L${i + 1} slots`}>
-                  <Input
-                    type="number"
-                    disabled={!canEdit}
-                    value={max}
-                    onChange={(e) => {
-                      const spellSlots = sheet.spellSlots.slice()
-                      spellSlots[i] = Number(e.target.value)
-                      patchSheet({ spellSlots })
-                    }}
-                  />
+                <Field key={i} label={`L${i + 1}`}>
+                  <div className="flex gap-1">
+                    <Input
+                      type="number"
+                      disabled={!canEdit}
+                      value={sheet.spellSlotsUsed[i] ?? 0}
+                      onChange={(e) => {
+                        const spellSlotsUsed = sheet.spellSlotsUsed.slice()
+                        spellSlotsUsed[i] = Number(e.target.value)
+                        patchSheet({ spellSlotsUsed })
+                      }}
+                      aria-label={`Level ${i + 1} used`}
+                    />
+                    <Input
+                      type="number"
+                      disabled={!canEdit}
+                      value={max}
+                      onChange={(e) => {
+                        const spellSlots = sheet.spellSlots.slice()
+                        spellSlots[i] = Number(e.target.value)
+                        patchSheet({ spellSlots })
+                      }}
+                      aria-label={`Level ${i + 1} max`}
+                    />
+                  </div>
                 </Field>
               ))}
             </div>
