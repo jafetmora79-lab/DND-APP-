@@ -551,7 +551,14 @@ export function Live() {
             >
               <Eye className="h-4 w-4" /> Reveal
             </Button>
-            <Button size="sm" variant={tool === 'hide' ? 'default' : 'outline'} onClick={() => setTool('hide')}>
+            <Button
+              size="sm"
+              variant={tool === 'hide' ? 'default' : 'outline'}
+              onClick={() => {
+                if (!instance.fogState.enabled) onFog({ ...instance.fogState, enabled: true })
+                setTool('hide')
+              }}
+            >
               <EyeOff className="h-4 w-4" /> Hide
             </Button>
             <Button

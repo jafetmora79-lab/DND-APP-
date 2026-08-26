@@ -191,6 +191,16 @@ export function Player() {
         <Button size="sm" variant="outline" onClick={() => setDrawer(true)}>
           <BookOpen className="h-4 w-4" /> Sheets
         </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            logout()
+            nav('/')
+          }}
+        >
+          Leave
+        </Button>
       </header>
       {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
 
@@ -353,17 +363,6 @@ export function Player() {
       )}
 
       {outcome && <EncounterOutcomeOverlay outcome={outcome} encounterName={snap.instance.name} />}
-
-      <button
-        type="button"
-        className={cn('fixed right-4 rounded-full bg-ember px-4 py-3 text-sm font-medium shadow-lg lg:hidden', me ? 'bottom-36' : 'bottom-4')}
-        onClick={() => {
-          logout()
-          nav('/')
-        }}
-      >
-        Leave table
-      </button>
     </div>
   )
 }

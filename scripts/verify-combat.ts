@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import {
   afterHpChange,
   attackOutcome,
+  attacksFromMonster,
   canTakeAttacks,
   characterSaveBonus,
   effectiveRollMode,
@@ -11,6 +12,7 @@ import {
   movementCostFeet,
   parseCombatantStats,
   parseDeathState,
+  parseRangeFeet,
   parseRollMode,
   parseSpeedFeet,
   parseTurnEconomy,
@@ -18,8 +20,12 @@ import {
   resolveDeathSave,
   resolveSavingThrow,
   saveBonusForCombatant,
+  snapshotForPlayer,
   spendMovement,
+  tokenHiddenFromPlayers,
 } from '../src/lib/combat.ts'
+import { emptyHub } from '../src/lib/campaign-hub.ts'
+import { emptySheet } from '../src/lib/types.ts'
 
 function check(name: string, fn: () => void) {
   fn()
@@ -178,6 +184,56 @@ check('per-turn movement uses the 5-ft Chebyshev grid', () => {
   assert.match(blocked.error ?? '', /Not enough movement/)
   assert.equal(blocked.remaining, 15)
   assert.equal(spendMovement(30, 0).remaining, 30)
+})
+
+check('SRD ranged attacks keep normal range, not melee 5 ft', () => {
+  const atks = attacksFromMonster({
+    actions: [
+      {
+        name: 'Scimitar',
+        desc: 'Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 5 (1d6 + 2) slashing damage.',
+      },
+      {
+        name: 'Shortbow',
+        desc: 'Ranged Weapon Attack: +4 to hit, range 80/320 ft., one target. Hit: 5 (1d6 + 2) piercing damage.',
+      },
+    ],
+  })
+  assert.equal(parseRangeFeet(atks.find((a) => a.name === 'Scimitar')?.range), 5)
+  assert.equal(parseRangeFeet(atks.find((a) => a.name === 'Shortbow')?.range), 80)
+})
+
+check('fog and visibleToPlayers hide tokens from players', () => {
+  const fog = { cols: 4, rows: 3, enabled: true, revealed: Array.from({ length: 12 }, () => 1) }
+  fog.revealed[0] = 0
+  const hiddenCell = { x: 35, y: 35, visibleToPlayers: true }
+  const shownCell = { x: 105, y: 35, visibleToPlayers: true }
+  const invisible = { x: 105, y: 35, visibleToPlayers: false }
+  assert.equal(tokenHiddenFromPlayers(hiddenCell, fog, 70, false), true)
+  assert.equal(tokenHiddenFromPlayers(shownCell, fog, 70, false), false)
+  assert.equal(tokenHiddenFromPlayers(hiddenCell, fog, 70, true), false)
+  assert.equal(tokenHiddenFromPlayers(invisible, { ...fog, enabled: false }, 70, false), true)
+  const snap = snapshotForPlayer(
+    {
+      campaign: { id: 'c', dmAccountId: 'd', name: 'T', hub: emptyHub() },
+      session: null,
+      instance: { id: 'i', campaignId: 'c', encounterTemplateId: null, name: 'F', status: 'active', roundNumber: 1, currentTurnPosition: 0, fogState: fog, mapId: 'm' },
+      map: { id: 'm', campaignId: 'c', name: 'M', imageUrl: '', gridCols: 4, gridRows: 3, gridSize: 70, gridType: 'square', blocked: [] },
+      combatants: [],
+      tokens: [
+        { id: 't1', encounterInstanceId: 'i', x: 35, y: 35, refType: 'combatant', refId: 'g', label: 'Goblin', color: '#c', sizeSquares: 1, visibleToPlayers: true },
+        { id: 't2', encounterInstanceId: 'i', x: 105, y: 35, refType: 'combatant', refId: 'e', label: 'Elara', color: '#6', sizeSquares: 1, visibleToPlayers: true },
+      ],
+      characters: [
+        { id: 'me', campaignId: 'c', personalCode: 'ELARA7K2', ownerDisplayName: 'A', name: 'Elara', tokenColor: '#6', sourcePdfUrl: null, sheet: emptySheet() },
+        { id: 'you', campaignId: 'c', personalCode: 'BROK4M9X', ownerDisplayName: 'B', name: 'Brok', tokenColor: '#b', sourcePdfUrl: null, sheet: emptySheet() },
+      ],
+    },
+    'me',
+  )
+  assert.deepEqual(snap.tokens.map((t) => t.id), ['t2'])
+  assert.equal(snap.characters.find((c) => c.id === 'me')?.personalCode, 'ELARA7K2')
+  assert.equal(snap.characters.find((c) => c.id === 'you')?.personalCode, '••••••••')
 })
 
 console.log('all combat checks passed')

@@ -8,8 +8,8 @@ import express from 'express'
 import multer from 'multer'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { sessionFromRow } from '../src/lib/session.ts'
-import { clampMovementRemaining, combatantStatsFromMonster, parseDeathState, parseSpeedFeet, parseTurnEconomy, statsForLiveCombatant } from '../src/lib/combat.ts'
-import { emptySheet, type AuthUser, type FogState, type NamedEntry } from '../src/lib/types.ts'
+import { clampMovementRemaining, combatantStatsFromMonster, parseDeathState, parseSpeedFeet, parseTurnEconomy, snapshotForPlayer, statsForLiveCombatant } from '../src/lib/combat.ts'
+import { emptySheet, type AuthUser, type EncounterSnapshot, type FogState, type NamedEntry } from '../src/lib/types.ts'
 import {
     clampGridDim,
     clampGridSize,
@@ -73,18 +73,10 @@ const upload = multer({
   },
 })
 
-type Sock = WebSocket & { campaignId?: string; role?: string }
+type Sock = WebSocket & { campaignId?: string; role?: string; characterId?: string }
 
 const server = http.createServer(app)
 const wss = new WebSocketServer({ server, path: '/ws' })
-
-function broadcast(campaignId: string, payload: unknown) {
-  const data = JSON.stringify(payload)
-  for (const client of wss.clients) {
-    const c = client as Sock
-    if (c.readyState === 1 && c.campaignId === campaignId) c.send(data)
-  }
-}
 
 function authOf(req: express.Request): AuthUser | null {
   const header = req.headers.authorization
@@ -235,7 +227,14 @@ function snapshot(campaignId: string) {
 }
 
 function pushCampaign(campaignId: string) {
-  broadcast(campaignId, { type: 'snapshot', payload: snapshot(campaignId) })
+  const snap = snapshot(campaignId)
+  if (!snap) return
+  for (const client of wss.clients) {
+    const c = client as Sock
+    if (c.readyState !== 1 || c.campaignId !== campaignId) continue
+    const payload = c.role === 'player' ? snapshotForPlayer(snap as EncounterSnapshot, c.characterId) : snap
+    c.send(JSON.stringify({ type: 'snapshot', payload }))
+  }
 }
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
@@ -1025,11 +1024,8 @@ app.get('/api/campaigns/:id/live', requireUser, (req, res) => {
   }
   const snap = snapshot(param(req, 'id'))
   if (user.role === 'player' && snap) {
-    snap.characters = snap.characters.map((c) => (c.id === user.characterId ? c : { ...c, personalCode: '••••••••' }))
-    snap.tokens = snap.tokens.filter((t) => t.visibleToPlayers)
-    if (snap.instance?.fogState.enabled) {
-      /* fog handled client-side */
-    }
+    res.json(snapshotForPlayer(snap as EncounterSnapshot, user.characterId))
+    return
   }
   res.json(snap)
 })
@@ -1395,6 +1391,7 @@ wss.on('connection', (ws, req) => {
     return
   }
   sock.role = row.role as string
+  sock.characterId = row.character_id ? String(row.character_id) : undefined
   sock.campaignId = row.role === 'dm' ? url.searchParams.get('campaignId') || '' : (row.campaign_id as string)
   ws.on('message', (raw) => {
     try {
