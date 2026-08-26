@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Circle, Group, Layer, Line, Rect, Shape, Stage, Text, Image as KImage } from 'react-konva'
+import { Circle, Group, Layer, Rect, Shape, Stage, Text, Image as KImage } from 'react-konva'
 import useImage from 'use-image'
 import type { BattleMap, FogState, MapToken } from '@/lib/types'
 import { initials, pixelToCell, tokenOccupiesBlocked } from '@/lib/utils'
@@ -94,10 +94,6 @@ export function MapBoard({ map, tokens, fog, isDm, selectedId, tool = 'select', 
     if (paintingTerrain) paintTerrain(x, y)
   }
 
-  const gridLines: number[][] = []
-  for (let x = 0; x <= map.gridCols; x++) gridLines.push([x * map.gridSize, 0, x * map.gridSize, worldH])
-  for (let y = 0; y <= map.gridRows; y++) gridLines.push([0, y * map.gridSize, worldW, y * map.gridSize])
-
   return (
     <div ref={wrap} className="relative h-full w-full overflow-hidden bg-[#0a0806]">
       <Stage
@@ -177,9 +173,6 @@ export function MapBoard({ map, tokens, fog, isDm, selectedId, tool = 'select', 
               ctx.fillStrokeShape(shape)
             }}
           />
-          {gridLines.map((pts, i) => (
-            <Line key={i} points={pts} stroke="rgba(243,230,208,0.22)" strokeWidth={1} listening={false} />
-          ))}
         </Layer>
         <Layer listening={false}>
           {fog.enabled && (
@@ -199,6 +192,36 @@ export function MapBoard({ map, tokens, fog, isDm, selectedId, tool = 'select', 
               height={worldH}
             />
           )}
+          <Shape
+            listening={false}
+            width={worldW}
+            height={worldH}
+            sceneFunc={(ctx, shape) => {
+              const trace = () => {
+                ctx.beginPath()
+                for (let x = 0; x <= map.gridCols; x++) {
+                  const px = x * map.gridSize + 0.5
+                  ctx.moveTo(px, 0)
+                  ctx.lineTo(px, worldH)
+                }
+                for (let y = 0; y <= map.gridRows; y++) {
+                  const py = y * map.gridSize + 0.5
+                  ctx.moveTo(0, py)
+                  ctx.lineTo(worldW, py)
+                }
+              }
+              ctx.strokeStyle = 'rgba(8, 6, 4, 0.92)'
+              ctx.lineWidth = 3
+              ctx.lineCap = 'square'
+              trace()
+              ctx.stroke()
+              ctx.strokeStyle = 'rgba(255, 244, 214, 0.95)'
+              ctx.lineWidth = 1.25
+              trace()
+              ctx.stroke()
+              ctx.fillStrokeShape(shape)
+            }}
+          />
         </Layer>
         <Layer>
           {tokens.map((t) => {
