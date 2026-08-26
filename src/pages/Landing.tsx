@@ -11,10 +11,11 @@ export function Landing() {
   const nav = useNavigate()
   const [mode, setMode] = useState<'dm' | 'join'>('dm')
   const [creating, setCreating] = useState(false)
-  const [name, setName] = useState(usingSupabase ? '' : 'Hearthkeeper')
-  const [passcode, setPasscode] = useState(usingSupabase ? '' : 'torch')
-  const [joinCode, setJoinCode] = useState(usingSupabase ? '' : 'HEARTH')
-  const [personal, setPersonal] = useState(usingSupabase ? '' : 'ELARA7K2')
+  const sampleTable = !usingSupabase && !import.meta.env.PROD
+  const [name, setName] = useState(sampleTable ? 'Hearthkeeper' : '')
+  const [passcode, setPasscode] = useState(sampleTable ? 'torch' : '')
+  const [joinCode, setJoinCode] = useState(sampleTable ? 'HEARTH' : '')
+  const [personal, setPersonal] = useState(sampleTable ? 'ELARA7K2' : '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -129,6 +130,13 @@ export function Landing() {
           <Dices className="mr-1 inline h-4 w-4 text-gold" />
           Connected to your Supabase project. Claim a table name to seed the SRD 5.1 bestiary, then share tonight’s join
           code with the phones at the table.
+        </p>
+      ) : import.meta.env.PROD ? (
+        <p className="mt-8 text-center text-sm text-muted">
+          <Dices className="mr-1 inline h-4 w-4 text-gold" />
+          This GitHub Pages copy is the table UI only. Add repository Actions secrets{' '}
+          <span className="text-ink">VITE_SUPABASE_URL</span> and <span className="text-ink">VITE_SUPABASE_ANON_KEY</span>{' '}
+          (see the README), then re-run the Pages workflow so phones can join a hosted table.
         </p>
       ) : (
         <p className="mt-8 text-center text-sm text-muted">

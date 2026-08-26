@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1050">
+  <defs>
+    <pattern id="stone" width="70" height="70" patternUnits="userSpaceOnUse">
+      <rect width="70" height="70" fill="#3a3228"/>
+      <rect x="1" y="1" width="68" height="68" fill="#4a4034"/>
+      <path d="M0 35h70M35 0v70" stroke="#2c261e" stroke-width="1" opacity="0.35"/>
+    </pattern>
+    <radialGradient id="torch" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f0b060" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#f0b060" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1400" height="1050" fill="#1a1510"/>
+  <rect x="70" y="70" width="1260" height="910" fill="url(#stone)"/>
+  <!-- outer walls -->
+  <rect x="0" y="0" width="1400" height="70" fill="#1c1612"/>
+  <rect x="0" y="980" width="1400" height="70" fill="#1c1612"/>
+  <rect x="0" y="0" width="70" height="1050" fill="#1c1612"/>
+  <rect x="1330" y="0" width="70" height="1050" fill="#1c1612"/>
+  <!-- cave pillars / walls -->
+  <rect x="350" y="70" width="70" height="280" fill="#241c16"/>
+  <rect x="700" y="280" width="280" height="70" fill="#241c16"/>
+  <rect x="980" y="70" width="70" height="420" fill="#241c16"/>
+  <rect x="210" y="630" width="560" height="70" fill="#241c16"/>
+  <rect x="770" y="630" width="70" height="280" fill="#241c16"/>
+  <!-- stream -->
+  <path d="M70 820 C 280 780, 420 900, 700 860 S 1100 780, 1330 840 L 1330 910 L 70 910 Z" fill="#2a4a55" opacity="0.85"/>
+  <path d="M70 840 C 300 800, 440 910, 720 875 S 1120 800, 1330 860" fill="none" stroke="#6ea8c9" stroke-width="3" opacity="0.35"/>
+  <!-- campfire -->
+  <circle cx="560" cy="420" r="90" fill="url(#torch)"/>
+  <circle cx="560" cy="420" r="18" fill="#e07030"/>
+  <circle cx="554" cy="414" r="8" fill="#f0d78c"/>
+  <!-- bedrolls -->
+  <rect x="490" y="490" width="50" height="22" rx="6" fill="#6b3a2a"/>
+  <rect x="570" y="500" width="50" height="22" rx="6" fill="#4a5a3a"/>
+  <rect x="450" y="360" width="50" height="22" rx="6" fill="#3a4a6b"/>
+  <!-- crates -->
+  <rect x="1120" y="210" width="56" height="56" fill="#6a5238"/>
+  <rect x="1185" y="230" width="42" height="42" fill="#7a5e40"/>
+  <rect x="180" y="180" width="48" height="48" fill="#5a4632"/>
+  <!-- door / mouth -->
+  <rect x="70" y="420" width="40" height="140" fill="#2a221c"/>
+  <rect x="80" y="450" width="18" height="80" fill="#120e0b"/>
+  <!-- grid hint (subtle) -->
+  <g stroke="#f3e6d0" stroke-opacity="0.05" stroke-width="1">
+    <path d="M70 70 V980 M140 70 V980 M210 70 V980 M280 70 V980 M350 70 V980 M420 70 V980 M490 70 V980 M560 70 V980 M630 70 V980 M700 70 V980 M770 70 V980 M840 70 V980 M910 70 V980 M980 70 V980 M1050 70 V980 M1120 70 V980 M1190 70 V980 M1260 70 V980 M1330 70 V980"/>
+    <path d="M70 70 H1330 M70 140 H1330 M70 210 H1330 M70 280 H1330 M70 350 H1330 M70 420 H1330 M70 490 H1330 M70 560 H1330 M70 630 H1330 M70 700 H1330 M70 770 H1330 M70 840 H1330 M70 910 H1330 M70 980 H1330"/>
+  </g>
+</svg>
