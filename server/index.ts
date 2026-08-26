@@ -8,7 +8,7 @@ import express from 'express'
 import multer from 'multer'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { sessionFromRow } from '../src/lib/session.ts'
-import { parseDeathState, parseTurnEconomy } from '../src/lib/combat.ts'
+import { combatantStatsFromMonster, parseDeathState, parseTurnEconomy, statsForLiveCombatant } from '../src/lib/combat.ts'
 import { emptySheet, type AuthUser, type FogState, type NamedEntry } from '../src/lib/types.ts'
 import {
     clampGridDim,
@@ -150,6 +150,22 @@ function snapshot(campaignId: string) {
   const combatants = instanceId
     ? (db.prepare('SELECT * FROM combatants WHERE encounter_instance_id = ? ORDER BY turn_order_position').all(instanceId) as Record<string, unknown>[])
     : []
+  const missingBestiaryIds = [
+    ...new Set(
+      combatants
+        .filter((c) => c.source === 'bestiary' && !statsForLiveCombatant(c, null))
+        .map((c) => String(c.source_id ?? ''))
+        .filter(Boolean),
+    ),
+  ]
+  const bestiaryById = new Map<string, Record<string, unknown>>()
+  if (missingBestiaryIds.length) {
+    const placeholders = missingBestiaryIds.map(() => '?').join(',')
+    const rows = db
+      .prepare(`SELECT * FROM bestiary_monsters WHERE id IN (${placeholders})`)
+      .all(...missingBestiaryIds) as Record<string, unknown>[]
+    for (const m of rows) bestiaryById.set(String(m.id), m)
+  }
   const tokens = instanceId
     ? (db.prepare('SELECT * FROM tokens_on_map WHERE encounter_instance_id = ?').all(instanceId) as Record<string, unknown>[])
     : []
@@ -192,6 +208,7 @@ function snapshot(campaignId: string) {
       color: c.color,
       notes: c.notes,
       constitution: Number(c.constitution ?? 10),
+      stats: statsForLiveCombatant(c, c.source === 'bestiary' ? bestiaryById.get(String(c.source_id ?? '')) : null),
       advantageAgainst: jparse<string[]>((c.advantage_against_json as string) || '[]', []),
       deathState: parseDeathState(c.death_state),
       deathSuccess: Number(c.death_success ?? 0),
@@ -922,9 +939,13 @@ app.post('/api/campaigns/:id/finish-encounter', requireDm, (req, res) => {
     return
   }
   if (existing.encounter_instance_id) {
+    const inst = db.prepare('SELECT status FROM encounter_instances WHERE id = ?').get(existing.encounter_instance_id) as
+      | { status?: string }
+      | undefined
+    const firstFinish = inst?.status !== 'completed'
     db.prepare(`UPDATE encounter_instances SET status = 'completed' WHERE id = ?`).run(existing.encounter_instance_id)
+    if (firstFinish) applyFinishRewards(campaignId, existing.encounter_instance_id, outcome)
   }
-  applyFinishRewards(campaignId, existing.encounter_instance_id, outcome)
   db.prepare('UPDATE live_sessions SET table_phase=?, last_outcome=? WHERE id=?').run(
     outcome === 'won' ? 'victory' : 'defeat',
     outcome,
@@ -1032,8 +1053,8 @@ app.post('/api/instances/:id/combatants', requireDm, (req, res) => {
         const id = i === 0 ? cid : ids.id()
         const name = qty > 1 ? `${src.name} ${i + 1}` : String(src.name)
         db.prepare(
-          `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution, stats_json)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         ).run(
           id,
           inst.id,
@@ -1050,6 +1071,7 @@ app.post('/api/instances/:id/combatants', requireDm, (req, res) => {
           req.body.color || '#c4453c',
           '',
           Number(src.con ?? 10),
+          JSON.stringify(combatantStatsFromMonster(src)),
         )
         const pos = battle
           ? walkablePixel(battle, 3 + i, 3)

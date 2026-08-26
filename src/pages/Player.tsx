@@ -168,6 +168,7 @@ export function Player() {
           selectedId={viewing?.id ?? null}
           onSelectCharacter={setSheetId}
           sheet={sheet}
+          playerView
         />
       </div>
     )
