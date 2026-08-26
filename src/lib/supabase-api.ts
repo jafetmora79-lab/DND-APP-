@@ -1,11 +1,12 @@
 import { customAlphabet } from 'nanoid'
 import { publicAsset, tableEmail } from './config'
-import { emptySheet, type AuthUser, type BattleMap, type FogState, type Monster, type NamedEntry, type PlayerCharacter } from './types'
+import { emptySheet, type AuthUser, type BattleMap, type EncounterInstance, type FogState, type Monster, type NamedEntry, type PlayerCharacter } from './types'
 import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
 import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter } from './utils'
-import { afterHpChange, clampMovementRemaining, combatantStatsFromMonster, emptyTurnEconomy, movementCostFeet, parseDeathState, parseSpeedFeet, parseTurnEconomy, resolveDeathSave, snapshotForPlayer, specCopyCell, spendMovement, statsForLiveCombatant, tokenCell } from './combat'
+import { afterHpChange, clampMovementRemaining, combatantStatsFromMonster, emptyTurnEconomy, formatDiceUsed, movementCostFeet, parseDeathState, parseSpeedFeet, parseTurnEconomy, resolveDeathSave, snapshotForPlayer, specCopyCell, spendMovement, statsForLiveCombatant, tokenCell } from './combat'
+import { attackActivityLines, parseActivity, parsePrompt } from './combat-activity'
 import { sessionFromRow } from './session'
 import { applyEncounterRewards, parseHub } from './campaign-hub'
 import { packTemplateBody, templateFromRow, unpackTemplateJson } from './template-json'
@@ -17,6 +18,31 @@ const personalCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8)
 function db() {
   if (!supabase) throw new Error('Supabase is not configured')
   return supabase
+}
+
+function encounterFromRow(i: Record<string, unknown>): EncounterInstance {
+  return {
+    id: String(i.id),
+    campaignId: String(i.campaign_id ?? ''),
+    encounterTemplateId: i.encounter_template_id ? String(i.encounter_template_id) : null,
+    name: String(i.name),
+    status: i.status as EncounterInstance['status'],
+    roundNumber: Number(i.round_number),
+    currentTurnPosition: Number(i.current_turn_position),
+    fogState: i.fog_state as FogState,
+    mapId: i.map_id ? String(i.map_id) : null,
+    activity: parseActivity(i.activity_json),
+    prompt: parsePrompt(i.prompt_json),
+  }
+}
+
+function missingRpc(message: string, name: string) {
+  return /could not find|does not exist|schema cache/i.test(message) && message.includes(name)
+}
+
+async function logFeed(instanceId: string, text: string) {
+  const { error } = await db().rpc('append_combat_activity', { p_instance: instanceId, p_text: text })
+  if (error && !missingRpc(error.message, 'append_combat_activity')) throwIf(error)
 }
 
 function throwIf(error: { message: string } | null) {
@@ -788,17 +814,7 @@ export const supabaseApi: TableApi = {
     const { data, error } = await db().from('encounter_instances').select('*').eq('campaign_id', campaignId)
     throwIf(error)
     return {
-      instances: (data ?? []).map((i) => ({
-        id: String(i.id),
-        campaignId: String(i.campaign_id),
-        encounterTemplateId: i.encounter_template_id ? String(i.encounter_template_id) : null,
-        name: String(i.name),
-        status: i.status as 'active' | 'paused' | 'completed',
-        roundNumber: Number(i.round_number),
-        currentTurnPosition: Number(i.current_turn_position),
-        fogState: i.fog_state as FogState,
-        mapId: i.map_id ? String(i.map_id) : null,
-      })),
+      instances: (data ?? []).map((i) => encounterFromRow(i as Record<string, unknown>)),
     }
   },
 
@@ -1099,19 +1115,7 @@ export const supabaseApi: TableApi = {
         hub: parseHub((campaign as { hub_json?: unknown }).hub_json),
       },
       session: session ? sessionFromRow(session as Record<string, unknown>) : null,
-      instance: instance
-        ? {
-            id: String(instance.id),
-            campaignId: String(instance.campaign_id),
-            encounterTemplateId: instance.encounter_template_id ? String(instance.encounter_template_id) : null,
-            name: String(instance.name),
-            status: instance.status,
-            roundNumber: Number(instance.round_number),
-            currentTurnPosition: Number(instance.current_turn_position),
-            fogState: instance.fog_state as FogState,
-            mapId: instance.map_id ? String(instance.map_id) : null,
-          }
-        : null,
+      instance: instance ? encounterFromRow(instance as Record<string, unknown>) : null,
       map: map ? mapFromRow(map as Record<string, unknown>) : null,
       combatants: (combatants ?? []).map((c) => ({
         id: String(c.id),
@@ -1291,6 +1295,9 @@ export const supabaseApi: TableApi = {
   },
 
   async nextTurn(id) {
+    const rpc = await db().rpc('player_advance_turn', { p_instance: id })
+    if (!rpc.error) return {}
+    if (!missingRpc(rpc.error.message, 'player_advance_turn')) throwIf(rpc.error)
     const { data: inst, error } = await db().from('encounter_instances').select('*').eq('id', id).single()
     throwIf(error)
     const { count } = await db().from('combatants').select('id', { count: 'exact', head: true }).eq('encounter_instance_id', id)
@@ -1371,6 +1378,7 @@ export const supabaseApi: TableApi = {
         if (!spent.ok) throw new Error(spent.error)
         const { error: mvErr } = await db().from('combatants').update({ movement_remaining: spent.remaining }).eq('id', comb.id)
         throwIf(mvErr)
+        if (cost > 0) await logFeed(String(token.encounter_instance_id), `${comb.name} moved ${cost} ft.`)
       }
     }
     const { error } = await db()
@@ -1412,7 +1420,7 @@ export const supabaseApi: TableApi = {
       error = retry.error
     }
     throwIf(error)
-    return data as {
+    const result = data as {
       hit: boolean
       crit: boolean
       fumble: boolean
@@ -1428,6 +1436,28 @@ export const supabaseApi: TableApi = {
       targetName: string
       message: string
     }
+    let attackerName = 'Player'
+    if (body.attackerId) {
+      const { data: atk } = await db().from('combatants').select('name').eq('id', body.attackerId).maybeSingle()
+      if (atk?.name) attackerName = String(atk.name)
+    }
+    const used = Number(result.d20 ?? body.d20)
+    const bonus = Number(result.total) - used
+    const mode = String(result.rollMode ?? body.rollMode ?? 'normal')
+    const diceNote = formatDiceUsed(body.d20, mode === 'normal' ? null : (body.d20b ?? result.d20b ?? null), used)
+    for (const line of attackActivityLines({
+      attackerName,
+      targetName: result.targetName,
+      diceNote,
+      bonus,
+      total: result.total,
+      hit: result.hit,
+      fumble: result.fumble,
+      damage: result.damage,
+    })) {
+      await logFeed(instanceId, line)
+    }
+    return result
   },
 
   async deathSave(combatantId, body) {
@@ -1492,6 +1522,60 @@ export const supabaseApi: TableApi = {
       throwIf(rpc.error)
     }
     return {}
+  },
+
+  async logActivity(instanceId, text) {
+    await logFeed(instanceId, text)
+    return {}
+  },
+
+  async declareAction(instanceId, body) {
+    const { data, error } = await db().rpc('declare_combat_action', {
+      p_instance: instanceId,
+      p_kind: body.kind,
+      p_slot: body.slot ?? 'action',
+      p_combatant: body.combatantId ?? null,
+      p_target: body.targetId ?? null,
+      p_other: body.other ?? null,
+      p_custom: body.custom ?? null,
+    })
+    if (error) {
+      throw new Error(
+        missingRpc(error.message, 'declare_combat_action')
+          ? 'Run migrate-player-combat.sql in the Supabase SQL Editor, then: notify pgrst, \'reload schema\';'
+          : error.message,
+      )
+    }
+    return (data ?? { text: '' }) as { text: string }
+  },
+
+  async setPrompt(instanceId, prompt) {
+    const { error } = await db().rpc('set_combat_prompt', { p_instance: instanceId, p_prompt: prompt })
+    if (error) {
+      throw new Error(
+        missingRpc(error.message, 'set_combat_prompt')
+          ? 'Run migrate-player-combat.sql in the Supabase SQL Editor, then: notify pgrst, \'reload schema\';'
+          : error.message,
+      )
+    }
+    return {}
+  },
+
+  async answerPrompt(instanceId, body) {
+    const { data, error } = await db().rpc('answer_combat_prompt', {
+      p_instance: instanceId,
+      p_use: body.use ?? null,
+      p_d20: body.d20 ?? null,
+      p_other: body.other ?? body.attackName ?? null,
+    })
+    if (error) {
+      throw new Error(
+        missingRpc(error.message, 'answer_combat_prompt')
+          ? 'Run migrate-player-combat.sql in the Supabase SQL Editor, then: notify pgrst, \'reload schema\';'
+          : error.message,
+      )
+    }
+    return (data ?? { ok: true }) as { ok?: true; success?: boolean; total?: number; message?: string }
   },
 }
 

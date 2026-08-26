@@ -46,6 +46,9 @@ export const CONDITIONS = [
   'Restrained',
   'Stunned',
   'Unconscious',
+  'Dodging',
+  'Disengaging',
+  'Hiding',
   'Exhaustion 1',
   'Exhaustion 2',
   'Exhaustion 3',
@@ -70,6 +73,9 @@ export const CONDITION_RING: Record<(typeof CONDITIONS)[number], string> = {
   Restrained: '#f59e0b',
   Stunned: '#38bdf8',
   Unconscious: '#818cf8',
+  Dodging: '#86efac',
+  Disengaging: '#fdba74',
+  Hiding: '#94a3b8',
   'Exhaustion 1': '#6b7280',
   'Exhaustion 2': '#6b7280',
   'Exhaustion 3': '#6b7280',
@@ -385,6 +391,22 @@ export type FogState = {
   revealed: number[]
 }
 
+export type CombatActivity = {
+  id: string
+  at: number
+  text: string
+}
+
+export type CombatPrompt = {
+  kind: 'reaction' | 'save'
+  combatantId: string
+  ability?: Ability
+  dc?: number
+} | null
+
+export type CombatDeclareKind = 'dash' | 'dodge' | 'help' | 'disengage' | 'hide' | 'other' | 'custom'
+export type CombatSpendSlot = 'action' | 'bonus' | 'reaction'
+
 export type EncounterInstance = {
   id: string
   campaignId: string
@@ -395,6 +417,8 @@ export type EncounterInstance = {
   currentTurnPosition: number
   fogState: FogState
   mapId: string | null
+  activity: CombatActivity[]
+  prompt: CombatPrompt
 }
 
 export type TablePhase = 'table' | 'combat' | 'victory' | 'defeat'

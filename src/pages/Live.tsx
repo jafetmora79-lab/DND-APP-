@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Check, Copy, Eye, EyeOff, Flag, Pause, Play, Sword, Trophy } from 'lucide-react'
 import { AttackBar } from '@/components/AttackBar'
+import { CombatActivityFeed } from '@/components/CombatActivityFeed'
 import { SaveBar } from '@/components/SaveBar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,7 +16,7 @@ import { api } from '@/lib/api'
 import { attacksFromMonster, canTakeAttacks, decorateTokens, effectiveRollMode, inRangeCombatantIds } from '@/lib/combat'
 import { useLive } from '@/lib/realtime'
 import { showCombatStage, showOutcome } from '@/lib/session'
-import type { Attack, EncounterInstance, EncounterSnapshot, EncounterTemplate, FogState, Monster, RollMode } from '@/lib/types'
+import { ABILITIES, ABILITY_LABELS, type Ability, type Attack, type EncounterInstance, type EncounterSnapshot, type EncounterTemplate, type FogState, type Monster, type RollMode } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
 import { markBeatForTemplate, parseHub, sortTemplates } from '@/lib/campaign-hub'
@@ -44,6 +45,8 @@ export function Live() {
   const [attackBusy, setAttackBusy] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [finalizeOpen, setFinalizeOpen] = useState(false)
+  const [saveAbility, setSaveAbility] = useState<Ability>('dex')
+  const [saveDc, setSaveDc] = useState('13')
   const captionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback(async () => {
@@ -467,6 +470,55 @@ export function Live() {
               api.reorder(instance.id, ids)
             }}
           />
+          {selectedCombatant?.source === 'character' && (
+            <div className="mt-3 space-y-2 rounded-md border border-line bg-bg p-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  void api
+                    .setPrompt(instance.id, { kind: 'reaction', combatantId: selectedCombatant.id })
+                    .catch((e) => setError(e instanceof Error ? e.message : 'Could not request reaction'))
+                }}
+              >
+                Request reaction
+              </Button>
+              <div className="flex flex-wrap items-center gap-1">
+                <select
+                  className="h-8 rounded-md border border-line bg-bg px-2 text-xs"
+                  value={saveAbility}
+                  onChange={(e) => setSaveAbility(e.target.value as Ability)}
+                  aria-label="Save ability"
+                >
+                  {ABILITIES.map((ab) => (
+                    <option key={ab} value={ab}>
+                      {ABILITY_LABELS[ab]}
+                    </option>
+                  ))}
+                </select>
+                <Input className="h-8 w-16" inputMode="numeric" placeholder="DC" value={saveDc} onChange={(e) => setSaveDc(e.target.value)} aria-label="Save DC" />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => {
+                    const dc = Number(saveDc)
+                    if (!Number.isInteger(dc) || dc < 1) {
+                      setError('Enter a DC.')
+                      return
+                    }
+                    void api
+                      .setPrompt(instance.id, { kind: 'save', combatantId: selectedCombatant.id, ability: saveAbility, dc })
+                      .catch((e) => setError(e instanceof Error ? e.message : 'Could not request save'))
+                  }}
+                >
+                  Request save
+                </Button>
+              </div>
+            </div>
+          )}
+          <CombatActivityFeed items={instance.activity ?? []} />
           <div className="mt-3 flex gap-2">
             <Input
               placeholder="Add monster…"

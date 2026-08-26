@@ -153,6 +153,24 @@ export const localApi = {
   resetDeath: (combatantId: string) => req(`/api/combatants/${combatantId}/reset-death`, { method: 'POST' }),
   setTurnEconomy: (combatantId: string, body: { action: boolean; bonus: boolean; reaction: boolean; movement: boolean }) =>
     req(`/api/combatants/${combatantId}/turn-economy`, { method: 'POST', body: JSON.stringify(body) }),
+  logActivity: (instanceId: string, text: string) =>
+    req(`/api/instances/${instanceId}/activity`, { method: 'POST', body: JSON.stringify({ text }) }),
+  declareAction: (
+    instanceId: string,
+    body: { kind: string; slot?: string; combatantId?: string; targetId?: string; other?: string; custom?: string },
+  ) => req<{ text: string }>(`/api/instances/${instanceId}/declare`, { method: 'POST', body: JSON.stringify(body) }),
+  setPrompt: (
+    instanceId: string,
+    prompt: { kind: 'reaction' | 'save'; combatantId: string; ability?: string; dc?: number } | null,
+  ) => req(`/api/instances/${instanceId}/prompt`, { method: 'POST', body: JSON.stringify(prompt ?? {}) }),
+  answerPrompt: (
+    instanceId: string,
+    body: { use?: boolean; d20?: number; other?: string; attackName?: string },
+  ) =>
+    req<{ ok?: true; success?: boolean; total?: number; message?: string }>(`/api/instances/${instanceId}/prompt-answer`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 }
 
 export type TableApi = typeof localApi

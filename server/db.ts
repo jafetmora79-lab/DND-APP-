@@ -4,9 +4,10 @@ import { fileURLToPath } from 'node:url'
 import bcrypt from 'bcryptjs'
 import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
-import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type FogState, type NamedEntry } from '../src/lib/types.ts'
-import { cellCenter, parseBlockedCells, playerStartOrigin, spreadCells, tokenCellKeys, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
-import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, combatantStatsFromMonster, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, isAttackInRange, movementCostFeet, parseAttackBonus, parseDeathState, parseRangeFeet, parseRollMode, parseSpeedFeet, parseTurnEconomy, pickUsedD20, resolveDeathSave, spendMovement, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
+import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type CombatDeclareKind, type CombatSpendSlot, type FogState, type NamedEntry } from '../src/lib/types.ts'
+import { cellCenter, parseBlockedCells, playerStartOrigin, proficiencyBonus, spreadCells, tokenCellKeys, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
+import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, characterSaveBonus, combatantStatsFromMonster, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, isAttackInRange, movementCostFeet, parseAttackBonus, parseCombatantStats, parseDeathState, parseRangeFeet, parseRollMode, parseSpeedFeet, parseTurnEconomy, pickUsedD20, resolveDeathSave, resolveSavingThrow, saveBonusForCombatant, spendMovement, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
+import { appendActivity, parseActivity, parsePrompt } from '../src/lib/combat-activity.ts'
 import { loadSrdMonsters } from './srd.ts'
 import { applyEncounterRewards, emptyBrief, parseHub } from '../src/lib/campaign-hub.ts'
 import { unpackTemplateJson } from '../src/lib/template-json.ts'
@@ -123,6 +124,8 @@ CREATE TABLE IF NOT EXISTS encounter_instances (
   current_turn_position INTEGER NOT NULL,
   fog_state TEXT NOT NULL,
   map_id TEXT,
+  activity_json TEXT NOT NULL DEFAULT '[]',
+  prompt_json TEXT,
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS combatants (
@@ -235,6 +238,16 @@ try {
 }
 try {
   db.exec(`ALTER TABLE combatants ADD COLUMN movement_remaining INTEGER NOT NULL DEFAULT 30`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE encounter_instances ADD COLUMN activity_json TEXT NOT NULL DEFAULT '[]'`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE encounter_instances ADD COLUMN prompt_json TEXT`)
 } catch {
   /* already present */
 }
@@ -608,6 +621,7 @@ export function resolveCombatAttack(opts: {
   d20b?: number
   rollMode?: string
   damage: number
+  skipRange?: boolean
 }): PlayerAttackResult {
   const { campaignId, instanceId, attackerId, targetId, attackIndex, d20, damage } = opts
   if (!Number.isInteger(d20) || d20 < 1 || d20 > 20) throw new Error('d20 must be between 1 and 20')
@@ -657,7 +671,7 @@ export function resolveCombatAttack(opts: {
     { ...tokenCell({ x: Number(toTok.x), y: Number(toTok.y) }, gridSize), size: Number(toTok.size_squares ?? 1) },
     parseRangeFeet(attack.range),
   )
-  if (!inRange) throw new Error(`That creature is out of range (${parseRangeFeet(attack.range)} ft)`)
+  if (!opts.skipRange && !inRange) throw new Error(`That creature is out of range (${parseRangeFeet(attack.range)} ft)`)
   const bonus = parseAttackBonus(attack.bonus)
   const ac = Number(target.ac)
   const attackerAdv = jparse<string[]>((attacker.advantage_against_json as string) || '[]', [])
@@ -675,7 +689,24 @@ export function resolveCombatAttack(opts: {
   const fumbleNote =
     outcome === 'fumble' ? ` ${target.name} has advantage against ${attacker.name} next turn.` : ''
   const modeNote = mode === 'normal' ? '' : ` (${mode})`
+  const atkName = String(attacker.name)
+  const tgtName = String(target.name)
+  const atkId = String(attacker.id)
+  const attackerEconRaw = String(attacker.turn_economy_json ?? '{}')
+  function noteAttack(hit: boolean, dmg: number) {
+    const econ = parseTurnEconomy(jparse(attackerEconRaw || '{}', {}))
+    econ.action = true
+    db.prepare('UPDATE combatants SET turn_economy_json = ? WHERE id = ?').run(JSON.stringify(econ), atkId)
+    appendInstanceActivity(instanceId, `${atkName} attacks ${tgtName}.`)
+    appendInstanceActivity(instanceId, `Attack roll: ${diceNote} + ${bonus} = ${total}.`)
+    appendInstanceActivity(instanceId, hit ? 'HIT.' : outcome === 'fumble' ? 'MISS (nat 1).' : 'MISS.')
+    if (hit) {
+      appendInstanceActivity(instanceId, `Damage: ${dmg}.`)
+      appendInstanceActivity(instanceId, `${tgtName} took ${dmg} damage.`)
+    }
+  }
   if (outcome === 'miss' || outcome === 'fumble') {
+    noteAttack(false, 0)
     return {
       hit: false,
       crit: false,
@@ -710,6 +741,7 @@ export function resolveCombatAttack(opts: {
     }
   }
   const crit = outcome === 'crit'
+  noteAttack(true, damage)
   return {
     hit: true,
     crit,
@@ -834,6 +866,124 @@ export function setCombatTurnEconomy(combatantId: string, economy: unknown) {
   db.prepare('UPDATE combatants SET turn_economy_json = ? WHERE id = ?').run(JSON.stringify(parseTurnEconomy(economy)), combatantId)
 }
 
+export function instanceActivity(instanceId: string) {
+  const row = db.prepare('SELECT activity_json, prompt_json FROM encounter_instances WHERE id = ?').get(instanceId) as
+    | { activity_json?: string; prompt_json?: string | null }
+    | undefined
+  return {
+    activity: parseActivity(jparse(row?.activity_json || '[]', [])),
+    prompt: parsePrompt(row?.prompt_json ? jparse(row.prompt_json, null) : null),
+  }
+}
+
+export function appendInstanceActivity(instanceId: string, text: string) {
+  const row = db.prepare('SELECT activity_json FROM encounter_instances WHERE id = ?').get(instanceId) as { activity_json?: string } | undefined
+  if (!row) return
+  const next = appendActivity(parseActivity(jparse(row.activity_json || '[]', [])), text)
+  db.prepare('UPDATE encounter_instances SET activity_json = ? WHERE id = ?').run(JSON.stringify(next), instanceId)
+}
+
+export function setInstancePrompt(instanceId: string, prompt: unknown) {
+  const parsed = parsePrompt(prompt)
+  db.prepare('UPDATE encounter_instances SET prompt_json = ? WHERE id = ?').run(parsed ? JSON.stringify(parsed) : null, instanceId)
+}
+
+export function applyDeclaredAction(opts: {
+  instanceId: string
+  combatantId: string
+  kind: string
+  slot?: string
+  targetId?: string
+  other?: string
+  custom?: string
+}) {
+  const inst = db.prepare('SELECT * FROM encounter_instances WHERE id = ?').get(opts.instanceId) as Record<string, unknown> | undefined
+  const c = db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(opts.combatantId, opts.instanceId) as
+    | Record<string, unknown>
+    | undefined
+  if (!inst || !c) throw new Error('Combatant not found')
+  if (Number(c.turn_order_position) !== Number(inst.current_turn_position)) throw new Error('Wait for your turn.')
+  const slot: CombatSpendSlot = opts.slot === 'bonus' ? 'bonus' : opts.slot === 'reaction' ? 'reaction' : 'action'
+  const econ = parseTurnEconomy(jparse((c.turn_economy_json as string) || '{}', {}))
+  if (econ[slot]) throw new Error(`Your ${slot} is already used.`)
+  const conditions = jparse<string[]>((c.conditions_json as string) || '[]', [])
+  const speed = parseSpeedFeet(c.speed_feet ?? 30)
+  let remaining = Number.isFinite(Number(c.movement_remaining)) ? Math.max(0, Number(c.movement_remaining)) : speed
+  const kind = String(opts.kind || '') as CombatDeclareKind
+  const name = String(c.name)
+  let text = ''
+  if (kind === 'dash') {
+    remaining += speed
+    text = `${name} used Dash.`
+  } else if (kind === 'dodge') {
+    if (!conditions.includes('Dodging')) conditions.push('Dodging')
+    text = `${name} used Dodge.`
+  } else if (kind === 'disengage') {
+    if (!conditions.includes('Disengaging')) conditions.push('Disengaging')
+    text = `${name} used Disengage.`
+  } else if (kind === 'hide') {
+    if (!conditions.includes('Hiding')) conditions.push('Hiding')
+    text = `${name} used Hide.`
+  } else if (kind === 'help') {
+    const ally = opts.targetId
+      ? (db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(opts.targetId, opts.instanceId) as
+          | Record<string, unknown>
+          | undefined)
+      : undefined
+    if (!ally || String(ally.id) === String(c.id)) throw new Error('Pick an ally to Help.')
+    text = `${name} used Help on ${ally.name}.`
+  } else if (kind === 'other' || kind === 'custom') {
+    const label =
+      kind === 'custom' || String(opts.other || '') === 'Custom' ? String(opts.custom || '').trim() : String(opts.other || '').trim()
+    if (!label) throw new Error('Say what you want to do.')
+    text = `${name} declared: ${label}.`
+  } else {
+    throw new Error('Unknown action')
+  }
+  econ[slot] = true
+  db.prepare('UPDATE combatants SET conditions_json = ?, turn_economy_json = ?, movement_remaining = ? WHERE id = ?').run(
+    JSON.stringify(conditions),
+    JSON.stringify(econ),
+    remaining,
+    c.id,
+  )
+  appendInstanceActivity(String(inst.id), text)
+  return { text }
+}
+
+export function resolvePromptSave(opts: { instanceId: string; combatantId: string; d20: number }) {
+  const inst = db.prepare('SELECT * FROM encounter_instances WHERE id = ?').get(opts.instanceId) as Record<string, unknown> | undefined
+  if (!inst) throw new Error('Encounter not found')
+  const prompt = parsePrompt(inst.prompt_json ? jparse(String(inst.prompt_json), null) : null)
+  if (!prompt || prompt.kind !== 'save' || prompt.combatantId !== opts.combatantId) throw new Error('No save is waiting.')
+  const ability = prompt.ability ?? 'dex'
+  const dc = prompt.dc ?? 13
+  const c = db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(opts.combatantId, opts.instanceId) as
+    | Record<string, unknown>
+    | undefined
+  if (!c) throw new Error('Combatant not found')
+  let modifier = 0
+  if (c.source === 'character') {
+    const ch = db.prepare('SELECT sheet_json FROM player_characters WHERE id = ?').get(c.source_id) as { sheet_json: string } | undefined
+    const sheet = jparse(ch?.sheet_json || '{}', {} as Record<string, unknown>)
+    const abilities = (sheet.abilities ?? {}) as Record<string, number>
+    const prof = (sheet.savingThrowProf ?? {}) as Record<string, boolean>
+    modifier = characterSaveBonus(Number(abilities[ability] ?? 10), Boolean(prof[ability]), proficiencyBonus(Number(sheet.level ?? 1)))
+  } else {
+    modifier = saveBonusForCombatant(
+      { stats: parseCombatantStats(jparse((c.stats_json as string) || 'null', null)), constitution: Number(c.constitution ?? 10), source: 'bestiary' },
+      ability,
+      null,
+    )
+  }
+  const r = resolveSavingThrow({ d20: opts.d20, modifier, dc })
+  const label = ability.toUpperCase()
+  const text = `${c.name} ${label} save: ${opts.d20} ${modifier >= 0 ? '+' : ''}${modifier} = ${r.total} — ${r.success ? 'SUCCESS' : 'FAILURE'}.`
+  appendInstanceActivity(String(inst.id), text)
+  db.prepare('UPDATE encounter_instances SET prompt_json = NULL WHERE id = ?').run(inst.id)
+  return { ...r, message: text }
+}
+
 /** Spend walk speed when the current-turn combatant moves. Off-turn moves do not consume. */
 export function consumeTurnMovement(instanceId: string, combatantId: string, from: { x: number; y: number }, to: { x: number; y: number }, gridSize: number) {
   const inst = db.prepare('SELECT current_turn_position FROM encounter_instances WHERE id = ?').get(instanceId) as
@@ -848,6 +998,7 @@ export function consumeTurnMovement(instanceId: string, combatantId: string, fro
   const spent = spendMovement(Number(c.movement_remaining ?? c.speed_feet ?? 30), cost)
   if (!spent.ok) throw new Error(spent.error)
   db.prepare('UPDATE combatants SET movement_remaining = ? WHERE id = ?').run(spent.remaining, combatantId)
+  if (cost > 0) appendInstanceActivity(instanceId, `${c.name} moved ${cost} ft.`)
 }
 
 export function applyHpKnockout(combatantId: string, prevHp: number, nextHp: number) {
@@ -925,7 +1076,7 @@ export function resolvePlayerAttack(opts: {
     .prepare(`SELECT * FROM combatants WHERE encounter_instance_id = ? AND source = 'character' AND source_id = ?`)
     .get(opts.instanceId, opts.characterId) as Record<string, unknown> | undefined
   if (!attacker) throw new Error('You are not on the map yet. Ask the DM to place you.')
-  return resolveCombatAttack({ ...opts, attackerId: String(attacker.id) })
+  return resolveCombatAttack({ ...opts, attackerId: String(attacker.id), skipRange: true })
 }
 
 function seedDemo() {
