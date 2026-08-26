@@ -961,7 +961,11 @@ export function Prep() {
                 onImportPdf={async (file) => {
                   const r = await api.importPdf(selectedChar.id, file)
                   setSelectedChar(r.character)
-                  setMsg(`Read ${r.fieldCount} form fields from the PDF.`)
+                  setMsg(
+                    r.fieldCount
+                      ? `Read ${r.fieldCount} fields from the PDF.`
+                      : 'Stored the PDF, but it had no readable character fields.',
+                  )
                   await reload()
                 }}
                 onRegenCode={async () => {

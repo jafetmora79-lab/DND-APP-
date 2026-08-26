@@ -92,8 +92,9 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
               }}
             />
             <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-              Import fillable PDF
+              Import PDF
             </Button>
+            <span className="text-xs text-muted">D&amp;D Beyond character PDFs or a fillable 5e sheet.</span>
             {character.sourcePdfUrl && (
               <a
                 href={character.sourcePdfUrl}

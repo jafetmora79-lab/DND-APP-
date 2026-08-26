@@ -101,7 +101,8 @@ CHARACTERS
   Sheet tabs: Combat / Skills / Spells / Bio. Empty tabs hide for viewers.
   Mods, skill bonuses, passive Perception calculate from abilities + prof.
   XP lives on the Combat tab (sheet.xp).
-  Optional fillable-PDF import. Owner and DM can edit; whole table can read.
+  Optional PDF import (D&D Beyond character PDFs or a fillable 5e sheet).
+  Owner and DM can edit; whole table can read.
   Creating a character does not place them on any encounter by itself.
 
 ENCOUNTER TEMPLATES

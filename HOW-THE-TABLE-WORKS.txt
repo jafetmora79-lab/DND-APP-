@@ -108,7 +108,7 @@ BESTIARY
 CHARACTERS
   - Name, sheet (Combat / Skills / Spells / Bio), personal join code.
   - Token color picker. That color is the circle on the map.
-  - Optional PDF import fills what it can from a digital character sheet.
+  - Optional PDF import fills what it can (D&D Beyond character PDFs or a fillable 5e sheet).
   - Empty sheet tabs hide. Ability modifiers, skill bonuses, and passive
     Perception calculate automatically.
   - Sheets are visible to the whole table. The owner and the DM can edit.
