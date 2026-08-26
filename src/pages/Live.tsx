@@ -68,7 +68,7 @@ export function Live() {
     load().catch((e) => setError(e.message))
   }, [load])
 
-  useLive(campaignId, setSnap)
+  const refreshLive = useLive(campaignId, setSnap)
 
   const instance = snap?.instance
   const selectedCombatant = snap?.combatants.find((c) => c.id === selected)
@@ -133,6 +133,7 @@ export function Live() {
         damage: dmg,
       })
       setAttackMsg(r.message)
+      refreshLive()
       if (r.hit) {
         setPending(null)
         setTargetId(null)
@@ -446,19 +447,32 @@ export function Live() {
               setPanel(c?.source === 'character' ? 'sheet' : 'stat')
             }}
             onPatch={(id, body) => {
-              if (body.turnEconomy) void api.setTurnEconomy(id, body.turnEconomy as { action: boolean; bonus: boolean; reaction: boolean; movement: boolean })
-              else void api.patchCombatant(id, body)
+              setSnap((s) =>
+                s
+                  ? {
+                      ...s,
+                      combatants: s.combatants.map((c) => (c.id === id ? { ...c, ...body } : c)),
+                    }
+                  : s,
+              )
+              const done = () => refreshLive()
+              if (body.turnEconomy) void api.setTurnEconomy(id, body.turnEconomy as { action: boolean; bonus: boolean; reaction: boolean; movement: boolean }).then(done)
+              else void api.patchCombatant(id, body).then(done)
             }}
-            onNext={() => api.nextTurn(instance.id)}
-            onSort={() => api.sortInit(instance.id)}
+            onNext={() => {
+              void api.nextTurn(instance.id).then(() => refreshLive())
+            }}
+            onSort={() => {
+              void api.sortInit(instance.id).then(() => refreshLive())
+            }}
             onDeathSave={(id, d20v) => {
               void api.deathSave(id, { d20: d20v }).then((r) => {
                 setAttackMsg(r.message)
-                void load()
+                refreshLive()
               }).catch((e) => setError(e instanceof Error ? e.message : 'Death save failed'))
             }}
             onResetDeath={(id) => {
-              void api.resetDeath(id).then(() => load())
+              void api.resetDeath(id).then(() => refreshLive())
             }}
             onReorder={(dir, id) => {
               const ordered = [...snap.combatants].sort((a, b) => a.turnOrderPosition - b.turnOrderPosition)
@@ -467,7 +481,7 @@ export function Live() {
               if (j < 0 || j >= ordered.length) return
               const ids = ordered.map((c) => c.id)
               ;[ids[i], ids[j]] = [ids[j], ids[i]]
-              api.reorder(instance.id, ids)
+              api.reorder(instance.id, ids).then(() => refreshLive())
             }}
           />
           {selectedCombatant?.source === 'character' && (
@@ -479,6 +493,7 @@ export function Live() {
                 onClick={() => {
                   void api
                     .setPrompt(instance.id, { kind: 'reaction', combatantId: selectedCombatant.id })
+                    .then(() => refreshLive())
                     .catch((e) => setError(e instanceof Error ? e.message : 'Could not request reaction'))
                 }}
               >
@@ -510,6 +525,7 @@ export function Live() {
                     }
                     void api
                       .setPrompt(instance.id, { kind: 'save', combatantId: selectedCombatant.id, ability: saveAbility, dc })
+                      .then(() => refreshLive())
                       .catch((e) => setError(e instanceof Error ? e.message : 'Could not request save'))
                   }}
                 >
@@ -578,10 +594,20 @@ export function Live() {
               setSelected(id)
             }}
             onMove={async (id, x, y) => {
+              const prev = snap.tokens.find((t) => t.id === id)
+              setSnap((s) =>
+                s ? { ...s, tokens: s.tokens.map((t) => (t.id === id ? { ...t, x, y } : t)) } : s,
+              )
               try {
                 await api.moveToken(id, { x, y })
                 setError('')
+                refreshLive()
               } catch (e) {
+                if (prev) {
+                  setSnap((s) =>
+                    s ? { ...s, tokens: s.tokens.map((t) => (t.id === id ? { ...t, x: prev.x, y: prev.y } : t)) } : s,
+                  )
+                }
                 const msg = e instanceof Error ? e.message : 'Could not move'
                 setError(msg)
                 throw e instanceof Error ? e : new Error(msg)

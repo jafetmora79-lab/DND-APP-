@@ -40,7 +40,7 @@ export function Player() {
     load()
   }, [load])
 
-  useLive(campaignId, setSnap)
+  const refreshLive = useLive(campaignId, setSnap)
 
   const me = user && user.role === 'player' ? snap?.characters.find((c) => c.id === user.characterId) : null
   const viewing: PlayerCharacter | undefined = snap?.characters.find((c) => c.id === sheetId) ?? me ?? snap?.characters[0]
@@ -179,10 +179,20 @@ export function Player() {
             onMove={
               myCombatant
                 ? async (id, x, y) => {
+                    const prev = snap.tokens.find((t) => t.id === id)
+                    setSnap((s) =>
+                      s ? { ...s, tokens: s.tokens.map((t) => (t.id === id ? { ...t, x, y } : t)) } : s,
+                    )
                     try {
                       await api.moveToken(id, { x, y })
                       setError('')
+                      refreshLive()
                     } catch (e) {
+                      if (prev) {
+                        setSnap((s) =>
+                          s ? { ...s, tokens: s.tokens.map((t) => (t.id === id ? { ...t, x: prev.x, y: prev.y } : t)) } : s,
+                        )
+                      }
                       const msg = e instanceof Error ? e.message : 'Could not move'
                       setError(msg)
                       throw e instanceof Error ? e : new Error(msg)
@@ -203,8 +213,18 @@ export function Player() {
             onSelect={(id) => setFocusId(id)}
             onPatch={(id, body) => {
               if (!myCombatant || id !== myCombatant.id) return
+              setSnap((s) =>
+                s
+                  ? {
+                      ...s,
+                      combatants: s.combatants.map((c) => (c.id === id ? { ...c, ...body } : c)),
+                    }
+                  : s,
+              )
               if (body.turnEconomy) {
-                void api.setTurnEconomy(id, body.turnEconomy as { action: boolean; bonus: boolean; reaction: boolean; movement: boolean })
+                void api
+                  .setTurnEconomy(id, body.turnEconomy as { action: boolean; bonus: boolean; reaction: boolean; movement: boolean })
+                  .then(() => refreshLive())
               }
             }}
             onNext={() => undefined}
@@ -216,7 +236,7 @@ export function Player() {
                 .deathSave(id, { d20: d20v })
                 .then((r) => {
                   setNote(r.message)
-                  load()
+                  refreshLive()
                 })
                 .catch((e) => setNote(e instanceof Error ? e.message : 'Death save failed'))
             }}
@@ -244,6 +264,7 @@ export function Player() {
             onMapPick={setMapPick}
             launchAttack={launchAttack}
             onLaunchHandled={() => setLaunchAttack(null)}
+            onSettled={refreshLive}
           />
         </>
       )}
