@@ -66,6 +66,9 @@ select {
 }
 
 .dnd-sheet {
+  container-type: inline-size;
+  min-width: 0;
+  overflow-x: hidden;
   background:
     radial-gradient(120% 70% at 50% 0%, rgba(232, 221, 200, 0.14), transparent 58%),
     repeating-linear-gradient(-12deg, transparent, transparent 11px, rgba(201, 150, 62, 0.035) 12px),
@@ -73,49 +76,88 @@ select {
   border: 2px solid var(--color-gold);
   border-radius: 0.35rem;
   box-shadow:
-    inset 0 0 0 5px rgba(17, 16, 14, 0.55),
-    inset 0 0 0 6px rgba(201, 150, 62, 0.35);
-  padding: 0.85rem 0.85rem 1.05rem;
+    inset 0 0 0 4px rgba(17, 16, 14, 0.55),
+    inset 0 0 0 5px rgba(201, 150, 62, 0.35);
+  padding: 0.7rem 0.65rem 0.9rem;
 }
 
-.dnd-stat-box {
-  border: 2px solid var(--color-gold);
-  border-radius: 0.85rem;
-  background:
-    linear-gradient(180deg, rgba(232, 221, 200, 0.1), transparent 52%),
-    var(--color-bg);
-}
-
-.dnd-bubble {
+.sheet-cell {
   display: flex;
-  min-height: 4.75rem;
+  min-width: 0;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 0.15rem;
   border: 2px solid var(--color-gold);
-  border-radius: 9999px;
+  border-radius: 0.5rem;
   background:
-    radial-gradient(circle at 50% 30%, rgba(232, 221, 200, 0.12), transparent 62%),
+    linear-gradient(180deg, rgba(232, 221, 200, 0.08), transparent 55%),
     var(--color-bg);
-  padding: 0.35rem 0.4rem;
+  padding: 0.35rem 0.25rem 0.3rem;
 }
 
-.dnd-bubble-ac {
-  border-radius: 18% 18% 50% 50% / 12% 12% 58% 58%;
+.sheet-cell > input {
+  min-width: 0;
+  width: 100%;
+}
+
+.sheet-cell-label {
+  width: 100%;
+  font-size: 0.6rem;
+  line-height: 1.2;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.sheet-ability {
+  padding: 0.4rem 0.15rem 0.45rem;
+  border-radius: 0.75rem;
+}
+
+.sheet-ability-score {
+  display: flex;
+  width: 2.55rem;
+  height: 1.5rem;
+  margin-inline: auto;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--color-gold);
+  border-radius: 999px;
+  background: var(--color-bg);
+}
+
+.sheet-ability-score input {
+  height: 1.35rem;
+  width: 2.4rem;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.sheet-shield {
+  min-height: 4.4rem;
+  border-radius: 0.4rem 0.4rem 1.35rem 1.35rem;
 }
 
 .dnd-panel {
+  min-width: 0;
   border: 1.5px solid var(--color-line);
   border-radius: 0.45rem;
   background: rgba(17, 16, 14, 0.38);
-  padding: 0.55rem 0.65rem;
+  padding: 0.5rem 0.55rem;
 }
 
 .dnd-panel-label {
   margin-bottom: 0.35rem;
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-gold);
 }

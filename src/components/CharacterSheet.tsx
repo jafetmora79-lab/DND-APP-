@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { type ReactNode, useRef, useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { TokenColorPicker } from '@/components/TokenColorPicker'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,23 @@ type Props = {
 
 type Tab = 'sheet' | 'spells' | 'notes'
 
+function SheetCell({
+  label,
+  children,
+  className,
+}: {
+  label: string
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn('sheet-cell', className)}>
+      {children}
+      <div className="sheet-cell-label">{label}</div>
+    </div>
+  )
+}
+
 function DeathPips({
   label,
   value,
@@ -34,19 +51,43 @@ function DeathPips({
   onChange: (n: number) => void
 }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="w-16 text-[10px] uppercase tracking-wider text-muted">{label}</span>
-      {[0, 1, 2].map((i) => (
-        <button
-          key={i}
-          type="button"
-          disabled={!canEdit}
-          aria-label={`${label} ${i + 1}`}
-          className={cn('h-3.5 w-3.5 rounded-full border', i < value ? filled : 'border-line bg-transparent')}
-          onClick={() => onChange(i + 1 === value ? i : i + 1)}
-        />
-      ))}
+    <div className="flex min-w-0 items-center gap-1.5">
+      <span className="min-w-0 shrink text-[10px] uppercase leading-tight tracking-wide text-muted">{label}</span>
+      <span className="ml-auto flex shrink-0 gap-1">
+        {[0, 1, 2].map((i) => (
+          <button
+            key={i}
+            type="button"
+            disabled={!canEdit}
+            aria-label={`${label} ${i + 1}`}
+            className={cn('h-3.5 w-3.5 rounded-full border', i < value ? filled : 'border-line bg-transparent')}
+            onClick={() => onChange(i + 1 === value ? i : i + 1)}
+          />
+        ))}
+      </span>
     </div>
+  )
+}
+
+function TinyNum({
+  value,
+  disabled,
+  onChange,
+  ariaLabel,
+}: {
+  value: string | number
+  disabled: boolean
+  onChange: (raw: string) => void
+  ariaLabel: string
+}) {
+  return (
+    <Input
+      disabled={disabled}
+      aria-label={ariaLabel}
+      className="h-8 border-0 bg-transparent px-0 text-center text-lg leading-none"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
   )
 }
 
@@ -76,8 +117,8 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="mb-2 flex items-center gap-1">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <div className="mb-2 flex min-w-0 items-center gap-1">
         {visibleTabs.map((item) => (
           <button
             key={item.id}
@@ -100,156 +141,196 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto scroll-thin pr-1">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden scroll-thin pr-1">
         {tab === 'sheet' && (
           <div className="dnd-sheet grid gap-3">
-            <div className="grid gap-3 border-b border-line pb-3 lg:grid-cols-[1fr_auto]">
-              <div>
-                {canEdit ? (
-                  <Input
-                    className="h-10 font-display text-lg"
-                    aria-label={t('sheet.characterName')}
-                    value={character.name}
-                    onChange={(e) => onChange({ name: e.target.value })}
-                  />
-                ) : (
-                  <h2 className="font-display text-2xl text-gold-2">{character.name}</h2>
-                )}
-                <p className="mt-1 text-xs text-muted">
-                  {sheet.race || t('sheet.race')} · {sheet.className || t('sheet.adventurer')} {sheet.level} · {t('sheet.playedBy')}{' '}
-                  {character.ownerDisplayName || t('sheet.unclaimed')}
-                </p>
-                <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-5">
-                  <Field label={t('sheet.classLevel')}>
-                    <Input disabled={!canEdit} value={sheet.className} onChange={(e) => patchSheet({ className: e.target.value })} />
-                  </Field>
-                  <Field label={t('sheet.level')}>
-                    <Input type="number" disabled={!canEdit} value={sheet.level} onChange={(e) => patchSheet({ level: Number(e.target.value) })} />
-                  </Field>
-                  <Field label={t('sheet.race')}>
-                    <Input disabled={!canEdit} value={sheet.race} onChange={(e) => patchSheet({ race: e.target.value })} />
-                  </Field>
-                  <Field label={t('sheet.background')}>
-                    <Input disabled={!canEdit} value={sheet.background} onChange={(e) => patchSheet({ background: e.target.value })} />
-                  </Field>
-                  <Field label={t('sheet.alignment')}>
-                    <Input disabled={!canEdit} value={sheet.alignment} onChange={(e) => patchSheet({ alignment: e.target.value })} />
-                  </Field>
+            <div className="grid min-w-0 gap-2 border-b border-line pb-3">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  {canEdit ? (
+                    <Input
+                      className="h-10 font-display text-lg"
+                      aria-label={t('sheet.characterName')}
+                      value={character.name}
+                      onChange={(e) => onChange({ name: e.target.value })}
+                    />
+                  ) : (
+                    <h2 className="font-display text-2xl text-gold-2">{character.name}</h2>
+                  )}
+                  <p className="mt-1 truncate text-xs text-muted">
+                    {sheet.race || t('sheet.race')} · {sheet.className || t('sheet.adventurer')} · {t('sheet.playedBy')}{' '}
+                    {character.ownerDisplayName || t('sheet.unclaimed')}
+                  </p>
+                </div>
+                <div className="flex max-w-full shrink-0 flex-col items-end gap-1">
+                  {canEdit && onImportPdf && (
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        accept="application/pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0]
+                          if (f) onImportPdf(f)
+                        }}
+                      />
+                      <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+                        {t('sheet.importPdf')}
+                      </Button>
+                      {character.sourcePdfUrl && (
+                        <a href={character.sourcePdfUrl} target="_blank" rel="noreferrer" className="text-xs text-gold underline-offset-2 hover:underline">
+                          {t('sheet.storedPdf')}
+                        </a>
+                      )}
+                    </div>
+                  )}
+                  {isDm && character.personalCode && character.personalCode !== '••••••••' && (
+                    <p className="flex max-w-full flex-wrap items-center justify-end gap-2 font-mono text-xs text-gold">
+                      <span className="truncate">
+                        {t('sheet.personalCode')} {character.personalCode}
+                      </span>
+                      <button
+                        className="inline-flex items-center gap-1 text-gold underline"
+                        type="button"
+                        onClick={async () => {
+                          const ok = await copyText(character.personalCode)
+                          if (!ok) return
+                          setCopied(true)
+                          window.setTimeout(() => setCopied(false), 1600)
+                        }}
+                      >
+                        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copied ? t('sheet.copied') : t('sheet.copy')}
+                      </button>
+                      {onRegenCode && (
+                        <button className="underline" onClick={onRegenCode} type="button">
+                          {t('sheet.regenerate')}
+                        </button>
+                      )}
+                    </p>
+                  )}
                 </div>
               </div>
-              <div className="flex flex-col items-start gap-2 lg:items-end">
-                {canEdit && onImportPdf && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      ref={fileRef}
-                      type="file"
-                      accept="application/pdf"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0]
-                        if (f) onImportPdf(f)
-                      }}
-                    />
-                    <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-                      {t('sheet.importPdf')}
-                    </Button>
-                    {character.sourcePdfUrl && (
-                      <a href={character.sourcePdfUrl} target="_blank" rel="noreferrer" className="text-xs text-gold underline-offset-2 hover:underline">
-                        {t('sheet.storedPdf')}
-                      </a>
-                    )}
-                  </div>
-                )}
-                {isDm && character.personalCode && character.personalCode !== '••••••••' && (
-                  <p className="flex flex-wrap items-center gap-2 font-mono text-xs text-gold">
-                    {t('sheet.personalCode')} {character.personalCode}
-                    <button
-                      className="inline-flex items-center gap-1 text-gold underline"
-                      type="button"
-                      onClick={async () => {
-                        const ok = await copyText(character.personalCode)
-                        if (!ok) return
-                        setCopied(true)
-                        window.setTimeout(() => setCopied(false), 1600)
-                      }}
-                    >
-                      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                      {copied ? t('sheet.copied') : t('sheet.copy')}
-                    </button>
-                    {onRegenCode && (
-                      <button className="underline" onClick={onRegenCode} type="button">
-                        {t('sheet.regenerate')}
-                      </button>
-                    )}
-                  </p>
-                )}
+              <div className="grid min-w-0 grid-cols-2 gap-2 @min-[24rem]:grid-cols-3">
+                <SheetCell label={t('sheet.classLevel')}>
+                  <Input
+                    disabled={!canEdit}
+                    className="h-8 border-0 bg-transparent px-1 text-center text-sm"
+                    value={sheet.className}
+                    onChange={(e) => patchSheet({ className: e.target.value })}
+                  />
+                </SheetCell>
+                <SheetCell label={t('sheet.level')}>
+                  <TinyNum
+                    disabled={!canEdit}
+                    ariaLabel={t('sheet.level')}
+                    value={sheet.level}
+                    onChange={(raw) => patchSheet({ level: Number(raw) })}
+                  />
+                </SheetCell>
+                <SheetCell label={t('sheet.race')}>
+                  <Input
+                    disabled={!canEdit}
+                    className="h-8 border-0 bg-transparent px-1 text-center text-sm"
+                    value={sheet.race}
+                    onChange={(e) => patchSheet({ race: e.target.value })}
+                  />
+                </SheetCell>
+                <SheetCell label={t('sheet.background')}>
+                  <Input
+                    disabled={!canEdit}
+                    className="h-8 border-0 bg-transparent px-1 text-center text-sm"
+                    value={sheet.background}
+                    onChange={(e) => patchSheet({ background: e.target.value })}
+                  />
+                </SheetCell>
+                <SheetCell label={t('sheet.alignment')}>
+                  <Input
+                    disabled={!canEdit}
+                    className="h-8 border-0 bg-transparent px-1 text-center text-sm"
+                    value={sheet.alignment}
+                    onChange={(e) => patchSheet({ alignment: e.target.value })}
+                  />
+                </SheetCell>
+                <SheetCell label={t('sheet.playerName')}>
+                  <Input
+                    disabled={!canEdit}
+                    className="h-8 border-0 bg-transparent px-1 text-center text-sm"
+                    value={character.ownerDisplayName}
+                    onChange={(e) => onChange({ ownerDisplayName: e.target.value })}
+                  />
+                </SheetCell>
               </div>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-[9.5rem_1fr]">
-              <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
+            <div className="grid min-w-0 gap-3 @min-[36rem]:grid-cols-[7.25rem_minmax(0,1fr)]">
+              <div className="grid grid-cols-3 gap-2 @min-[36rem]:grid-cols-1">
                 {ABILITIES.map((ab) => (
-                  <div key={ab} className="dnd-stat-box px-1 py-2 text-center">
-                    <div className="text-[10px] font-semibold tracking-[0.18em] text-muted">{t(`ability.${ab}`)}</div>
-                    <div className="stat-num mt-0.5 text-2xl leading-none text-gold">{signed(abilityMod(sheet.abilities[ab]))}</div>
-                    <Input
-                      disabled={!canEdit}
-                      type="number"
-                      className="mx-auto mt-1 h-7 w-12 px-1 text-center text-xs"
-                      value={sheet.abilities[ab]}
-                      aria-label={t(`abilityName.${ab}`)}
-                      onChange={(e) => patchSheet({ abilities: { ...sheet.abilities, [ab]: Number(e.target.value) } })}
-                    />
+                  <div key={ab} className="sheet-cell sheet-ability">
+                    <div className="text-[10px] font-semibold tracking-[0.12em] text-muted">{t(`ability.${ab}`)}</div>
+                    <div className="stat-num text-2xl leading-none text-gold">{signed(abilityMod(sheet.abilities[ab]))}</div>
+                    <div className="sheet-ability-score">
+                      <input
+                        disabled={!canEdit}
+                        type="number"
+                        aria-label={t(`abilityName.${ab}`)}
+                        value={sheet.abilities[ab]}
+                        onChange={(e) => patchSheet({ abilities: { ...sheet.abilities, [ab]: Number(e.target.value) } })}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
 
-              <div className="grid gap-3">
+              <div className="grid min-w-0 gap-2">
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="dnd-bubble dnd-bubble-ac">
-                    <span className="text-[9px] uppercase tracking-wider text-muted">{t('sheet.ac')}</span>
-                    <Input
-                      type="number"
-                      disabled={!canEdit}
-                      className="h-8 w-14 border-0 bg-transparent px-0 text-center text-xl"
-                      value={sheet.ac}
-                      onChange={(e) => patchSheet({ ac: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div className="dnd-bubble">
-                    <span className="text-[9px] uppercase tracking-wider text-muted">{t('sheet.initiative')}</span>
-                    <div className="stat-num text-xl text-gold">{signed(init)}</div>
-                  </div>
-                  <div className="dnd-bubble">
-                    <span className="text-[9px] uppercase tracking-wider text-muted">{t('sheet.speed')}</span>
+                  <SheetCell className="sheet-shield" label={t('sheet.acShort')}>
+                    <TinyNum disabled={!canEdit} ariaLabel={t('sheet.ac')} value={sheet.ac} onChange={(raw) => patchSheet({ ac: Number(raw) })} />
+                  </SheetCell>
+                  <SheetCell className="sheet-shield" label={t('sheet.initShort')}>
+                    <div className="stat-num text-xl leading-none text-gold">{signed(init)}</div>
+                  </SheetCell>
+                  <SheetCell className="sheet-shield" label={t('sheet.speedShort')}>
                     <Input
                       disabled={!canEdit}
-                      className="h-8 w-[4.5rem] border-0 bg-transparent px-0 text-center text-sm"
+                      aria-label={t('sheet.speed')}
+                      className="h-8 border-0 bg-transparent px-0 text-center text-sm"
                       value={sheet.speed}
                       onChange={(e) => patchSheet({ speed: e.target.value })}
                     />
-                  </div>
+                  </SheetCell>
                 </div>
 
                 <div className="dnd-panel">
                   <div className="dnd-panel-label">{t('sheet.hp')}</div>
                   <div className="grid grid-cols-3 gap-2">
-                    <Field label={t('sheet.hpMax')}>
-                      <Input type="number" disabled={!canEdit} value={sheet.hpMax} onChange={(e) => patchSheet({ hpMax: Number(e.target.value) })} />
-                    </Field>
-                    <Field label={t('sheet.hpCurrent')}>
-                      <Input type="number" disabled={!canEdit} value={sheet.hpCurrent} onChange={(e) => patchSheet({ hpCurrent: Number(e.target.value) })} />
-                    </Field>
-                    <Field label={t('sheet.hpTemp')}>
-                      <Input type="number" disabled={!canEdit} value={sheet.hpTemp} onChange={(e) => patchSheet({ hpTemp: Number(e.target.value) })} />
-                    </Field>
+                    <SheetCell label={t('sheet.hpMaxShort')}>
+                      <TinyNum disabled={!canEdit} ariaLabel={t('sheet.hpMax')} value={sheet.hpMax} onChange={(raw) => patchSheet({ hpMax: Number(raw) })} />
+                    </SheetCell>
+                    <SheetCell label={t('sheet.hpCurrentShort')}>
+                      <TinyNum
+                        disabled={!canEdit}
+                        ariaLabel={t('sheet.hpCurrent')}
+                        value={sheet.hpCurrent}
+                        onChange={(raw) => patchSheet({ hpCurrent: Number(raw) })}
+                      />
+                    </SheetCell>
+                    <SheetCell label={t('sheet.hpTempShort')}>
+                      <TinyNum disabled={!canEdit} ariaLabel={t('sheet.hpTemp')} value={sheet.hpTemp} onChange={(raw) => patchSheet({ hpTemp: Number(raw) })} />
+                    </SheetCell>
                   </div>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    <Field label={t('sheet.hitDice')}>
-                      <Input disabled={!canEdit} value={sheet.hitDice} onChange={(e) => patchSheet({ hitDice: e.target.value })} />
-                    </Field>
-                    <div>
-                      <div className="mb-1 text-xs uppercase tracking-wider text-muted">{t('sheet.deathSaves')}</div>
+                  <div className="mt-2 grid min-w-0 gap-2 @min-[24rem]:grid-cols-2">
+                    <SheetCell label={t('sheet.hitDice')}>
+                      <Input
+                        disabled={!canEdit}
+                        className="h-8 border-0 bg-transparent px-1 text-center text-sm"
+                        value={sheet.hitDice}
+                        onChange={(e) => patchSheet({ hitDice: e.target.value })}
+                      />
+                    </SheetCell>
+                    <div className="sheet-cell items-stretch justify-center px-2">
+                      <div className="sheet-cell-label mb-1">{t('sheet.deathSaves')}</div>
                       <DeathPips
                         label={t('sheet.successes')}
                         value={sheet.deathSuccess}
@@ -270,25 +351,24 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
-                  <div className="dnd-stat-box px-2 py-1.5">
-                    <div className="text-[10px] uppercase tracking-wider text-muted">{t('sheet.proficiency')}</div>
-                    <div className="stat-num text-gold">{signed(pb)}</div>
-                  </div>
-                  <div className="dnd-stat-box px-2 py-1.5">
-                    <div className="text-[10px] uppercase tracking-wider text-muted">{t('sheet.passivePerception')}</div>
-                    <div className="stat-num text-gold">{passive}</div>
-                  </div>
-                  <div className="dnd-stat-box px-2 py-1.5">
-                    <div className="text-[10px] uppercase tracking-wider text-muted">{t('sheet.xp')}</div>
-                    <Input type="number" disabled={!canEdit} className="h-7 px-1 text-sm" value={sheet.xp ?? 0} onChange={(e) => patchSheet({ xp: Number(e.target.value) || 0 })} />
-                  </div>
-                  <Field label={t('sheet.darkvision')}>
+                <div className="grid grid-cols-2 gap-2 @min-[24rem]:grid-cols-4">
+                  <SheetCell label={t('sheet.profShort')}>
+                    <div className="stat-num text-lg text-gold">{signed(pb)}</div>
+                  </SheetCell>
+                  <SheetCell label={t('sheet.ppShort')}>
+                    <div className="stat-num text-lg text-gold">{passive}</div>
+                  </SheetCell>
+                  <SheetCell label={t('sheet.xpShort')}>
+                    <TinyNum disabled={!canEdit} ariaLabel={t('sheet.xp')} value={sheet.xp ?? 0} onChange={(raw) => patchSheet({ xp: Number(raw) || 0 })} />
+                  </SheetCell>
+                  <SheetCell label={t('sheet.dvShort')}>
                     <Input
                       type="number"
                       min={0}
                       disabled={!canEdit}
+                      aria-label={t('sheet.darkvision')}
                       placeholder={t('sheet.auto')}
+                      className="h-8 border-0 bg-transparent px-0 text-center text-sm"
                       value={sheet.darkvisionFt ?? ''}
                       onChange={(e) => {
                         const raw = e.target.value
@@ -296,24 +376,24 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
                         else patchSheet({ darkvisionFt: Math.max(0, Number(raw) || 0) })
                       }}
                     />
-                  </Field>
+                  </SheetCell>
                 </div>
               </div>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid min-w-0 gap-3 @min-[36rem]:grid-cols-2">
               <div className="dnd-panel">
                 <div className="dnd-panel-label">{t('sheet.saves')}</div>
                 <div className="grid grid-cols-2 gap-1.5">
                   {ABILITIES.map((ab) => (
-                    <label key={ab} className="flex items-center gap-2 text-sm">
+                    <label key={ab} className="flex min-w-0 items-center gap-2 text-sm">
                       <input
                         type="checkbox"
                         disabled={!canEdit}
                         checked={sheet.savingThrowProf[ab]}
                         onChange={(e) => patchSheet({ savingThrowProf: { ...sheet.savingThrowProf, [ab]: e.target.checked } })}
                       />
-                      <span className="w-9 text-[11px]">{t(`ability.${ab}`)}</span>
+                      <span className="w-9 shrink-0 text-[11px]">{t(`ability.${ab}`)}</span>
                       <span className="stat-num text-gold">{signed(saveMod(ab))}</span>
                     </label>
                   ))}
@@ -322,12 +402,12 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
               <div className="dnd-panel">
                 <div className="dnd-panel-label">{t('sheet.skills')}</div>
                 <p className="mb-1 text-[10px] text-muted">{t('sheet.expertise')}</p>
-                <div className="grid max-h-56 gap-0.5 overflow-y-auto scroll-thin sm:grid-cols-2">
+                <div className="grid max-h-56 gap-0.5 overflow-y-auto scroll-thin @min-[24rem]:grid-cols-2">
                   {SKILLS.map((sk) => {
                     const bonus =
                       abilityMod(sheet.abilities[sk.ability]) + (sheet.skillProf[sk.key] ? pb : 0) + (sheet.skillExpertise[sk.key] ? pb : 0)
                     return (
-                      <div key={sk.key} className="flex items-center gap-1.5 py-0.5 text-sm">
+                      <div key={sk.key} className="flex min-w-0 items-center gap-1.5 py-0.5 text-sm">
                         <input
                           type="checkbox"
                           disabled={!canEdit}
@@ -346,7 +426,7 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
                         <span className="min-w-0 flex-1 truncate">
                           {t(`skill.${sk.key}`)} <span className="text-[10px] text-muted">{t(`ability.${sk.ability}`)}</span>
                         </span>
-                        <span className="stat-num text-gold">{signed(bonus)}</span>
+                        <span className="stat-num shrink-0 text-gold">{signed(bonus)}</span>
                       </div>
                     )
                   })}
@@ -356,14 +436,14 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
 
             <div className="dnd-panel">
               <div className="dnd-panel-label">{t('sheet.attacks')}</div>
-              <div className="hidden text-[10px] uppercase tracking-wider text-muted md:grid md:grid-cols-4 md:gap-2">
+              <div className="mb-1 hidden text-[10px] uppercase tracking-wider text-muted @min-[32rem]:grid @min-[32rem]:grid-cols-4 @min-[32rem]:gap-2">
                 <span>{t('sheet.attackName')}</span>
                 <span>{t('sheet.attackBonus')}</span>
                 <span>{t('sheet.attackDamage')}</span>
                 <span>{t('sheet.attackRange')}</span>
               </div>
               {sheet.attacks.map((atk, i) => (
-                <div key={i} className="mb-2 grid grid-cols-2 gap-2 md:grid-cols-4">
+                <div key={i} className="mb-2 grid min-w-0 grid-cols-2 gap-2 @min-[32rem]:grid-cols-4">
                   <Input
                     disabled={!canEdit}
                     placeholder={t('sheet.attackName')}
@@ -394,7 +474,7 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
                       patchSheet({ attacks })
                     }}
                   />
-                  <div className="flex gap-1">
+                  <div className="flex min-w-0 gap-1">
                     <Input
                       disabled={!canEdit}
                       placeholder={t('sheet.attackRange')}
@@ -424,7 +504,7 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
               <div className="dnd-panel-label">{t('sheet.resources')}</div>
               <p className="mb-2 text-xs text-muted">{t('sheet.resourcesHint')}</p>
               {(sheet.resources ?? []).map((res, i) => (
-                <div key={i} className="mb-2 grid grid-cols-2 gap-1 sm:grid-cols-[1fr_3.5rem_3.5rem_6.5rem_auto] sm:items-center">
+                <div key={i} className="mb-2 grid min-w-0 grid-cols-2 gap-1 @min-[32rem]:grid-cols-[1fr_3.5rem_3.5rem_6.5rem_auto] @min-[32rem]:items-center">
                   <Input
                     disabled={!canEdit}
                     placeholder={t('sheet.attackName')}
@@ -538,7 +618,7 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 md:grid-cols-9">
+            <div className="grid grid-cols-3 gap-2 @min-[40rem]:grid-cols-9">
               {sheet.spellSlots.map((max, i) => (
                 <Field key={i} label={`L${i + 1}`}>
                   <div className="flex gap-1">
@@ -612,10 +692,7 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
 
         {tab === 'notes' && (
           <div className="dnd-sheet grid gap-3">
-            <Field label={t('sheet.playerName')}>
-              <Input disabled={!canEdit} value={character.ownerDisplayName} onChange={(e) => onChange({ ownerDisplayName: e.target.value })} />
-            </Field>
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 @min-[28rem]:grid-cols-2">
               <Field label={t('sheet.personality')}>
                 <Textarea disabled={!canEdit} value={sheet.personality} onChange={(e) => patchSheet({ personality: e.target.value })} />
               </Field>
