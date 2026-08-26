@@ -326,6 +326,11 @@ Hide did nothing
   Use Hide (fog turns on) and click the square or the token. Fog must be on
   for players to lose that cell.
 
+Attack “operator does not exist: uuid = text”
+  Hosted only. The attack RPC compared a uuid token ref to text.
+  Run supabase/migrate-attack-token-uuid.sql, then:
+    notify pgrst, 'reload schema';
+
 Attack “out of range”
   Melee is 5 ft. Move adjacent, or pick a ranged attack. Shortbow is 80 ft.
 

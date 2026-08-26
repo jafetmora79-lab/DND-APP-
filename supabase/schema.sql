@@ -393,13 +393,14 @@ begin
   end if;
   if range_ft <= 0 then range_ft := 5; end if;
 
+  -- ref_id is uuid. Casting combatant id to text raises: operator does not exist: uuid = text
   select * into from_tok from public.tokens_on_map
-    where encounter_instance_id = inst.id and ref_id = attacker.id::text;
+    where encounter_instance_id = inst.id and ref_id = attacker.id;
   if not found then
     raise exception 'Both creatures need to be on the map';
   end if;
   select * into to_tok from public.tokens_on_map
-    where encounter_instance_id = inst.id and ref_id = target.id::text;
+    where encounter_instance_id = inst.id and ref_id = target.id;
   if not found then
     raise exception 'Both creatures need to be on the map';
   end if;

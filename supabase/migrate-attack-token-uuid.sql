@@ -1,11 +1,13 @@
--- Run in the SQL Editor if schema.sql was already applied. Safe to re-run.
-
-alter table public.encounter_templates add column if not exists characters_json jsonb not null default '[]'::jsonb;
-alter table public.combatants add column if not exists constitution int not null default 10;
-alter table public.combatants add column if not exists advantage_against_json jsonb not null default '[]'::jsonb;
+-- Existing hosted projects only. New projects: run schema.sql, skip this file.
+--
+-- Symptom: resolving an attack fails with
+--   operator does not exist: uuid = text
+-- Cause: resolve_player_attack compared tokens_on_map.ref_id (uuid)
+-- to combatant id::text. This recreates the function with uuid = uuid.
 
 drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int);
 drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int, uuid);
+drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int, uuid, int, text);
 
 create or replace function public.resolve_player_attack(
   p_instance uuid,
@@ -13,7 +15,9 @@ create or replace function public.resolve_player_attack(
   p_attack_index int,
   p_d20 int,
   p_damage int,
-  p_attacker uuid default null
+  p_attacker uuid default null,
+  p_d20_b int default null,
+  p_roll_mode text default 'normal'
 )
 returns json
 language plpgsql
@@ -45,6 +49,9 @@ declare
   msg text;
   attacker_adv jsonb;
   target_adv jsonb;
+  used_d20 int;
+  mode text;
+  dice_note text;
 begin
   if auth.uid() is null then
     raise exception 'Sign-in required';
@@ -97,6 +104,14 @@ begin
   if target.id = attacker.id then
     raise exception 'Pick a different creature';
   end if;
+  if coalesce(attacker.death_state, 'ok') in ('dying', 'stable', 'dead')
+     or coalesce(attacker.conditions_json, '[]'::jsonb) @> '"Unconscious"'::jsonb
+     or coalesce(attacker.conditions_json, '[]'::jsonb) @> '"Paralyzed"'::jsonb
+     or coalesce(attacker.conditions_json, '[]'::jsonb) @> '"Stunned"'::jsonb
+     or coalesce(attacker.conditions_json, '[]'::jsonb) @> '"Incapacitated"'::jsonb
+     or coalesce(attacker.conditions_json, '[]'::jsonb) @> '"Petrified"'::jsonb then
+    raise exception '% cannot take a normal attack', attacker.name;
+  end if;
 
   if attacker.source = 'character' then
     select * into ch from public.player_characters where id = attacker.source_id::uuid;
@@ -127,6 +142,7 @@ begin
   end if;
   if range_ft <= 0 then range_ft := 5; end if;
 
+  -- ref_id is uuid. Casting combatant id to text raises: operator does not exist: uuid = text
   select * into from_tok from public.tokens_on_map
     where encounter_instance_id = inst.id and ref_id = attacker.id;
   if not found then
@@ -147,7 +163,8 @@ begin
     abs(floor(from_tok.x / map_row.grid_size)::int - floor(to_tok.x / map_row.grid_size)::int),
     abs(floor(from_tok.y / map_row.grid_size)::int - floor(to_tok.y / map_row.grid_size)::int)
   );
-  if dist_sq * 5 > range_ft then
+  -- Player attacks: DM is the range authority. Keep the check for DM-driven monster attacks.
+  if public.is_dm_of_campaign(inst.campaign_id) and dist_sq * 5 > range_ft then
     raise exception 'That creature is out of range (% ft away, range % ft)', dist_sq * 5, range_ft;
   end if;
 
@@ -157,6 +174,22 @@ begin
   attacker_adv := coalesce(attacker.advantage_against_json, '[]'::jsonb);
   target_adv := coalesce(target.advantage_against_json, '[]'::jsonb);
   had_adv := attacker_adv @> to_jsonb(target.id::text);
+  mode := coalesce(nullif(p_roll_mode, ''), 'normal');
+  if had_adv and mode = 'disadvantage' then mode := 'normal'; end if;
+  if had_adv and mode = 'normal' then mode := 'advantage'; end if;
+  if mode <> 'normal' then
+    if p_d20_b is null or p_d20_b < 1 or p_d20_b > 20 then
+      raise exception 'Enter both d20s for advantage or disadvantage';
+    end if;
+    if mode = 'advantage' then used_d20 := greatest(p_d20, p_d20_b); else used_d20 := least(p_d20, p_d20_b); end if;
+    dice_note := format('%s / %s → %s used', p_d20, p_d20_b, used_d20);
+  else
+    used_d20 := p_d20;
+    dice_note := used_d20::text;
+  end if;
+  total := used_d20 + bonus;
+  crit := used_d20 >= 20;
+  fumble := used_d20 <= 1;
   attacker_adv := coalesce((
     select jsonb_agg(to_jsonb(x))
     from jsonb_array_elements_text(attacker_adv) x
@@ -174,18 +207,24 @@ begin
   end if;
   update public.combatants set advantage_against_json = attacker_adv where id = attacker.id;
   update public.combatants set advantage_against_json = target_adv where id = target.id;
+  update public.combatants
+    set turn_economy_json = jsonb_set(coalesce(turn_economy_json, '{}'::jsonb), '{action}', 'true'::jsonb)
+    where id = attacker.id;
 
   if not hit then
     if fumble then
-      msg := format('Natural 1 against %s — miss. %s has advantage against %s next turn.', target.name, target.name, attacker.name);
+      msg := format('%s. Natural 1 against %s — miss. %s has advantage against %s next turn.', dice_note, target.name, target.name, attacker.name);
     else
-      msg := format('%s vs AC %s — need higher than %s to hit %s.', total, target.ac, target.ac, target.name);
+      msg := format('%s. %s vs AC %s — need higher than %s to hit %s.', dice_note, total, target.ac, target.ac, target.name);
     end if;
     return json_build_object(
       'hit', false,
       'crit', false,
       'fumble', fumble,
       'hadAdvantage', had_adv,
+      'rollMode', mode,
+      'd20', used_d20,
+      'd20b', p_d20_b,
       'total', total,
       'ac', target.ac,
       'damage', 0,
@@ -206,6 +245,39 @@ begin
   end if;
 
   update public.combatants set hp_current = new_hp, hp_temp = new_temp where id = target.id;
+  if new_hp > 0 then
+    update public.combatants
+      set conditions_json = coalesce((
+            select jsonb_agg(to_jsonb(x))
+            from jsonb_array_elements_text(coalesce(conditions_json, '[]'::jsonb)) x
+            where x <> 'Unconscious'
+          ), '[]'::jsonb),
+          death_success = case when coalesce(death_state, 'ok') <> 'ok' then 0 else death_success end,
+          death_fail = case when coalesce(death_state, 'ok') <> 'ok' then 0 else death_fail end,
+          death_state = case when coalesce(death_state, 'ok') <> 'ok' then 'ok' else death_state end
+      where id = target.id;
+  else
+    if not (coalesce(target.conditions_json, '[]'::jsonb) @> '"Unconscious"'::jsonb) then
+      update public.combatants
+        set conditions_json = coalesce(conditions_json, '[]'::jsonb) || '"Unconscious"'::jsonb
+        where id = target.id;
+    end if;
+    if target.source = 'character' and coalesce(target.death_state, 'ok') <> 'dead' then
+      if target.hp_current > 0 and coalesce(target.death_state, 'ok') in ('ok', '') then
+        update public.combatants set death_state = 'dying', death_success = 0, death_fail = 0 where id = target.id;
+      elsif coalesce(target.death_state, 'ok') = 'dying' then
+        update public.combatants
+          set death_fail = least(3, coalesce(death_fail, 0) + case when target.hp_current <= 0 and crit then 2 else 1 end)
+          where id = target.id;
+        update public.combatants set death_state = 'dead' where id = target.id and death_fail >= 3;
+      elsif coalesce(target.death_state, 'ok') = 'stable' then
+        update public.combatants
+          set death_state = 'dying', death_success = 0,
+              death_fail = least(3, case when target.hp_current <= 0 and crit then 2 else 1 end)
+          where id = target.id;
+      end if;
+    end if;
+  end if;
   if target.source = 'character' then
     update public.player_characters
       set sheet_json = jsonb_set(jsonb_set(coalesce(sheet_json, '{}'::jsonb), '{hpCurrent}', to_jsonb(new_hp)), '{hpTemp}', to_jsonb(new_temp))
@@ -213,9 +285,9 @@ begin
   end if;
 
   if crit then
-    msg := format('Natural 20! %s damage to %s (%s HP left).', p_damage, target.name, new_hp);
+    msg := format('%s. Natural 20! %s damage to %s (%s HP left).', dice_note, p_damage, target.name, new_hp);
   else
-    msg := format('Hit %s (%s beats AC %s) for %s damage (%s HP left).', target.name, total, target.ac, p_damage, new_hp);
+    msg := format('%s. Hit %s (%s beats AC %s) for %s damage (%s HP left).', dice_note, target.name, total, target.ac, p_damage, new_hp);
   end if;
 
   return json_build_object(
@@ -223,6 +295,9 @@ begin
     'crit', crit,
     'fumble', false,
     'hadAdvantage', had_adv,
+    'rollMode', mode,
+    'd20', used_d20,
+    'd20b', p_d20_b,
     'total', total,
     'ac', target.ac,
     'damage', p_damage,
@@ -234,5 +309,6 @@ begin
 end;
 $$;
 
-grant execute on function public.resolve_player_attack(uuid, uuid, int, int, int, uuid) to authenticated;
+grant execute on function public.resolve_player_attack(uuid, uuid, int, int, int, uuid, int, text) to authenticated;
+
 notify pgrst, 'reload schema';
