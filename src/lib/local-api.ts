@@ -79,11 +79,26 @@ export const localApi = {
   startInstance: (campaignId: string, templateId: string, name?: string) =>
     req<{ instanceId: string }>(`/api/campaigns/${campaignId}/instances`, { method: 'POST', body: JSON.stringify({ templateId, name }) }),
   setStatus: (id: string, status: string) => req(`/api/instances/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
-  openSession: (campaignId: string, encounterInstanceId: string | null) =>
+  openSession: (campaignId: string, encounterInstanceId: string | null, opts?: { rotateJoinCode?: boolean }) =>
     req<{ session: { joinCode: string } }>(`/api/campaigns/${campaignId}/session`, {
       method: 'POST',
-      body: JSON.stringify({ encounterInstanceId }),
+      body: JSON.stringify({ encounterInstanceId, rotateJoinCode: opts?.rotateJoinCode }),
     }),
+  ensureSession: (campaignId: string) =>
+    req<{ session: { joinCode: string } }>(`/api/campaigns/${campaignId}/session`, {
+      method: 'POST',
+      body: JSON.stringify({ ensure: true }),
+    }),
+  patchSession: (campaignId: string, body: { ambianceCaption?: string; ambianceImageUrl?: string | null }) =>
+    req(`/api/campaigns/${campaignId}/session`, { method: 'PATCH', body: JSON.stringify(body) }),
+  uploadAmbiance: (campaignId: string, file: File) => {
+    const form = new FormData()
+    form.append('image', file)
+    return req(`/api/campaigns/${campaignId}/session/ambiance`, { method: 'POST', body: form })
+  },
+  finishEncounter: (campaignId: string, outcome: 'won' | 'lost') =>
+    req(`/api/campaigns/${campaignId}/finish-encounter`, { method: 'POST', body: JSON.stringify({ outcome }) }),
+  returnToTable: (campaignId: string) => req(`/api/campaigns/${campaignId}/return-to-table`, { method: 'POST' }),
   peekJoin: (code: string) => req<{ campaignName: string; joinCode: string }>(`/api/join/${code}`),
   join: (code: string, personalCode: string) =>
     req<{ token: string; user: AuthUser }>(`/api/join/${code}`, { method: 'POST', body: JSON.stringify({ personalCode }) }),

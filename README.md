@@ -9,13 +9,13 @@ Monster stat blocks are seeded from the Systems Reference Document 5.1 (© Wizar
 - **Dungeon Master login** with a table name and passcode. Run as many campaigns as you want.
 - **Shared bestiary** across every campaign at that table (~300 SRD creatures, plus your own).
 - **Prep library** per campaign: square 5-ft battle maps you draw from scratch (optional picture as background, blocked squares tokens cannot walk on), encounter templates, player characters with personal join codes.
-- **Live session**: start a new fight from a template or resume a paused one. Players enter tonight’s join code plus their personal character code. Copy buttons sit next to both codes.
+- **Live session**: the campaign table stays open on one join code. Between fights, players see their character sheets and a scene image (or a hearth placeholder) while you talk and travel. Start or resume an encounter when you are ready. Copy buttons sit next to join codes and personal character codes.
 - **Map & tokens** (Konva): pan/zoom, drag tokens on a square grid (5 ft per square), paint fog of war. Tokens snap back if dropped on a blocked square. Each creature has a name, HP bar, Armor Class, and a colored ring per condition (Poisoned, Unconscious / sleeping, and the rest of the tracker list).
 - **Encounter tracker**: initiative, current/max/temp HP, conditions, next-turn. State hangs off the encounter instance, not the night’s join code.
 - **Attacks**: pick an attack, tap a creature in range, enter the d20 from the table and the damage. d20 + bonus must be **higher than Armor Class** to hit (equal to AC misses). Natural 20 hits. Natural 1 misses and the target has advantage against the attacker next turn — same rule for players and for the DM’s monsters.
 - **Encounter templates**: pick monsters from a bestiary dropdown (quantity places that many tokens). Place player characters on the map so you decide starting squares before you hit Start.
 - **Character sheets** with Combat / Skills / Spells / Bio. Empty tabs hide. Ability modifiers, skill bonuses, and passive Perception calculate automatically. Visible to everyone; editable by the owner and the DM.
-- **Fillable PDF import** reads named form fields (no OCR). Manual entry remains as a fallback.
+- **Encounter outcome**: the DM finalizes a fight as won or lost. Everyone sees a victory or defeat, then the table returns to the scene + sheets. **Next encounter** loads the next template without minting a new join code.
 
 ## Run locally
 
@@ -54,7 +54,7 @@ A seeded campaign is ready on first boot:
 | Player (Elara) | Join code **HEARTH**, personal code **ELARA7K2** |
 | Player (Brok) | Join code **HEARTH**, personal code **BROK4M9X** |
 
-The **Cragmaw Ambush** is paused in round 2 with the bugbear already wounded. Open Live as the DM and hit Resume, or join as a player and watch the map.
+The **Cragmaw Ambush** is paused in round 2 with the bugbear already wounded. Open Live as the DM — you sit at the tavern table first. Resume the ambush when the party is ready, or join as a player and read your sheet beside the scene.
 
 ## Architecture
 
@@ -74,7 +74,7 @@ Do not put the Supabase `service_role` key in the client.
 
 ## Out of scope (deliberate)
 
-Hex grids, dynamic lighting, animations, sound, multiple maps in one session, OCR for handwritten sheets, and importing from an external monster API.
+Hex grids, dynamic lighting, token animations, sound, multiple maps in one session, OCR for handwritten sheets, and importing from an external monster API.
 
 Measurement tools and freehand wall drawing are still out of scope; blocked squares on the 5-ft grid cover impassable terrain.
 

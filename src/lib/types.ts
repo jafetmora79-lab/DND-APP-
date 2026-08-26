@@ -292,11 +292,18 @@ export type EncounterInstance = {
   mapId: string | null
 }
 
+export type TablePhase = 'table' | 'combat' | 'victory' | 'defeat'
+export type EncounterOutcome = 'won' | 'lost'
+
 export type LiveSession = {
   id: string
   joinCode: string
   campaignId: string
   encounterInstanceId: string | null
+  tablePhase: TablePhase
+  ambianceImageUrl: string | null
+  ambianceCaption: string
+  lastOutcome: EncounterOutcome | null
 }
 
 export type EncounterSnapshot = {

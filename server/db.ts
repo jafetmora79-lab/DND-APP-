@@ -160,6 +160,10 @@ CREATE TABLE IF NOT EXISTS live_sessions (
   campaign_id TEXT NOT NULL,
   encounter_instance_id TEXT,
   created_at INTEGER NOT NULL,
+  table_phase TEXT NOT NULL DEFAULT 'table',
+  ambiance_image_url TEXT,
+  ambiance_caption TEXT NOT NULL DEFAULT '',
+  last_outcome TEXT,
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
 );
 `)
@@ -183,6 +187,31 @@ try {
   db.exec(`ALTER TABLE combatants ADD COLUMN advantage_against_json TEXT NOT NULL DEFAULT '[]'`)
 } catch {
   /* already present */
+}
+try {
+  db.exec(`ALTER TABLE live_sessions ADD COLUMN table_phase TEXT NOT NULL DEFAULT 'table'`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE live_sessions ADD COLUMN ambiance_image_url TEXT`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE live_sessions ADD COLUMN ambiance_caption TEXT NOT NULL DEFAULT ''`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE live_sessions ADD COLUMN last_outcome TEXT`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`UPDATE live_sessions SET table_phase = 'combat' WHERE encounter_instance_id IS NOT NULL AND (table_phase IS NULL OR table_phase = 'table')`)
+} catch {
+  /* ignore */
 }
 
 export function now() {
@@ -745,12 +774,18 @@ function seedDemo() {
   const bug = combatants.find((c) => c.name === 'Bugbear')
   if (bug) db.prepare('UPDATE combatants SET hp_current = 18, conditions_json = ? WHERE id = ?').run(JSON.stringify(['Poisoned']), bug.id)
 
-  db.prepare('INSERT INTO live_sessions (id, join_code, campaign_id, encounter_instance_id, created_at) VALUES (?,?,?,?,?)').run(
+  db.prepare(
+    `INSERT INTO live_sessions (id, join_code, campaign_id, encounter_instance_id, created_at, table_phase, ambiance_caption, last_outcome)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(
     ids.id(),
     'HEARTH',
     campaignId,
-    instanceId,
+    null,
     now(),
+    'table',
+    'The Hearthkeeper tavern. Wet cloaks by the fire — the road to Cragmaw can wait.',
+    null,
   )
 }
 

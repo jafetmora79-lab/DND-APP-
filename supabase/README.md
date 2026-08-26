@@ -23,6 +23,8 @@ If the project already had `schema.sql` applied before the map maker shipped, al
 
 If it was applied before encounter play (one token per monster copy, player start squares, player attacks), also run `migrate-encounter-play.sql`.
 
+If it was applied before the campaign table (scene image between fights, next encounter, won/lost), also run `migrate-campaign-table.sql`.
+
 ## 3. App env
 
 ```bash

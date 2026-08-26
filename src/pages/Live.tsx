@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Check, Copy, Eye, EyeOff, Pause, Play, Sword } from 'lucide-react'
+import { Check, Copy, Eye, EyeOff, Flag, Pause, Play, Sword, Trophy } from 'lucide-react'
 import { AttackBar } from '@/components/AttackBar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CharacterSheet } from '@/components/CharacterSheet'
+import { EncounterOutcomeOverlay } from '@/components/EncounterOutcome'
 import { MapBoard } from '@/components/map/MapBoard'
 import { StatBlock } from '@/components/StatBlock'
+import { TableHub } from '@/components/TableHub'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
 import { attacksFromMonster, decorateTokens, inRangeCombatantIds } from '@/lib/combat'
 import { useLive } from '@/lib/realtime'
+import { showCombatStage, showOutcome } from '@/lib/session'
 import type { Attack, EncounterInstance, EncounterSnapshot, EncounterTemplate, FogState, Monster } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
@@ -22,6 +25,7 @@ export function Live() {
   const [instances, setInstances] = useState<EncounterInstance[]>([])
   const [monsters, setMonsters] = useState<Monster[]>([])
   const [selected, setSelected] = useState<string | null>(null)
+  const [sheetId, setSheetId] = useState<string | null>(null)
   const [panel, setPanel] = useState<'tracker' | 'sheet' | 'stat'>('tracker')
   const [tool, setTool] = useState<'select' | 'reveal' | 'hide'>('select')
   const [addQ, setAddQ] = useState('')
@@ -34,14 +38,23 @@ export function Live() {
   const [damage, setDamage] = useState('')
   const [attackMsg, setAttackMsg] = useState('')
   const [attackBusy, setAttackBusy] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [finalizeOpen, setFinalizeOpen] = useState(false)
+  const captionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback(async () => {
     if (!campaignId) return
-    const [live, t, i, b] = await Promise.all([api.live(campaignId), api.templates(campaignId), api.instances(campaignId), api.bestiary()])
+    let live = await api.live(campaignId)
+    if (!live.session) {
+      await api.ensureSession(campaignId)
+      live = await api.live(campaignId)
+    }
+    const [t, i, b] = await Promise.all([api.templates(campaignId), api.instances(campaignId), api.bestiary()])
     setSnap(live)
     setTemplates(t.templates)
     setInstances(i.instances)
     setMonsters(b.monsters)
+    setSheetId((cur) => cur ?? live.characters[0]?.id ?? null)
   }, [campaignId])
 
   useEffect(() => {
@@ -119,9 +132,17 @@ export function Live() {
   async function startFrom(templateId: string) {
     if (!campaignId) return
     setBusy(true)
+    setError('')
     try {
+      if (instance && instance.status === 'active') {
+        await api.setStatus(instance.id, 'completed')
+      }
       const r = await api.startInstance(campaignId, templateId)
       await api.openSession(campaignId, r.instanceId)
+      setPickerOpen(false)
+      setFinalizeOpen(false)
+      setPending(null)
+      setTargetId(null)
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed')
@@ -133,10 +154,14 @@ export function Live() {
   async function resume(id: string) {
     if (!campaignId) return
     setBusy(true)
+    setError('')
     try {
       await api.setStatus(id, 'active')
       await api.openSession(campaignId, id)
+      setPickerOpen(false)
       await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed')
     } finally {
       setBusy(false)
     }
@@ -145,6 +170,79 @@ export function Live() {
   async function pause() {
     if (!instance) return
     await api.setStatus(instance.id, 'paused')
+    await load()
+  }
+
+  async function leaveToTable() {
+    if (!campaignId) return
+    setBusy(true)
+    try {
+      if (instance && instance.status === 'active') await api.setStatus(instance.id, 'paused')
+      await api.returnToTable(campaignId)
+      setPickerOpen(false)
+      setFinalizeOpen(false)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function finish(outcome: 'won' | 'lost') {
+    if (!campaignId) return
+    setBusy(true)
+    try {
+      await api.finishEncounter(campaignId, outcome)
+      setFinalizeOpen(false)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function backToTable() {
+    if (!campaignId) return
+    setBusy(true)
+    try {
+      await api.returnToTable(campaignId)
+      setPickerOpen(false)
+      setFinalizeOpen(false)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function onCaption(value: string) {
+    if (!campaignId) return
+    setSnap((s) => (s?.session ? { ...s, session: { ...s.session, ambianceCaption: value } } : s))
+    if (captionTimer.current) clearTimeout(captionTimer.current)
+    captionTimer.current = setTimeout(() => {
+      api.patchSession(campaignId, { ambianceCaption: value }).catch((e) => setError(e.message))
+    }, 400)
+  }
+
+  async function onUploadScene(file: File) {
+    if (!campaignId) return
+    setBusy(true)
+    try {
+      await api.uploadAmbiance(campaignId, file)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onClearScene() {
+    if (!campaignId) return
+    await api.patchSession(campaignId, { ambianceImageUrl: null })
     await load()
   }
 
@@ -160,58 +258,84 @@ export function Live() {
   }
 
   const paused = instances.filter((i) => i.status === 'paused')
+  const combat = showCombatStage(snap?.session ?? null, instance ?? null, snap?.map ?? null)
+  const outcome = showOutcome(snap?.session ?? null)
+  const hubCharacter = snap?.characters.find((c) => c.id === sheetId) ?? snap?.characters[0]
 
   if (!snap) {
     return <div className="p-8 text-muted">{error || 'Loading the table…'}</div>
   }
 
-  if (!instance || !snap.map) {
+  const joinActions = (
+    <>
+      <div className="rounded-md border border-gold/40 bg-panel px-3 py-1 font-mono text-sm tracking-[0.2em] text-gold-2">
+        {snap.session?.joinCode ?? '—'}
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={!snap.session?.joinCode}
+        onClick={async () => {
+          if (!snap.session?.joinCode) return
+          const ok = await copyText(snap.session.joinCode)
+          if (!ok) return
+          setCopiedJoin(true)
+          window.setTimeout(() => setCopiedJoin(false), 1600)
+        }}
+      >
+        {copiedJoin ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+        {copiedJoin ? 'Copied' : 'Copy code'}
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => api.openSession(campaignId!, instance?.id ?? null, { rotateJoinCode: true }).then(load)}
+      >
+        New join code
+      </Button>
+    </>
+  )
+
+  if (!combat || !instance || !snap.map) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-10">
-        <Link to={`/dm/${campaignId}`} className="text-xs uppercase tracking-[0.3em] text-gold">
-          Back to prep
-        </Link>
-        <h1 className="mt-2 font-display text-3xl text-gold-2">Start tonight</h1>
-        <p className="mt-2 text-muted">Load a fresh encounter from a template, or resume a fight you paused mid-round.</p>
-        {error && <p className="mt-3 text-blood">{error}</p>}
-        {paused.length > 0 && (
-          <section className="mt-6">
-            <h2 className="font-display text-lg text-gold">Paused fights</h2>
-            <ul className="mt-2 space-y-2">
-              {paused.map((i) => (
-                <li key={i.id} className="flex items-center justify-between rounded-lg border border-line bg-panel px-3 py-3">
-                  <div>
-                    <div>{i.name}</div>
-                    <div className="text-xs text-muted">Round {i.roundNumber}</div>
-                  </div>
-                  <Button disabled={busy} onClick={() => resume(i.id)}>
-                    Resume
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-        <section className="mt-8">
-          <h2 className="font-display text-lg text-gold">New encounter</h2>
-          <ul className="mt-2 space-y-2">
-            {templates.map((t) => (
-              <li key={t.id} className="flex items-center justify-between rounded-lg border border-line bg-panel px-3 py-3">
-                <div>
-                  <div>{t.name}</div>
-                  <div className="text-xs text-muted">{t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')}</div>
-                  {(t.characters?.length ?? 0) > 0 && (
-                    <div className="text-xs text-muted">Starts: {t.characters!.map((c) => c.name).join(', ')}</div>
-                  )}
-                </div>
-                <Button disabled={busy} variant="ember" onClick={() => startFrom(t.id)}>
-                  Start
-                </Button>
-              </li>
-            ))}
-            {templates.length === 0 && <li className="text-muted">Build an encounter template in prep first.</li>}
-          </ul>
-        </section>
+      <div className="flex h-dvh flex-col bg-bg">
+        <header className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
+          <Link to={`/dm/${campaignId}`} className="font-display text-gold">
+            {snap.campaign.name}
+          </Link>
+          <span className="text-muted">/</span>
+          <span>At the table</span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">{joinActions}</div>
+        </header>
+        {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
+        <TableHub
+          campaignName={snap.campaign.name}
+          imageUrl={snap.session?.ambianceImageUrl ?? null}
+          caption={snap.session?.ambianceCaption ?? ''}
+          lastOutcome={snap.session?.lastOutcome ?? null}
+          characters={snap.characters}
+          selectedId={hubCharacter?.id ?? null}
+          onSelectCharacter={setSheetId}
+          sheet={
+            hubCharacter ? (
+              <CharacterSheet character={hubCharacter} canEdit isDm onChange={(patch) => api.patchCharacter(hubCharacter.id, patch)} />
+            ) : (
+              <p className="text-sm text-muted">Add characters in prep so their sheets sit on this table between fights.</p>
+            )
+          }
+          dm={{
+            caption: snap.session?.ambianceCaption ?? '',
+            onCaption,
+            onUpload: onUploadScene,
+            onClearImage: onClearScene,
+            hasImage: Boolean(snap.session?.ambianceImageUrl),
+            templates,
+            paused,
+            onStart: startFrom,
+            onResume: resume,
+            busy,
+          }}
+        />
       </div>
     )
   }
@@ -228,26 +352,15 @@ export function Live() {
           {instance.status}
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <div className="rounded-md border border-gold/40 bg-panel px-3 py-1 font-mono text-sm tracking-[0.2em] text-gold-2">
-            {snap.session?.joinCode ?? '—'}
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!snap.session?.joinCode}
-            onClick={async () => {
-              if (!snap.session?.joinCode) return
-              const ok = await copyText(snap.session.joinCode)
-              if (!ok) return
-              setCopiedJoin(true)
-              window.setTimeout(() => setCopiedJoin(false), 1600)
-            }}
-          >
-            {copiedJoin ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copiedJoin ? 'Copied' : 'Copy code'}
+          {joinActions}
+          <Button size="sm" variant="outline" disabled={busy} onClick={leaveToTable}>
+            Table
           </Button>
-          <Button size="sm" variant="outline" onClick={() => api.openSession(campaignId!, instance.id).then(load)}>
-            New join code
+          <Button size="sm" variant="outline" disabled={busy || Boolean(outcome)} onClick={() => setPickerOpen(true)}>
+            Next encounter
+          </Button>
+          <Button size="sm" variant="ember" disabled={busy || Boolean(outcome)} onClick={() => setFinalizeOpen(true)}>
+            <Trophy className="h-4 w-4" /> Finalize
           </Button>
           {instance.status === 'active' ? (
             <Button size="sm" variant="outline" onClick={pause}>
@@ -427,6 +540,79 @@ export function Live() {
           busy={attackBusy}
           message={attackMsg}
         />
+      )}
+      {outcome && (
+        <EncounterOutcomeOverlay
+          outcome={outcome}
+          encounterName={instance.name}
+          isDm
+          busy={busy}
+          onReturnToTable={backToTable}
+          onNextEncounter={() => setPickerOpen(true)}
+        />
+      )}
+      {finalizeOpen && !outcome && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-label="Finalize encounter">
+          <div className="w-full max-w-md rounded-xl border border-line bg-panel p-6 text-center">
+            <h2 className="font-display text-2xl text-gold-2">How did it go?</h2>
+            <p className="mt-2 text-sm text-muted">
+              Players see a victory or defeat on their phones, then you bring everyone back to the table — same join code.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <Button disabled={busy} onClick={() => finish('won')}>
+                <Trophy className="h-4 w-4" /> Won
+              </Button>
+              <Button disabled={busy} variant="danger" onClick={() => finish('lost')}>
+                <Flag className="h-4 w-4" /> Lost
+              </Button>
+              <Button disabled={busy} variant="ghost" onClick={() => setFinalizeOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {pickerOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-label="Next encounter">
+          <div className="max-h-[80dvh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-panel p-6">
+            <h2 className="font-display text-2xl text-gold-2">Next encounter</h2>
+            <p className="mt-2 text-sm text-muted">The join code stays. This fight is left behind; the new map opens for everyone at the table.</p>
+            {paused.length > 0 && (
+              <section className="mt-4">
+                <h3 className="text-xs uppercase tracking-wider text-muted">Paused</h3>
+                <ul className="mt-2 space-y-2">
+                  {paused.map((i) => (
+                    <li key={i.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2">
+                      <span className="truncate">{i.name}</span>
+                      <Button size="sm" disabled={busy} onClick={() => resume(i.id)}>
+                        Resume
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            <ul className="mt-4 space-y-2">
+              {templates.map((t) => (
+                <li key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="truncate">{t.name}</div>
+                    <div className="truncate text-xs text-muted">{t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')}</div>
+                  </div>
+                  <Button size="sm" variant="ember" disabled={busy} onClick={() => startFrom(t.id)}>
+                    Start
+                  </Button>
+                </li>
+              ))}
+              {templates.length === 0 && <li className="text-sm text-muted">Build a template in prep first.</li>}
+            </ul>
+            <div className="mt-4 text-right">
+              <Button variant="ghost" onClick={() => setPickerOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

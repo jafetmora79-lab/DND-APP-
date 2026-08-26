@@ -137,7 +137,11 @@ create table if not exists public.live_sessions (
   join_code text not null unique,
   campaign_id uuid not null references public.campaigns (id) on delete cascade,
   encounter_instance_id uuid,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  table_phase text not null default 'table',
+  ambiance_image_url text,
+  ambiance_caption text not null default '',
+  last_outcome text
 );
 
 create or replace function public.is_dm_of_campaign(cid uuid)
