@@ -22,6 +22,7 @@ import {
   FEET_PER_SQUARE,
   pixelToCell,
   spreadCells,
+  tokenOccupiedCells,
   terrainAt,
   terrainEnterCostFeet,
   tokenOccupiesBlocked,
@@ -421,27 +422,36 @@ export function attacksFromMonster(monster: { actions?: { name: string; desc: st
   return parsed.length ? parsed : [{ name: 'Strike', bonus: '+0', damage: '', range: '5 ft.' }]
 }
 
-/** Player map: hide tokens the DM marked invisible, that sit in unrevealed fog, or that are Hidden from this viewer. */
+function tokenBelongsToViewer(
+  token: Pick<MapToken, 'refId'> & { refType?: MapToken['refType'] },
+  opts?: { viewerCharacterId?: string | null; combatants?: Combatant[] },
+) {
+  const viewer = opts?.viewerCharacterId
+  if (!viewer) return false
+  if (token.refType === 'character' && token.refId === viewer) return true
+  const owner = opts?.combatants?.find((c) => c.id === token.refId)
+  return Boolean(owner && owner.source === 'character' && owner.sourceId === viewer)
+}
+
+/** Player map: hide tokens the DM marked invisible, that sit in unrevealed fog, or that are Hidden from this viewer. Never hide the viewer's own token. */
 export function tokenHiddenFromPlayers(
-  token: Pick<MapToken, 'x' | 'y' | 'visibleToPlayers' | 'refId'>,
+  token: Pick<MapToken, 'x' | 'y' | 'visibleToPlayers' | 'refId'> & { refType?: MapToken['refType']; sizeSquares?: number },
   fog: FogState | null | undefined,
   gridSize: number,
   isDm: boolean,
   opts?: { viewerCharacterId?: string | null; combatants?: Combatant[] },
 ) {
   if (isDm) return false
+  if (tokenBelongsToViewer(token, opts)) return false
   if (!token.visibleToPlayers) return true
   const owner = opts?.combatants?.find((c) => c.id === token.refId)
-  if (owner && isHiding(owner)) {
-    const mine = owner.source === 'character' && owner.sourceId === opts?.viewerCharacterId
-    if (!mine) return true
-  }
+  if (owner && isHiding(owner)) return true
   if (!fog?.enabled) return false
-  const cell = Math.max(1, gridSize)
-  const c = Math.floor(token.x / cell)
-  const r = Math.floor(token.y / cell)
-  if (c < 0 || r < 0 || c >= fog.cols || r >= fog.rows) return true
-  return !fog.revealed[r * fog.cols + c]
+  const cols = fog.cols
+  const rows = fog.rows
+  const cells = tokenOccupiedCells(token, gridSize, cols, rows)
+  if (cells.length === 0) return true
+  return cells.every((cell) => !fog.revealed[cell.row * cols + cell.col])
 }
 
 /** Same payload GET /live already sent to players — also used for WebSocket pushes. */

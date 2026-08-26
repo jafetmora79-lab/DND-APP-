@@ -196,6 +196,8 @@ export function Player() {
             selectedId={targetId ?? focusId}
             highlightIds={highlightIds}
             dragRefIds={myCombatant && whose?.id === myCombatant.id ? [myCombatant.id] : []}
+            viewerCharacterId={user?.role === 'player' ? user.characterId : null}
+            combatants={snap.combatants}
             onSelect={(id) => {
               if (mapPick === 'attack' || mapPick === 'help') {
                 setTargetId(id)

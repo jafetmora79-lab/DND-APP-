@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Maximize2, Minus, Plus } from 'lucide-react'
 import { Circle, Group, Layer, Rect, Shape, Stage, Text, Image as KImage } from 'react-konva'
 import useImage from 'use-image'
-import { conditionRingColor, type BattleMap, type FogState, type MapToken } from '@/lib/types'
+import { conditionRingColor, type BattleMap, type Combatant, type FogState, type MapToken } from '@/lib/types'
 import { tokenHiddenFromPlayers } from '@/lib/combat'
 import { clampMapScale, fitMapView, touchDistance, zoomAtPoint } from '@/lib/map-view'
-import { hpBarFill, initials, pixelToCell, TERRAIN, tokenOccupiesBlocked } from '@/lib/utils'
+import { hpBarFill, initials, pixelToCell, TERRAIN, tokenOccupiedCells, tokenOccupiesBlocked } from '@/lib/utils'
 import { inkOnToken } from '@/lib/token-look'
 
 export type MapTool =
@@ -49,6 +49,9 @@ type Props = {
   onCellClick?: (col: number, row: number) => void
   /** Combatant ids the current user may drag. DM can drag every token when onMove is set. */
   dragRefIds?: string[]
+  /** Player viewing this map — their own token stays visible through fog. */
+  viewerCharacterId?: string | null
+  combatants?: Combatant[]
 }
 
 function MapImage({ url, width, height }: { url: string; width: number; height: number }) {
@@ -71,6 +74,8 @@ export function MapBoard({
   onBlocked,
   onCellClick,
   dragRefIds = [],
+  viewerCharacterId = null,
+  combatants = [],
 }: Props) {
   const wrap = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -88,6 +93,16 @@ export function MapBoard({
   const blocked = map.blocked ?? []
   const paintingTerrain = Boolean(TERRAIN_TOOL[tool] != null || tool === 'open' || tool === 'block')
   const paintingFog = tool === 'reveal' || tool === 'hide'
+  const hideOpts = { viewerCharacterId, combatants }
+  const visibleTokens = tokens.filter((t) => !tokenHiddenFromPlayers(t, fog, map.gridSize, isDm, hideOpts))
+  const tokenFogHoles = new Set<string>()
+  if (!isDm) {
+    for (const t of visibleTokens) {
+      for (const cell of tokenOccupiedCells(t, map.gridSize, fog.cols, fog.rows)) {
+        tokenFogHoles.add(`${cell.col},${cell.row}`)
+      }
+    }
+  }
 
 
   function applyView(next: { scale: number; x: number; y: number }) {
@@ -424,7 +439,9 @@ export function MapBoard({
                 for (let r = 0; r < fog.rows; r++) {
                   for (let c = 0; c < fog.cols; c++) {
                     const i = r * fog.cols + c
-                    if (!revealed[i]) ctx.fillRect(c * map.gridSize, r * map.gridSize, map.gridSize, map.gridSize)
+                    if (revealed[i]) continue
+                    if (tokenFogHoles.has(`${c},${r}`)) continue
+                    ctx.fillRect(c * map.gridSize, r * map.gridSize, map.gridSize, map.gridSize)
                   }
                 }
                 ctx.fillStrokeShape(shape)
@@ -465,9 +482,8 @@ export function MapBoard({
           />
         </Layer>
         <Layer>
-          {tokens.map((t) => {
+          {visibleTokens.map((t) => {
             const r = (t.sizeSquares * map.gridSize) / 2 - 4
-            if (tokenHiddenFromPlayers(t, fog, map.gridSize, isDm)) return null
             const selected = selectedId === t.refId
             const highlighted = highlightIds.includes(t.refId)
             const hpMax = t.hpMax ?? 0
