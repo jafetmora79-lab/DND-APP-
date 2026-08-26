@@ -89,8 +89,15 @@ export function Landing() {
               <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" />
             </Field>
             <Field label="Passcode">
-              <Input type="password" value={passcode} onChange={(e) => setPasscode(e.target.value)} autoComplete="current-password" />
+              <Input
+                type="password"
+                value={passcode}
+                onChange={(e) => setPasscode(e.target.value)}
+                autoComplete="current-password"
+                minLength={usingSupabase ? 6 : 4}
+              />
             </Field>
+            {usingSupabase && <p className="text-xs text-muted">Hosted tables need a passcode of at least 6 characters.</p>}
             <label className="flex items-center gap-2 text-sm text-muted">
               <input type="checkbox" checked={creating} onChange={(e) => setCreating(e.target.checked)} />
               Claim a new table (seeds the SRD 5.1 bestiary)
