@@ -13,11 +13,10 @@ export function Landing() {
   const nav = useNavigate()
   const [mode, setMode] = useState<'dm' | 'join'>('dm')
   const [creating, setCreating] = useState(false)
-  const sampleTable = !usingSupabase && !import.meta.env.PROD
-  const [name, setName] = useState(sampleTable ? SAMPLE_TABLE_NAME : '')
-  const [passcode, setPasscode] = useState(sampleTable ? SAMPLE_TABLE_PASSCODE : '')
-  const [joinCode, setJoinCode] = useState(sampleTable ? SAMPLE_JOIN_CODE : '')
-  const [personal, setPersonal] = useState(sampleTable ? SAMPLE_ELARA_CODE : '')
+  const [name, setName] = useState(SAMPLE_TABLE_NAME)
+  const [passcode, setPasscode] = useState(SAMPLE_TABLE_PASSCODE)
+  const [joinCode, setJoinCode] = useState(SAMPLE_JOIN_CODE)
+  const [personal, setPersonal] = useState(SAMPLE_ELARA_CODE)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -128,12 +127,13 @@ export function Landing() {
           )}
         </div>
 
-        {usingSupabase ? (
-          <p className="mt-6 text-center text-sm text-muted">{t('landing.share')}</p>
-        ) : import.meta.env.PROD ? (
+        {import.meta.env.PROD && !usingSupabase ? (
           <p className="mt-6 text-center text-sm text-muted">{t('landing.pagesHint')}</p>
         ) : (
-          <p className="mt-6 text-center text-sm text-muted">{t('landing.sample')}</p>
+          <div className="mt-6 space-y-1 text-center text-sm text-muted">
+            {usingSupabase && <p>{t('landing.share')}</p>}
+            <p>{t('landing.sample')}</p>
+          </div>
         )}
       </div>
     </div>
