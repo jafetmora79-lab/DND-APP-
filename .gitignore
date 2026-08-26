@@ -14,5 +14,7 @@ data/*.sqlite-*
 uploads/*
 !uploads/.gitkeep
 .env
+.env.local
+.env.*.local
 agent-tools
 data-tmp-monsters.json

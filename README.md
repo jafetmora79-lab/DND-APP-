@@ -26,6 +26,8 @@ Then open [http://127.0.0.1:4731](http://127.0.0.1:4731).
 
 The Vite app proxies `/api` and `/ws` to the SQLite + WebSocket server on port **4732**. Data lives in `data/table.sqlite`; uploaded maps and PDFs live in `uploads/`.
 
+To host the table so phones can join from anywhere, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (see [supabase/README.md](supabase/README.md)). GitHub Pages can serve the static app only — it cannot replace that backend.
+
 ### Sample table
 
 A seeded campaign is ready on first boot:
@@ -40,17 +42,19 @@ The **Cragmaw Ambush** is paused in round 2 with the bugbear already wounded. Op
 
 ## Architecture
 
-The plan called for Supabase (Postgres, Realtime, RLS, Storage, Edge Functions). This first build ships a **local fallback** so the table runs without cloud credentials:
+Without env vars, the app uses a local SQLite + WebSocket server so you can run tonight’s table on one machine.
 
-| Planned | Shipped now |
-| --- | --- |
-| Supabase Auth (magic link / passcode) | Passcode login for DMs; personal codes for players |
-| Postgres + RLS | SQLite with the same table sketch |
-| Supabase Realtime | WebSocket snapshots after every combat mutation |
-| Supabase Storage | Disk files under `/uploads` |
-| Edge Function + pdf-lib | Same pdf-lib parser, in the Node server |
+With `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`, the same UI talks to Supabase (Auth, Postgres, RLS, Realtime, Storage). PDF parsing runs in the browser. That is the path for a public URL (GitHub Pages, Vercel, or Netlify).
 
-Swap the `server/` layer for Supabase later without changing the UI. Row-level rules in this build are enforced in the API: prep writes are DM-only; live map/tracker writes are DM-only; sheet writes are owner + DM.
+| Concern | Local (`npm run dev`) | Hosted |
+| --- | --- | --- |
+| Auth | Passcode + personal codes | Same UX; DMs are Auth users, players join anonymously then claim a character |
+| Database | SQLite | Postgres + RLS (`supabase/schema.sql`) |
+| Live sync | WebSocket | Supabase Realtime |
+| Map images | `/uploads` | Storage bucket `maps` |
+| GitHub Pages | Not enough on its own | Works once the two `VITE_` secrets are set |
+
+Do not put the Supabase `service_role` key in the client.
 
 ## Out of scope (deliberate)
 

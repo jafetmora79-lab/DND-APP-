@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { getToken } from './api'
+import { api, getToken } from './api'
+import { usingSupabase } from './config'
+import { supabase } from './supabase'
 import type { EncounterSnapshot } from './types'
 
 export function useLive(campaignId: string | undefined, onSnap: (s: EncounterSnapshot) => void) {
@@ -8,6 +10,30 @@ export function useLive(campaignId: string | undefined, onSnap: (s: EncounterSna
 
   useEffect(() => {
     if (!campaignId) return
+
+    if (usingSupabase && supabase) {
+      const client = supabase
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const reload = () => {
+        if (timer) clearTimeout(timer)
+        timer = setTimeout(() => {
+          api.live(campaignId).then((snap) => cb.current(snap)).catch(() => undefined)
+        }, 120)
+      }
+      const channel = client
+        .channel(`campaign:${campaignId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'encounter_instances', filter: `campaign_id=eq.${campaignId}` }, reload)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'live_sessions', filter: `campaign_id=eq.${campaignId}` }, reload)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'player_characters', filter: `campaign_id=eq.${campaignId}` }, reload)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'combatants' }, reload)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tokens_on_map' }, reload)
+        .subscribe()
+      return () => {
+        if (timer) clearTimeout(timer)
+        void client.removeChannel(channel)
+      }
+    }
+
     const token = getToken()
     if (!token) return
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'

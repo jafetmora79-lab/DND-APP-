@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, getToken, setToken } from './api'
+import { usingSupabase } from './config'
+import { supabase } from './supabase'
 import type { AuthUser } from './types'
 
 type AuthState = {
@@ -18,6 +20,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (usingSupabase && supabase) {
+      const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (!session) {
+          setUser(null)
+          setLoading(false)
+          return
+        }
+        api
+          .me()
+          .then((r) => setUser(r.user))
+          .catch(() => setUser(null))
+          .finally(() => setLoading(false))
+      })
+      return () => data.subscription.unsubscribe()
+    }
     if (!getToken()) {
       setLoading(false)
       return
@@ -52,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout: () => {
         setToken(null)
         setUser(null)
+        if (usingSupabase) void supabase?.auth.signOut()
       },
     }),
     [user, loading],

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/lib/auth'
 import { Campaigns } from '@/pages/Campaigns'
 import { Landing } from '@/pages/Landing'
@@ -16,9 +16,12 @@ function Guard({ role, children }: { role: 'dm' | 'player'; children: ReactNode 
 }
 
 export default function App() {
+  const Router = import.meta.env.VITE_HASH_ROUTER === '1' ? HashRouter : BrowserRouter
+  const basename =
+    import.meta.env.VITE_HASH_ROUTER === '1' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, '') || undefined
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <Router basename={basename}>
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route
@@ -55,7 +58,7 @@ export default function App() {
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </BrowserRouter>
+      </Router>
     </AuthProvider>
   )
 }

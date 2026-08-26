@@ -1,5 +1,5 @@
 import { PDFDocument, PDFCheckBox, PDFDropdown, PDFRadioGroup, PDFTextField } from 'pdf-lib'
-import { emptySheet, type Ability, type CharacterSheetData } from '../src/lib/types.ts'
+import { emptySheet, type Ability, type CharacterSheetData } from './types'
 
 function text(fields: Record<string, string>, ...names: string[]) {
   for (const n of names) {
@@ -32,7 +32,7 @@ const ABILITY_FIELDS: Record<Ability, string[]> = {
   cha: ['CHA', 'Cha', 'CHAscore', 'Charisma'],
 }
 
-export async function parseCharacterPdf(buffer: Buffer) {
+export async function parseCharacterPdf(buffer: ArrayBuffer | Uint8Array) {
   const pdf = await PDFDocument.load(buffer)
   const form = pdf.getForm()
   const fields: Record<string, string> = {}
@@ -54,6 +54,7 @@ export async function parseCharacterPdf(buffer: Buffer) {
   const sheet = emptySheet()
   const characterName = text(fields, 'CharacterName', 'Character Name', 'Name')
   const playerName = text(fields, 'PlayerName', 'Player Name', 'Player')
+
   sheet.className = text(fields, 'ClassLevel', 'ClassLevel 2', 'Class')
   const classMatch = sheet.className.match(/(\d+)/)
   if (classMatch) sheet.level = Number(classMatch[1]) || 1
@@ -119,6 +120,7 @@ export async function parseCharacterPdf(buffer: Buffer) {
       damage: text(fields, 'Wpn1 Damage', 'Wpn2 Damage'),
     },
   ].filter((a) => a.name)
+
   if (sheet.attacks.length === 0) sheet.attacks = [{ name: '', bonus: '', damage: '' }]
 
   sheet.spellcastingAbility = (text(fields, 'SpellcastingAbility', 'Spellcasting Ability').toLowerCase().slice(0, 3) ||
@@ -135,5 +137,6 @@ export async function parseCharacterPdf(buffer: Buffer) {
     }
   }
   sheet.spells = spells
+
   return { characterName, playerName, sheet, fieldNames, fieldCount: fieldNames.length }
 }

@@ -4,16 +4,17 @@ import { Dices, Map as MapIcon, ScrollText, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth'
+import { usingSupabase } from '@/lib/config'
 
 export function Landing() {
   const { loginDm, registerDm, joinPlayer } = useAuth()
   const nav = useNavigate()
   const [mode, setMode] = useState<'dm' | 'join'>('dm')
   const [creating, setCreating] = useState(false)
-  const [name, setName] = useState('Hearthkeeper')
-  const [passcode, setPasscode] = useState('torch')
-  const [joinCode, setJoinCode] = useState('HEARTH')
-  const [personal, setPersonal] = useState('ELARA7K2')
+  const [name, setName] = useState(usingSupabase ? '' : 'Hearthkeeper')
+  const [passcode, setPasscode] = useState(usingSupabase ? '' : 'torch')
+  const [joinCode, setJoinCode] = useState(usingSupabase ? '' : 'HEARTH')
+  const [personal, setPersonal] = useState(usingSupabase ? '' : 'ELARA7K2')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -116,12 +117,20 @@ export function Landing() {
         )}
       </div>
 
-      <p className="mt-8 text-center text-sm text-muted">
-        <Dices className="mr-1 inline h-4 w-4 text-gold" />
-        Sample table is already seated: DM <span className="text-ink">Hearthkeeper</span> / <span className="text-ink">torch</span>.
-        Players join <span className="text-ink">HEARTH</span> with <span className="text-ink">ELARA7K2</span> or{' '}
-        <span className="text-ink">BROK4M9X</span>. The Cragmaw Ambush is paused in round 2.
-      </p>
+      {usingSupabase ? (
+        <p className="mt-8 text-center text-sm text-muted">
+          <Dices className="mr-1 inline h-4 w-4 text-gold" />
+          Connected to your Supabase project. Claim a table name to seed the SRD 5.1 bestiary, then share tonight’s join
+          code with the phones at the table.
+        </p>
+      ) : (
+        <p className="mt-8 text-center text-sm text-muted">
+          <Dices className="mr-1 inline h-4 w-4 text-gold" />
+          Sample table is already seated: DM <span className="text-ink">Hearthkeeper</span> / <span className="text-ink">torch</span>.
+          Players join <span className="text-ink">HEARTH</span> with <span className="text-ink">ELARA7K2</span> or{' '}
+          <span className="text-ink">BROK4M9X</span>. The Cragmaw Ambush is paused in round 2.
+        </p>
+      )}
     </div>
   )
 }
