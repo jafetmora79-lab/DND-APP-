@@ -2,14 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
-import { attackOutcome, canTakeAttacks, characterSaveBonus, effectiveRollMode, parseAttackBonus, pickUsedD20 } from '@/lib/combat'
+import { attackOutcome, canTakeAttacks, characterSaveBonus, effectiveRollMode, hasHiddenAdvantage, parseAttackBonus, pickUsedD20 } from '@/lib/combat'
 import { OTHER_ACTION_LABELS } from '@/lib/combat-activity'
-import { ABILITY_LABELS, type Ability, type Attack, type CombatPrompt, type CombatSpendSlot, type Combatant, type PlayerCharacter, type RollMode } from '@/lib/types'
+import { canAttemptHide, hideDcFor } from '@/lib/stealth'
+import { ABILITY_LABELS, type Ability, type Attack, type BattleMap, type CombatPrompt, type CombatSpendSlot, type Combatant, type MapToken, type Monster, type PlayerCharacter, type RollMode } from '@/lib/types'
 import { cn, proficiencyBonus } from '@/lib/utils'
+import { coverBonusBetween } from '@/lib/vision'
 
 export type MapPickMode = 'select' | 'attack' | 'help'
 
-type Menu = null | 'action' | 'bonus' | 'reaction' | 'other' | 'help' | 'attack' | 'custom'
+type Menu = null | 'action' | 'bonus' | 'reaction' | 'other' | 'help' | 'attack' | 'custom' | 'hide'
 type AttackStep = 'pick' | 'target' | 'roll' | 'damage'
 
 const DECLARE_KINDS = [
@@ -41,6 +43,9 @@ type Props = {
   onSettled?: () => void
   setup?: boolean
   currentTurnPosition?: number
+  map?: BattleMap | null
+  tokens?: MapToken[]
+  monsters?: Monster[]
 }
 
 export function PlayerTurnPanel({
@@ -58,6 +63,9 @@ export function PlayerTurnPanel({
   onSettled,
   setup,
   currentTurnPosition,
+  map,
+  tokens = [],
+  monsters = [],
 }: Props) {
   const myTurn = Boolean(combatant && whose && whose.id === combatant.id)
   const [menu, setMenu] = useState<Menu>(null)
@@ -116,11 +124,11 @@ export function PlayerTurnPanel({
     setDamage('')
     setMsg('')
     onSelectedId(null)
-    const hasAdv = Boolean(selectedId && combatant?.advantageAgainst?.includes(selectedId))
+    const hasAdv = Boolean(selectedId && combatant && hasHiddenAdvantage(combatant, selectedId))
     setRollMode(hasAdv ? 'advantage' : 'normal')
   }
 
-  async function declare(kind: string, extra?: { targetId?: string; other?: string; custom?: string }) {
+  async function declare(kind: string, extra?: { targetId?: string; other?: string; custom?: string; d20?: number }) {
     setBusy(true)
     try {
       const r = await api.declareAction(instanceId, {
@@ -130,6 +138,7 @@ export function PlayerTurnPanel({
         targetId: extra?.targetId,
         other: extra?.other,
         custom: extra?.custom,
+        d20: extra?.d20,
       })
       setMsg(r.text)
       resetMenus()
@@ -163,11 +172,26 @@ export function PlayerTurnPanel({
       setMenu('other')
       return
     }
+    if (kind === 'hide') {
+      setMenu('hide')
+      setD20('')
+      setMsg('')
+      return
+    }
     void declare(kind)
   }
 
-  const hasAdv = Boolean(target && combatant?.advantageAgainst?.includes(target.id))
+  const hasAdv = Boolean(target && combatant && hasHiddenAdvantage(combatant, target.id))
   const mode = effectiveRollMode(rollMode, hasAdv)
+  const coverBonus =
+    map && combatant && target
+      ? coverBonusBetween(
+          map,
+          tokens.find((t) => t.refId === combatant.id),
+          tokens.find((t) => t.refId === target.id),
+        )
+      : 0
+  const previewAc = target ? target.ac + coverBonus : 0
   const preview = useMemo(() => {
     if (!pending || !target) return null
     const roll = Number(d20)
@@ -176,10 +200,10 @@ export function PlayerTurnPanel({
     if (mode !== 'normal' && (!Number.isInteger(rollb) || rollb < 1 || rollb > 20)) return null
     const bonus = parseAttackBonus(pending.attack.bonus)
     const dice = pickUsedD20(roll, mode === 'normal' ? undefined : rollb, mode)
-    const outcome = attackOutcome(dice.used, bonus, target.ac)
+    const outcome = attackOutcome(dice.used, bonus, previewAc)
     const total = dice.used + bonus
     return { outcome, total, bonus, used: dice.used }
-  }, [pending, target, d20, d20b, mode])
+  }, [pending, target, d20, d20b, mode, previewAc])
 
   async function submitAttack(dmg: number) {
     if (!pending || !selectedId) return
@@ -188,6 +212,7 @@ export function PlayerTurnPanel({
     setBusy(true)
     try {
       const r = await api.playerAttack(instanceId, {
+        attackerId: combatant?.id,
         targetId: selectedId,
         attackIndex: pending.index,
         d20: roll,
@@ -269,6 +294,8 @@ export function PlayerTurnPanel({
         )
       : 0
 
+  const hideGate = combatant && map ? canAttemptHide(combatant, combatants, tokens, map) : null
+  const hideDc = combatant ? hideDcFor(combatant, combatants, [character], monsters) : 10
   const declareList = slot === 'action' ? DECLARE_KINDS : DECLARE_KINDS.filter((k) => k.kind !== 'attack')
 
   return (
@@ -368,7 +395,7 @@ export function PlayerTurnPanel({
       {myTurn && combatant && !setup && (
         <>
           <div className="mt-2 flex flex-wrap gap-1">
-            <Button size="sm" variant={menu === 'action' || menu === 'attack' || (menu === 'other' && slot === 'action') || menu === 'help' ? 'default' : 'outline'} disabled={Boolean(econ?.action)} onClick={() => openSlot('action')}>
+            <Button size="sm" variant={menu === 'action' || menu === 'attack' || menu === 'hide' || (menu === 'other' && slot === 'action') || menu === 'help' ? 'default' : 'outline'} disabled={Boolean(econ?.action)} onClick={() => openSlot('action')}>
               Action
             </Button>
             <Button size="sm" variant={menu === 'bonus' || (menu === 'other' && slot === 'bonus') ? 'default' : 'outline'} disabled={Boolean(econ?.bonus)} onClick={() => openSlot('bonus')}>
@@ -434,6 +461,34 @@ export function PlayerTurnPanel({
             </div>
           )}
 
+          {menu === 'hide' && (
+            <div className="mt-2 rounded-md border border-gold/40 bg-bg px-3 py-2">
+              <div className="text-xs uppercase tracking-wider text-gold">Hide (Stealth)</div>
+              <p className="mt-1 text-sm text-muted">
+                {hideGate && !hideGate.ok
+                  ? hideGate.error
+                  : `No enemy can see you. DC ${hideDc} is the highest passive Perception among enemies. Enter the d20 from the table.`}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Input className="h-8 w-16" inputMode="numeric" placeholder="d20" value={d20} onChange={(e) => setD20(e.target.value)} aria-label="Hide Stealth d20" />
+                <Button
+                  size="sm"
+                  disabled={busy || Boolean(hideGate && !hideGate.ok)}
+                  onClick={() => {
+                    const roll = Number(d20)
+                    if (!Number.isInteger(roll) || roll < 1 || roll > 20) {
+                      setMsg('Enter the d20 you rolled for Stealth (1–20).')
+                      return
+                    }
+                    void declare('hide', { d20: roll })
+                  }}
+                >
+                  Resolve Hide
+                </Button>
+              </div>
+            </div>
+          )}
+
           {menu === 'help' && (
             <div className="mt-2">
               <p className="text-xs text-muted">Tap an ally on the map or pick from the list.</p>
@@ -474,7 +529,7 @@ export function PlayerTurnPanel({
                 ))}
               </div>
               <Button className="mt-2" size="sm" disabled={!selectedId} onClick={() => {
-                const adv = Boolean(selectedId && combatant?.advantageAgainst?.includes(selectedId))
+                const adv = Boolean(selectedId && combatant && hasHiddenAdvantage(combatant, selectedId))
                 setRollMode(adv ? 'advantage' : 'normal')
                 setStep('roll')
               }}>
@@ -486,7 +541,7 @@ export function PlayerTurnPanel({
           {menu === 'attack' && pending && (step === 'roll' || step === 'damage') && target && (
             <div className="mt-2">
               <p className="text-sm">
-                {pending.attack.name} → {target.name} (AC {target.ac} — must roll higher)
+                {pending.attack.name} → {target.name} (AC {previewAc}{coverBonus ? ` · cover +${coverBonus}` : ''} — must roll higher)
               </p>
               <div className="mt-1 flex flex-wrap gap-1">
                 {(['normal', 'advantage', 'disadvantage'] as const).map((m) => (
@@ -494,7 +549,7 @@ export function PlayerTurnPanel({
                     {m === 'normal' ? 'Normal' : m === 'advantage' ? 'Advantage' : 'Disadvantage'}
                   </Button>
                 ))}
-                {hasAdv && <span className="self-center text-xs text-gold">Stored advantage vs this target</span>}
+                {hasAdv && <span className="self-center text-xs text-gold">Advantage vs this target</span>}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Input className="h-8 w-16" inputMode="numeric" placeholder={mode !== 'normal' ? 'd20 a' : 'd20'} value={d20} onChange={(e) => setD20(e.target.value)} aria-label="d20 roll" />
@@ -509,7 +564,7 @@ export function PlayerTurnPanel({
               </div>
               {preview && (
                 <p className="mt-1 text-xs text-muted">
-                  {preview.used} + {preview.bonus} = {preview.total} vs AC {target.ac} — {preview.outcome.toUpperCase()}
+                  {preview.used} + {preview.bonus} = {preview.total} vs AC {previewAc} — {preview.outcome.toUpperCase()}
                 </p>
               )}
               {step === 'damage' && (

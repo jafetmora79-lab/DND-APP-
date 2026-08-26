@@ -1,12 +1,13 @@
 import { customAlphabet } from 'nanoid'
 import { publicAsset, tableEmail } from './config'
-import { emptySheet, type AuthUser, type BattleMap, type EncounterInstance, type FogState, type Monster, type NamedEntry, type PlayerCharacter } from './types'
+import { emptySheet, type AuthUser, type BattleMap, type Combatant, type EncounterInstance, type FogState, type MapToken, type Monster, type NamedEntry, type PlayerCharacter } from './types'
 import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
 import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter, abilityMod } from './utils'
 import { afterHpChange, clampMovementRemaining, combatantStatsFromMonster, combatantStatsFromSheet, emptyTurnEconomy, formatDiceUsed, movementCostFeet, parseCombatantStats, parseDeathState, parseSpeedFeet, parseTurnEconomy, resolveDeathSave, snapshotForPlayer, specCopyCell, spendMovement, statsForLiveCombatant, tokenCell } from './combat'
-import { lightingFromStart, makeStartFog } from './vision'
+import { lightingFromStart, makeStartFog, coverBonusAlongLine } from './vision'
+import { hidingBrokenByWatchers, isHiding, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from './stealth'
 import { attackActivityLines, parseActivity, parsePrompt } from './combat-activity'
 import { sessionFromRow } from './session'
 import { applyEncounterRewards, parseHub } from './campaign-hub'
@@ -258,6 +259,127 @@ function mapFromRow(row: Record<string, unknown>): BattleMap {
     gridRows,
     gridType: 'square',
     blocked: parseBlockedCells(row.blocked_cells, gridCols, gridRows),
+  }
+}
+
+function tokenFromSupabase(t: Record<string, unknown>): MapToken {
+  return {
+    id: String(t.id),
+    encounterInstanceId: String(t.encounter_instance_id),
+    x: Number(t.x),
+    y: Number(t.y),
+    refType: (t.ref_type as MapToken['refType']) ?? 'combatant',
+    refId: String(t.ref_id),
+    label: String(t.label ?? ''),
+    color: String(t.color ?? ''),
+    sizeSquares: Number(t.size_squares ?? 1),
+    visibleToPlayers: Boolean(t.visible_to_players),
+  }
+}
+
+function combatantFromSupabase(c: Record<string, unknown>, monster?: Parameters<typeof statsForLiveCombatant>[1]): Combatant {
+  return {
+    id: String(c.id),
+    encounterInstanceId: String(c.encounter_instance_id),
+    name: String(c.name),
+    source: c.source === 'character' ? 'character' : 'bestiary',
+    sourceId: String(c.source_id ?? ''),
+    initiative: Number(c.initiative),
+    hpCurrent: Number(c.hp_current),
+    hpMax: Number(c.hp_max),
+    hpTemp: Number(c.hp_temp),
+    ac: Number(c.ac),
+    conditions: Array.isArray(c.conditions_json) ? (c.conditions_json as string[]) : [],
+    turnOrderPosition: Number(c.turn_order_position),
+    color: String(c.color ?? '#c4453c'),
+    notes: String(c.notes ?? ''),
+    constitution: Number((c as { constitution?: number }).constitution ?? 10),
+    stats: statsForLiveCombatant(c as { stats_json?: unknown; source?: unknown }, monster),
+    advantageAgainst: Array.isArray((c as { advantage_against_json?: string[] }).advantage_against_json)
+      ? ((c as { advantage_against_json: string[] }).advantage_against_json)
+      : [],
+    deathState: parseDeathState((c as { death_state?: string }).death_state),
+    deathSuccess: Number((c as { death_success?: number }).death_success ?? 0),
+    deathFail: Number((c as { death_fail?: number }).death_fail ?? 0),
+    turnEconomy: parseTurnEconomy((c as { turn_economy_json?: unknown }).turn_economy_json),
+    speedFeet: parseSpeedFeet((c as { speed_feet?: unknown }).speed_feet ?? 30),
+    movementRemaining: Number.isFinite(Number((c as { movement_remaining?: unknown }).movement_remaining))
+      ? Math.max(0, Number((c as { movement_remaining?: unknown }).movement_remaining))
+      : parseSpeedFeet((c as { speed_feet?: unknown }).speed_feet ?? 30),
+  }
+}
+
+async function loadFightPieces(instanceId: string) {
+  const { data: inst, error } = await db().from('encounter_instances').select('*').eq('id', instanceId).single()
+  throwIf(error)
+  const mapRes = inst.map_id ? await db().from('maps').select('*').eq('id', inst.map_id).maybeSingle() : { data: null }
+  const map = mapRes.data ? mapFromRow(mapRes.data as Record<string, unknown>) : null
+  const { data: combatRows } = await db().from('combatants').select('*').eq('encounter_instance_id', instanceId)
+  const { data: tokenRows } = await db().from('tokens_on_map').select('*').eq('encounter_instance_id', instanceId)
+  const { data: charRows } = await db().from('player_characters').select('*').eq('campaign_id', inst.campaign_id)
+  const monsterIds = [...new Set((combatRows ?? []).filter((c) => c.source === 'bestiary').map((c) => String(c.source_id)).filter(Boolean))]
+  const bestiaryRes =
+    monsterIds.length > 0 ? await db().from('bestiary_monsters').select('*').in('id', monsterIds) : { data: [] as Record<string, unknown>[] }
+  const monsters = (bestiaryRes.data ?? []).map((row) => monsterFromRow(row as Record<string, unknown>))
+  const monsterById = new Map(monsters.map((m) => [m.id, m]))
+  const combatants = (combatRows ?? []).map((c) =>
+    combatantFromSupabase(c as Record<string, unknown>, c.source === 'bestiary' ? monsterById.get(String(c.source_id)) : null),
+  )
+  const tokens = (tokenRows ?? []).map((t) => tokenFromSupabase(t as Record<string, unknown>))
+  const characters = (charRows ?? []).map((r) => characterFromRow(r as Record<string, unknown>))
+  return { inst, map, combatants, tokens, characters, monsters }
+}
+
+async function coverForAttack(instanceId: string, attackerId: string | undefined, targetId: string) {
+  if (!attackerId) return 0
+  const { data: inst } = await db().from('encounter_instances').select('map_id').eq('id', instanceId).maybeSingle()
+  if (!inst?.map_id) return 0
+  const { data: mapRow } = await db().from('maps').select('*').eq('id', inst.map_id).maybeSingle()
+  if (!mapRow) return 0
+  const battle = mapFromRow(mapRow as Record<string, unknown>)
+  const { data: tokens } = await db().from('tokens_on_map').select('x, y, ref_id').eq('encounter_instance_id', instanceId)
+  const from = tokens?.find((t) => String(t.ref_id) === attackerId)
+  const to = tokens?.find((t) => String(t.ref_id) === targetId)
+  if (!from || !to) return 0
+  return coverBonusAlongLine(
+    battle.blocked,
+    battle.gridCols,
+    battle.gridRows,
+    tokenCell({ x: Number(from.x), y: Number(from.y) }, battle.gridSize),
+    tokenCell({ x: Number(to.x), y: Number(to.y) }, battle.gridSize),
+  )
+}
+
+async function persistHide(combatantId: string, success: boolean) {
+  const { data: row } = await db().from('combatants').select('conditions_json').eq('id', combatantId).maybeSingle()
+  const conditions = Array.isArray(row?.conditions_json) ? (row!.conditions_json as string[]) : []
+  const { error } = await db()
+    .from('combatants')
+    .update({ conditions_json: success ? withHiding(conditions) : withoutHiding(conditions) })
+    .eq('id', combatantId)
+  throwIf(error)
+}
+
+async function revealHidingAfterMove(instanceId: string, combatantId: string, map: BattleMap | undefined, nextPos: { x: number; y: number }) {
+  if (!map) return
+  const pieces = await loadFightPieces(instanceId)
+  const hider = pieces.combatants.find((c) => c.id === combatantId)
+  if (!hider || !isHiding(hider)) return
+  const tokens = pieces.tokens.map((t) => (t.refId === combatantId ? { ...t, x: nextPos.x, y: nextPos.y } : t))
+  if (!hidingBrokenByWatchers(hider, pieces.combatants, tokens, map)) return
+  await persistHide(combatantId, false)
+  await logFeed(instanceId, `${hider.name} is no longer hidden.`)
+}
+
+async function stripHidingOnAttack(instanceId: string, attackerId?: string, targetId?: string) {
+  const ids = [attackerId, targetId].filter(Boolean) as string[]
+  if (ids.length === 0) return
+  const { data: rows } = await db().from('combatants').select('id, name, conditions_json').in('id', ids)
+  for (const row of rows ?? []) {
+    const conditions = Array.isArray(row.conditions_json) ? (row.conditions_json as string[]) : []
+    if (!isHiding({ conditions })) continue
+    await persistHide(String(row.id), false)
+    await logFeed(instanceId, `${row.name} is no longer hidden.`)
   }
 }
 
@@ -1544,7 +1666,10 @@ export const supabaseApi: TableApi = {
         }
       }
       const { error: rpcErr } = await db().rpc('move_combatant_token', { p_token: id, p_x: body.x, p_y: body.y })
-      if (!rpcErr) return {}
+      if (!rpcErr) {
+        await revealHidingAfterMove(String(token.encounter_instance_id), String(token.ref_id), battle, { x: Number(body.x), y: Number(body.y) })
+        return {}
+      }
       if (!/could not find|does not exist|schema cache|move_combatant_token/i.test(rpcErr.message)) throwIf(rpcErr)
       const { data: comb } = await db().from('combatants').select('*').eq('id', token.ref_id).maybeSingle()
       if (comb && Number(comb.turn_order_position) === Number(inst?.current_turn_position)) {
@@ -1562,6 +1687,7 @@ export const supabaseApi: TableApi = {
         throwIf(mvErr)
         if (cost > 0) await logFeed(String(token.encounter_instance_id), `${comb.name} moved ${cost} ft.`)
       }
+      await revealHidingAfterMove(String(token.encounter_instance_id), String(token.ref_id), battle, { x: Number(body.x), y: Number(body.y) })
     }
     const { error } = await db()
       .from('tokens_on_map')
@@ -1583,6 +1709,7 @@ export const supabaseApi: TableApi = {
   },
 
   async playerAttack(instanceId, body) {
+    const cover = await coverForAttack(instanceId, body.attackerId, body.targetId)
     const payload: Record<string, unknown> = {
       p_instance: instanceId,
       p_target: body.targetId,
@@ -1592,16 +1719,25 @@ export const supabaseApi: TableApi = {
       p_attacker: body.attackerId ?? null,
       p_d20_b: body.d20b ?? null,
       p_roll_mode: body.rollMode ?? 'normal',
+      p_cover: cover,
     }
     let { data, error } = await db().rpc('resolve_player_attack', payload)
+    if (error && /p_cover/.test(error.message)) {
+      delete payload.p_cover
+      const retry = await db().rpc('resolve_player_attack', payload)
+      data = retry.data
+      error = retry.error
+    }
     if (error && /p_d20_b|p_roll_mode/.test(error.message)) {
       delete payload.p_d20_b
       delete payload.p_roll_mode
+      delete payload.p_cover
       const retry = await db().rpc('resolve_player_attack', payload)
       data = retry.data
       error = retry.error
     }
     throwIf(error)
+    await stripHidingOnAttack(instanceId, body.attackerId, body.targetId)
     const result = data as {
       hit: boolean
       crit: boolean
@@ -1712,6 +1848,50 @@ export const supabaseApi: TableApi = {
   },
 
   async declareAction(instanceId, body) {
+    if (body.kind === 'hide') {
+      const pieces = await loadFightPieces(instanceId)
+      const hider = body.combatantId
+        ? pieces.combatants.find((c) => c.id === body.combatantId)
+        : pieces.combatants.find((c) => c.turnOrderPosition === Number(pieces.inst.current_turn_position))
+      if (!hider) throw new Error('Combatant not found')
+      if (!pieces.map) throw new Error('Need the map to hide.')
+      const d20 = Number(body.d20)
+      const monster = hider.source === 'bestiary' ? pieces.monsters.find((m) => m.id === hider.sourceId) ?? null : null
+      const result = resolveHideAttempt({
+        hider,
+        combatants: pieces.combatants,
+        tokens: pieces.tokens,
+        map: pieces.map,
+        characters: pieces.characters,
+        monsters: pieces.monsters,
+        d20,
+        sheet: sheetForHide(hider, pieces.characters),
+        monster,
+      })
+      if (!result.ok) throw new Error(result.message)
+      const { data, error } = await db().rpc('apply_hide_result', {
+        p_instance: instanceId,
+        p_combatant: hider.id,
+        p_success: result.success,
+        p_text: result.message,
+        p_spend_action: true,
+        p_slot: body.slot ?? 'action',
+      })
+      if (error) {
+        if (missingRpc(error.message, 'apply_hide_result')) {
+          await persistHide(hider.id, result.success)
+          const { data: row } = await db().from('combatants').select('turn_economy_json').eq('id', hider.id).maybeSingle()
+          const econ = parseTurnEconomy(row?.turn_economy_json)
+          const slot = body.slot === 'bonus' ? 'bonus' : body.slot === 'reaction' ? 'reaction' : 'action'
+          econ[slot] = true
+          await db().from('combatants').update({ turn_economy_json: econ }).eq('id', hider.id)
+          await logFeed(instanceId, result.message)
+          return { text: result.message }
+        }
+        throw new Error(error.message)
+      }
+      return (data ?? { text: result.message }) as { text: string }
+    }
     const { data, error } = await db().rpc('declare_combat_action', {
       p_instance: instanceId,
       p_kind: body.kind,
@@ -1728,7 +1908,35 @@ export const supabaseApi: TableApi = {
           : error.message,
       )
     }
+    if (body.kind === 'dash' || body.kind === 'help' || body.kind === 'other' || body.kind === 'custom') {
+      const cid = body.combatantId
+      if (cid) {
+        const { data: row } = await db().from('combatants').select('name, conditions_json').eq('id', cid).maybeSingle()
+        const conditions = Array.isArray(row?.conditions_json) ? (row!.conditions_json as string[]) : []
+        if (isHiding({ conditions })) {
+          await persistHide(cid, false)
+          await logFeed(instanceId, `${row?.name ?? 'Creature'} is no longer hidden.`)
+        }
+      }
+    }
     return (data ?? { text: '' }) as { text: string }
+  },
+
+  async applyHide(instanceId, body) {
+    const { data, error } = await db().rpc('apply_hide_result', {
+      p_instance: instanceId,
+      p_combatant: body.combatantId,
+      p_success: body.success,
+      p_text: body.text,
+      p_spend_action: false,
+    })
+    if (error) {
+      if (!missingRpc(error.message, 'apply_hide_result')) throw new Error(error.message)
+      await persistHide(body.combatantId, body.success)
+      if (body.text) await logFeed(instanceId, body.text)
+      return { text: body.text }
+    }
+    return (data ?? { text: body.text }) as { text: string }
   },
 
   async setPrompt(instanceId, prompt) {

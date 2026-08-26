@@ -12,10 +12,11 @@ required to run a normal night at a real table.
 1. RULES ENGINE
 ---------------
 
-No automatic legendary / lair action economy, concentration ticks, cover,
+No automatic legendary / lair action economy, concentration ticks,
 AoE templates, spell-slot spend, hidden initiative, poison clocks, or
 condition expiry. Conditions are labels you add and remove. Dice stay
-physical.
+physical. Half / three-quarters cover and Hide are on the map; a separate
+non-combat Challenge scene mode (skip initiative) is not.
 
 
 2. VTT EXTRAS
@@ -40,6 +41,7 @@ Existing Supabase projects that predate this flow also need:
 
   supabase/migrate-campaign-flow.sql
   supabase/migrate-vision-terrain.sql
+  supabase/migrate-cover-hide.sql
   then:  notify pgrst, 'reload schema';
 
 New projects that ran the current schema.sql already have the RPCs.

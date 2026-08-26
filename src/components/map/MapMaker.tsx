@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Ban, CircleDot, Droplets, Flame, Footprints, ImagePlus, Move, Snowflake } from 'lucide-react'
+import { Ban, Box, CircleDot, Droplets, Flame, Footprints, ImagePlus, Move, Snowflake, TreePine } from 'lucide-react'
 import { MapBoard, type MapTool } from '@/components/map/MapBoard'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
@@ -185,9 +185,15 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
             <Button size="sm" variant={tool === 'water' ? 'default' : 'outline'} onClick={() => setTool('water')}>
               <Droplets className="h-4 w-4" /> {t('map.terrain.water')}
             </Button>
+            <Button size="sm" variant={tool === 'half-cover' ? 'default' : 'outline'} onClick={() => setTool('half-cover')}>
+              <TreePine className="h-4 w-4" /> {t('map.terrain.halfCover')}
+            </Button>
+            <Button size="sm" variant={tool === 'three-quarter-cover' ? 'default' : 'outline'} onClick={() => setTool('three-quarter-cover')}>
+              <Box className="h-4 w-4" /> {t('map.terrain.threeQuarterCover')}
+            </Button>
           </div>
           <p className="text-xs text-muted">
-            Walls block walking and sight. Holes cannot be walked but you can see across them. Difficult, ice, fire, and water cost 10 ft per square.
+            Walls block walking and sight. Holes cannot be walked but you can see across them. Difficult, ice, fire, and water cost 10 ft per square. Half cover is +2 AC and Dex saves; three-quarters is +5. Full cover is a wall in the way.
           </p>
           <div className="rounded-md border border-line p-2">
             <div className="flex items-center gap-2 text-sm">

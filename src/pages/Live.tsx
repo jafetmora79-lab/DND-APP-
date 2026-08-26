@@ -15,7 +15,7 @@ import { StartFightDialog } from '@/components/StartFightDialog'
 import { TableHub } from '@/components/TableHub'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
-import { attacksFromMonster, canTakeAttacks, decorateTokens, effectiveRollMode, inRangeCombatantIds } from '@/lib/combat'
+import { attacksFromMonster, canTakeAttacks, decorateTokens, effectiveRollMode, hasHiddenAdvantage, inRangeCombatantIds } from '@/lib/combat'
 import { LanguageToggle, useT } from '@/lib/i18n'
 import { useLive } from '@/lib/realtime'
 import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
 import { markBeatForTemplate, parseHub, sortTemplates } from '@/lib/campaign-hub'
 import { asCombatantLike, standingEnemies, type StartFightOpts } from '@/lib/turn-flow'
-import { applyLightingFog, fogWithLighting, parseLighting, type Lighting } from '@/lib/vision'
+import { applyLightingFog, coverBonusBetween, fogWithLighting, parseLighting, type Lighting } from '@/lib/vision'
 
 export function Live() {
   const { campaignId } = useParams()
@@ -101,6 +101,16 @@ export function Live() {
     return inRangeCombatantIds(snap.map, snap.tokens, snap.combatants, selectedCombatant.id, pending.attack)
   }, [snap, pending, selectedCombatant])
   const attackTarget = snap?.combatants.find((c) => c.id === targetId)
+  const whose = snap?.combatants.find((c) => c.turnOrderPosition === instance?.currentTurnPosition)
+  const attackCover =
+    snap?.map && selectedCombatant && attackTarget
+      ? coverBonusBetween(
+          snap.map,
+          snap.tokens.find((t) => t.refId === selectedCombatant.id),
+          snap.tokens.find((t) => t.refId === attackTarget.id),
+        )
+      : 0
+  const attackHasAdv = Boolean(selectedCombatant && targetId && hasHiddenAdvantage(selectedCombatant, targetId))
 
   function pickAttack(attack: Attack, index: number) {
     setPending({ attack, index })
@@ -114,7 +124,7 @@ export function Live() {
 
   async function submitAttack() {
     if (!instance || !pending || !targetId || !selectedCombatant) return
-    const hasAdv = selectedCombatant.advantageAgainst?.includes(targetId)
+    const hasAdv = hasHiddenAdvantage(selectedCombatant, targetId)
     const mode = effectiveRollMode(rollMode, Boolean(hasAdv))
     const roll = Number(d20)
     const rollb = Number(d20b)
@@ -836,8 +846,9 @@ export function Live() {
               setAttackMsg('')
             }}
             targetName={attackTarget?.name}
-            targetAc={attackTarget?.ac}
-            hasAdvantage={Boolean(targetId && selectedCombatant.advantageAgainst?.includes(targetId))}
+            targetAc={attackTarget ? attackTarget.ac + attackCover : undefined}
+            coverBonus={attackCover}
+            hasAdvantage={attackHasAdv}
             disabled={!canTakeAttacks(selectedCombatant)}
             disabledReason={
               !canTakeAttacks(selectedCombatant)
@@ -847,7 +858,7 @@ export function Live() {
                 : undefined
             }
             rollMode={
-              targetId && selectedCombatant.advantageAgainst?.includes(targetId) && rollMode === 'normal'
+              attackHasAdv && rollMode === 'normal'
                 ? 'advantage'
                 : rollMode
             }
@@ -863,7 +874,19 @@ export function Live() {
             busy={attackBusy}
             message={attackMsg}
           />
-          <SaveBar combatants={snap.combatants} selectedId={selected} characters={snap.characters} monster={selectedMonster} compact />
+          <SaveBar
+            combatants={snap.combatants}
+            selectedId={selected}
+            characters={snap.characters}
+            monster={selectedMonster}
+            compact
+            instanceId={instance.id}
+            map={snap.map}
+            tokens={snap.tokens}
+            monsters={snap.monsters ?? monsters}
+            originId={whose?.id ?? selected}
+            onSettled={refreshLive}
+          />
         </div>
       )}
       {setup && initOpen && campaignId && (

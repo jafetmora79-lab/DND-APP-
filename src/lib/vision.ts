@@ -1,4 +1,5 @@
 import type {
+  BattleMap,
   CharacterSheetData,
   Combatant,
   EncounterSnapshot,
@@ -6,7 +7,7 @@ import type {
   MapToken,
   PlayerCharacter,
 } from './types.ts'
-import { FEET_PER_SQUARE, isOpaqueTerrain, MAX_GRID_DIM, pixelToCell, terrainAt } from './utils.ts'
+import { coverBonusForTerrain, FEET_PER_SQUARE, isOpaqueTerrain, MAX_GRID_DIM, pixelToCell, terrainAt } from './utils.ts'
 
 export const LIGHTINGS = ['day', 'night', 'interior'] as const
 export type Lighting = (typeof LIGHTINGS)[number]
@@ -258,4 +259,36 @@ export function sheetForCombatant(
 ): CharacterSheetData | undefined {
   if (combatant.source !== 'character') return undefined
   return characters.find((c) => c.id === combatant.sourceId)?.sheet
+}
+
+/** Highest cover bonus on the attacker→target line, not counting the attacker's square. */
+export function coverBonusAlongLine(
+  blocked: number[] | undefined,
+  cols: number,
+  rows: number,
+  from: { col: number; row: number },
+  to: { col: number; row: number },
+) {
+  const line = supercoverLine(from.col, from.row, to.col, to.row)
+  let bonus = 0
+  for (let i = 1; i < line.length; i++) {
+    const cell = line[i]
+    bonus = Math.max(bonus, coverBonusForTerrain(terrainAt(blocked, cell.col, cell.row, cols, rows)))
+  }
+  return bonus
+}
+
+export function coverBonusBetween(
+  map: Pick<BattleMap, 'blocked' | 'gridCols' | 'gridRows' | 'gridSize'>,
+  from: { x: number; y: number } | undefined,
+  to: { x: number; y: number } | undefined,
+) {
+  if (!from || !to) return 0
+  return coverBonusAlongLine(
+    map.blocked,
+    map.gridCols,
+    map.gridRows,
+    pixelToCell(from.x, from.y, map.gridSize),
+    pixelToCell(to.x, to.y, map.gridSize),
+  )
 }

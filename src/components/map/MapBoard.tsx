@@ -8,7 +8,19 @@ import { clampMapScale, fitMapView, touchDistance, zoomAtPoint } from '@/lib/map
 import { hpBarFill, initials, pixelToCell, TERRAIN, tokenOccupiesBlocked } from '@/lib/utils'
 import { inkOnToken } from '@/lib/token-look'
 
-export type MapTool = 'select' | 'reveal' | 'hide' | 'block' | 'open' | 'hole' | 'difficult' | 'slippery' | 'fire' | 'water'
+export type MapTool =
+  | 'select'
+  | 'reveal'
+  | 'hide'
+  | 'block'
+  | 'open'
+  | 'hole'
+  | 'difficult'
+  | 'slippery'
+  | 'fire'
+  | 'water'
+  | 'half-cover'
+  | 'three-quarter-cover'
 
 const TERRAIN_TOOL: Partial<Record<MapTool, number>> = {
   open: TERRAIN.OPEN,
@@ -18,6 +30,8 @@ const TERRAIN_TOOL: Partial<Record<MapTool, number>> = {
   slippery: TERRAIN.SLIPPERY,
   fire: TERRAIN.FIRE,
   water: TERRAIN.WATER,
+  'half-cover': TERRAIN.HALF_COVER,
+  'three-quarter-cover': TERRAIN.THREE_QUARTER_COVER,
 }
 
 type Props = {
@@ -375,6 +389,26 @@ export function MapBoard({
                   ctx.moveTo(x + 6, y + g / 2)
                   ctx.quadraticCurveTo(x + g / 2, y + g / 2 - 6, x + g - 6, y + g / 2)
                   ctx.stroke()
+                } else if (code === TERRAIN.HALF_COVER) {
+                  ctx.fillStyle = 'rgba(46, 92, 46, 0.28)'
+                  ctx.fillRect(x, y, g, g)
+                  ctx.fillStyle = 'rgba(90, 58, 24, 0.85)'
+                  ctx.fillRect(x + g / 2 - 3, y + g - 18, 6, 14)
+                  ctx.fillStyle = 'rgba(62, 130, 62, 0.82)'
+                  ctx.beginPath()
+                  ctx.arc(x + g / 2, y + g / 2 - 4, Math.max(8, g * 0.28), 0, Math.PI * 2)
+                  ctx.fill()
+                } else if (code === TERRAIN.THREE_QUARTER_COVER) {
+                  ctx.fillStyle = 'rgba(90, 62, 36, 0.34)'
+                  ctx.fillRect(x, y, g, g)
+                  ctx.fillStyle = 'rgba(120, 82, 42, 0.88)'
+                  ctx.fillRect(x + 8, y + g / 2 - 2, g / 2, g / 2 - 8)
+                  ctx.fillStyle = 'rgba(158, 108, 54, 0.92)'
+                  ctx.fillRect(x + g / 2 - 8, y + 10, g / 2 - 2, g / 2)
+                  ctx.strokeStyle = 'rgba(40, 24, 12, 0.7)'
+                  ctx.lineWidth = 1
+                  ctx.strokeRect(x + 8, y + g / 2 - 2, g / 2, g / 2 - 8)
+                  ctx.strokeRect(x + g / 2 - 8, y + 10, g / 2 - 2, g / 2)
                 }
               }
               ctx.fillStrokeShape(shape)

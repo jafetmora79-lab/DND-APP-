@@ -210,6 +210,9 @@ MAP
     (same, with a long range so rooms matter more than darkness). Reveal /
     Hide still paint extra hidden squares. Players only see revealed squares
     when fog is on. The DM overlay shows the party's combined vision.
+  - Cover (map maker): half cover +2 AC and Dex saves, three-quarters +5.
+    Full cover is a wall blocking line of sight. Cover does not block walking
+    or sight.
 
 TRACKER
   - Initiative, current / max / temp HP, conditions, next turn, Skip, Sort,
@@ -224,9 +227,21 @@ ATTACKS
   - Pick an attack on the selected creature, tap a target in range, enter the
     d20 from the physical table and the damage.
   - Hit if d20 + bonus is STRICTLY greater than Armor Class (equal to AC misses).
+  - Cover on the attacker-to-target line (or the target's square) is added to
+    effective AC.
   - Natural 20 always hits.
   - Natural 1 always misses, and the target has advantage against the fumbler
     on their next attack against them. Same rule for PCs and monsters.
+  - Attacking while Hidden uses advantage. Attacking or being attacked ends
+    Hidden.
+
+CHECKS / HIDING
+  - The Check bar (was Save bar) resolves saves or any skill: pick Save or
+    Skill, DC, enter the table d20.
+  - Hide: only if no enemy currently has line of sight (walls). Stealth vs
+    the highest enemy passive Perception. Success puts Hiding on the token —
+    other players do not see it; the owner and DM still do. Dash / Help /
+    Other and walking into view end Hidden. Dodge and Disengage do not.
 
 HEADER
   - Finalize Won / Lost (XP to combatants in that fight; optional loot holder)
@@ -283,7 +298,7 @@ If you want the extra columns anyway, supabase/migrate-encounter-play.sql
 and migrate-campaign-table.sql are still there. For skip-dead turns, player
 initiative, and Join this fight on existing hosted projects, also run
 migrate-campaign-flow.sql. For player monster stat blocks on token tap, also
-run migrate-vision-terrain.sql, then:
+run migrate-vision-terrain.sql. For cover and Hide, also run migrate-cover-hide.sql, then:
 
   notify pgrst, 'reload schema';
 
@@ -296,7 +311,7 @@ Local SQLite adds missing columns automatically on boot.
   1. DM: Start → Hearthkeeper / torch (or your own table).
   2. Open the campaign. Prep → Characters: confirm names, colors, codes.
      Copy personal codes to the players.
-  3. Prep → Maps: make or open the battle map. Paint walls and other terrain.
+  3. Prep → Maps: make or open the battle map. Paint walls, cover, and other terrain.
   4. Prep → Encounters: name it, pick the map, add monsters, Place each
      player, drag them, SAVE.
   5. Open Live. Copy the join code. Players join with that code + personal

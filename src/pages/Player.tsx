@@ -313,6 +313,9 @@ export function Player() {
             onSettled={refreshLive}
             setup={isFightSetup(snap.session, snap.instance)}
             currentTurnPosition={snap.instance.currentTurnPosition}
+            map={snap.map}
+            tokens={snap.tokens}
+            monsters={snap.monsters}
           />
           </div>
         </>
