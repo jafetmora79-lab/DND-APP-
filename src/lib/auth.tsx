@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, getToken, setToken } from './api'
-import { usingSupabase } from './config'
+import { assertHostedBackend, usingSupabase } from './config'
 import { supabase } from './supabase'
 import type { AuthUser } from './types'
 
@@ -51,16 +51,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       loading,
       loginDm: async (name, passcode) => {
+        assertHostedBackend()
         const r = await api.login(name, passcode)
         setToken(r.token)
         setUser(r.user)
       },
       registerDm: async (name, passcode) => {
+        assertHostedBackend()
         const r = await api.register(name, passcode)
         setToken(r.token)
         setUser(r.user)
       },
       joinPlayer: async (joinCode, personalCode) => {
+        assertHostedBackend()
         const r = await api.join(joinCode, personalCode)
         setToken(r.token)
         setUser(r.user)

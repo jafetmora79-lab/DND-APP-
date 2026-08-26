@@ -1,5 +1,3 @@
-# GitHub Pages still runs Jekyll when Source is “Deploy from a branch”.
-# Do not wrap the Vite SPA in a theme layout.
 defaults:
   - scope:
       path: ""
