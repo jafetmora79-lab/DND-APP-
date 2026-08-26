@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { Maximize2, Minus, Plus } from 'lucide-react'
 import { Circle, Group, Layer, Rect, Shape, Stage, Text, Image as KImage } from 'react-konva'
 import useImage from 'use-image'
 import { conditionRingColor, type BattleMap, type FogState, type MapToken } from '@/lib/types'
 import { tokenHiddenFromPlayers } from '@/lib/combat'
+import { clampMapScale, fitMapView, touchDistance, zoomAtPoint } from '@/lib/map-view'
 import { hpBarFill, initials, pixelToCell, tokenOccupiesBlocked } from '@/lib/utils'
 import { inkOnToken } from '@/lib/token-look'
 
@@ -47,13 +49,15 @@ export function MapBoard({
   dragRefIds = [],
 }: Props) {
   const wrap = useRef<HTMLDivElement>(null)
-  const [size, setSize] = useState({ w: 800, h: 600 })
-  const [scale, setScale] = useState(0.7)
-  const [pos, setPos] = useState({ x: 20, y: 20 })
+  const [size, setSize] = useState({ w: 0, h: 0 })
+  const [scale, setScale] = useState(1)
+  const [pos, setPos] = useState({ x: 0, y: 0 })
   const painting = useRef(false)
   const lastPaint = useRef(-1)
   const dragOrigin = useRef<Record<string, { x: number; y: number }>>({})
   const pointerDown = useRef<{ x: number; y: number } | null>(null)
+  const userZoomed = useRef(false)
+  const pinch = useRef<{ dist: number; scale: number; pos: { x: number; y: number } } | null>(null)
 
   const worldW = map.gridCols * map.gridSize
   const worldH = map.gridRows * map.gridSize
@@ -61,14 +65,75 @@ export function MapBoard({
   const paintingTerrain = tool === 'block' || tool === 'open'
   const paintingFog = tool === 'reveal' || tool === 'hide'
 
+
+  function applyView(next: { scale: number; x: number; y: number }) {
+    setScale(next.scale)
+    setPos({ x: next.x, y: next.y })
+  }
+
+  function fitNow() {
+    if (size.w < 8 || size.h < 8) return
+    userZoomed.current = false
+    const view = fitMapView(size.w, size.h, worldW, worldH)
+    setScale(view.scale)
+    setPos({ x: view.x, y: view.y })
+  }
+
+  function zoomBy(factor: number, point?: { x: number; y: number }) {
+    if (size.w < 8 || size.h < 8) return
+    userZoomed.current = true
+    const origin = point ?? { x: size.w / 2, y: size.h / 2 }
+    const next = clampMapScale(scale * factor, size.w, size.h, worldW, worldH)
+    applyView(zoomAtPoint(scale, next, pos, origin))
+  }
+
+  function stagePointFromTouches(touches: TouchList) {
+    const el = wrap.current
+    if (!el || touches.length === 0) return null
+    const rect = el.getBoundingClientRect()
+    const n = Math.min(touches.length, 2)
+    let x = 0
+    let y = 0
+    for (let i = 0; i < n; i++) {
+      x += touches[i].clientX - rect.left
+      y += touches[i].clientY - rect.top
+    }
+    return { x: x / n, y: y / n }
+  }
+
+  useEffect(() => {
+    userZoomed.current = false
+  }, [map.id, worldW, worldH])
+
   useEffect(() => {
     const el = wrap.current
     if (!el) return
     const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: el.clientHeight }))
     ro.observe(el)
     setSize({ w: el.clientWidth, h: el.clientHeight })
-    return () => ro.disconnect()
+    const blockPinchScroll = (ev: TouchEvent) => {
+      if (ev.touches.length >= 2) ev.preventDefault()
+    }
+    const blockWheelZoom = (ev: WheelEvent) => ev.preventDefault()
+    el.addEventListener('touchmove', blockPinchScroll, { passive: false })
+    el.addEventListener('wheel', blockWheelZoom, { passive: false })
+    return () => {
+      ro.disconnect()
+      el.removeEventListener('touchmove', blockPinchScroll)
+      el.removeEventListener('wheel', blockWheelZoom)
+    }
   }, [])
+
+  useEffect(() => {
+    if (size.w < 8 || size.h < 8) return
+    if (userZoomed.current) {
+      setScale((s) => clampMapScale(s, size.w, size.h, worldW, worldH))
+      return
+    }
+    const view = fitMapView(size.w, size.h, worldW, worldH)
+    setScale(view.scale)
+    setPos({ x: view.x, y: view.y })
+  }, [size.w, size.h, worldW, worldH, map.id])
 
   function cellAt(x: number, y: number) {
     const c = Math.floor(x / map.gridSize)
@@ -116,30 +181,33 @@ export function MapBoard({
   }
 
   return (
-    <div ref={wrap} className="relative h-full w-full overflow-hidden bg-[#0a0806]">
+    <div ref={wrap} className="relative h-full min-h-0 w-full touch-none overflow-hidden bg-[#0a0806]">
       <Stage
-        width={size.w}
-        height={size.h}
+        width={Math.max(1, size.w)}
+        height={Math.max(1, size.h)}
         scaleX={scale}
         scaleY={scale}
         x={pos.x}
         y={pos.y}
         draggable={tool === 'select'}
+        onDragStart={(e) => {
+          if (pinch.current && e.target === e.target.getStage()) e.target.stopDrag()
+        }}
         onDragEnd={(e) => {
           if (e.target === e.target.getStage()) setPos({ x: e.target.x(), y: e.target.y() })
         }}
         onWheel={(e) => {
           e.evt.preventDefault()
           const old = scale
-          const next = Math.min(2.4, Math.max(0.25, old * (e.evt.deltaY > 0 ? 0.92 : 1.08)))
+          const factor = e.evt.deltaY > 0 ? 0.92 : 1.08
+          const next = clampMapScale(old * factor, size.w, size.h, worldW, worldH)
           const ptr = e.target.getStage()?.getPointerPosition()
+          userZoomed.current = true
           if (!ptr) {
-            setScale(next)
+            applyView({ scale: next, x: pos.x, y: pos.y })
             return
           }
-          const mousePointTo = { x: (ptr.x - pos.x) / old, y: (ptr.y - pos.y) / old }
-          setScale(next)
-          setPos({ x: ptr.x - mousePointTo.x * next, y: ptr.y - mousePointTo.y * next })
+          applyView(zoomAtPoint(old, next, pos, ptr))
         }}
         onMouseDown={(e) => {
           const ptr = e.target.getStage()?.getPointerPosition()
@@ -157,6 +225,15 @@ export function MapBoard({
           if (tool === 'select' && !onCellClick) onSelect?.(null)
         }}
         onTouchStart={(e) => {
+          if (e.evt.touches.length >= 2) {
+            painting.current = false
+            const dist = touchDistance(e.evt.touches[0], e.evt.touches[1])
+            pinch.current = { dist, scale, pos: { ...pos } }
+            const stage = e.target.getStage()
+            if (stage && stage.isDragging()) stage.stopDrag()
+            return
+          }
+          pinch.current = null
           if (!(paintingFog || paintingTerrain)) return
           painting.current = true
           lastPaint.current = -1
@@ -184,6 +261,24 @@ export function MapBoard({
           if (w) paintAt(w.x, w.y)
         }}
         onTouchMove={(e) => {
+          if (e.evt.touches.length >= 2) {
+            e.evt.preventDefault()
+            painting.current = false
+            const a = e.evt.touches[0]
+            const b = e.evt.touches[1]
+            const dist = touchDistance(a, b)
+            const start = pinch.current
+            const center = stagePointFromTouches(e.evt.touches)
+            if (dist < 8 || !center) return
+            if (!start) {
+              pinch.current = { dist, scale, pos: { ...pos } }
+              return
+            }
+            userZoomed.current = true
+            const next = clampMapScale(start.scale * (dist / start.dist), size.w, size.h, worldW, worldH)
+            applyView(zoomAtPoint(start.scale, next, start.pos, center))
+            return
+          }
           if (!painting.current) return
           const w = worldFromEvent(e)
           if (w) paintAt(w.x, w.y)
@@ -192,7 +287,8 @@ export function MapBoard({
           painting.current = false
           lastPaint.current = -1
         }}
-        onTouchEnd={() => {
+        onTouchEnd={(e) => {
+          if (e.evt.touches.length < 2) pinch.current = null
           painting.current = false
           lastPaint.current = -1
         }}
@@ -425,6 +521,32 @@ export function MapBoard({
           </Layer>
         )}
       </Stage>
+      <div className="pointer-events-none absolute bottom-3 right-3 z-10 flex flex-col gap-1">
+        <button
+          type="button"
+          className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md border border-line bg-panel/90 text-ink shadow"
+          aria-label="Zoom in"
+          onClick={() => zoomBy(1.2)}
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md border border-line bg-panel/90 text-ink shadow"
+          aria-label="Zoom out"
+          onClick={() => zoomBy(1 / 1.2)}
+        >
+          <Minus className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md border border-line bg-panel/90 text-ink shadow"
+          aria-label="Fit map"
+          onClick={fitNow}
+        >
+          <Maximize2 className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   )
 }
