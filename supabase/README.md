@@ -31,6 +31,8 @@ If it was applied before the campaign hub (timeline, quests, NPCs, loot), also r
 
 If it was applied before player combat (activity feed, declare/prompt, player end-turn), also run `migrate-player-combat.sql`.
 
+If resolving an attack fails with **operator does not exist: uuid = text**, run `migrate-attack-token-uuid.sql` (or re-run `resolve_player_attack` from `schema.sql`). Then: `notify pgrst, 'reload schema';`
+
 ## 3. App env
 
 ```bash

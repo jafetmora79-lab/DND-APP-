@@ -31,6 +31,7 @@ HOSTED (GitHub Pages + Supabase)
   - New Supabase projects: run supabase/schema.sql once
   - Existing projects that predate later features also need the migrate-*.sql
     files, then:  notify pgrst, 'reload schema';
+    Attack “uuid = text”: run migrate-attack-token-uuid.sql
   - GitHub Pages must use GitHub Actions (not deploy-from-branch /docs)
   - Repository secrets: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (once)
   - After a push, wait only if the GitHub Pages workflow actually ran.
