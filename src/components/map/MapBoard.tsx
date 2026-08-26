@@ -249,7 +249,7 @@ export function MapBoard({
             const barW = Math.max(28, r * 1.8)
             const ratio = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0
             const rings = (t.conditions ?? []).slice(0, 4)
-            const showHud = Boolean(t.label) || hpMax > 0 || t.con != null
+            const showHud = Boolean(t.label) || hpMax > 0 || t.ac != null
             return (
               <Group
                 key={t.id}
@@ -289,7 +289,7 @@ export function MapBoard({
                       listening={false}
                     />
                     <Text
-                      text={[hpMax > 0 ? `${hpCurrent}/${hpMax}` : '', t.con != null ? `CON ${t.con}` : '']
+                      text={[hpMax > 0 ? `${hpCurrent}/${hpMax}` : '', t.ac != null ? `AC ${t.ac}` : '']
                         .filter(Boolean)
                         .join('  ')}
                       y={-r - 16}

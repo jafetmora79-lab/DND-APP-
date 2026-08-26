@@ -6,6 +6,7 @@ import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
 import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked } from './utils'
 import { specCopyCell } from './combat'
+import { sessionFromRow } from './session'
 import type { TableApi } from './local-api'
 
 const joinCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6)
@@ -754,19 +755,147 @@ export const supabaseApi: TableApi = {
     return {}
   },
 
-  async openSession(campaignId, encounterInstanceId) {
-    await db().from('live_sessions').delete().eq('campaign_id', campaignId)
+  async openSession(campaignId, encounterInstanceId, opts) {
+    const { data: existing } = await db()
+      .from('live_sessions')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
     if (encounterInstanceId) {
       await db().from('encounter_instances').update({ status: 'active' }).eq('id', encounterInstanceId)
     }
+    if (!existing) {
+      const code = joinCode()
+      const { data, error } = await db()
+        .from('live_sessions')
+        .insert({
+          join_code: code,
+          campaign_id: campaignId,
+          encounter_instance_id: encounterInstanceId,
+          table_phase: encounterInstanceId ? 'combat' : 'table',
+        })
+        .select()
+        .single()
+      throwIf(error)
+      return { session: { joinCode: String(data.join_code) } }
+    }
+    const patch: Record<string, unknown> = {}
+    if (opts?.rotateJoinCode) patch.join_code = joinCode()
+    patch.encounter_instance_id = encounterInstanceId
+    patch.table_phase = encounterInstanceId ? 'combat' : 'table'
+    if (encounterInstanceId) patch.last_outcome = null
+    const { data, error } = await db().from('live_sessions').update(patch).eq('id', existing.id).select().single()
+    throwIf(error)
+    return { session: { joinCode: String(data.join_code) } }
+  },
+
+  async ensureSession(campaignId) {
+    const { data: existing } = await db()
+      .from('live_sessions')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (existing) return { session: { joinCode: String(existing.join_code) } }
     const code = joinCode()
     const { data, error } = await db()
       .from('live_sessions')
-      .insert({ join_code: code, campaign_id: campaignId, encounter_instance_id: encounterInstanceId })
+      .insert({ join_code: code, campaign_id: campaignId, encounter_instance_id: null, table_phase: 'table' })
       .select()
       .single()
     throwIf(error)
     return { session: { joinCode: String(data.join_code) } }
+  },
+
+  async patchSession(campaignId, body) {
+    const { data: existing, error: loadErr } = await db()
+      .from('live_sessions')
+      .select('id')
+      .eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    throwIf(loadErr)
+    if (!existing) throw new Error('No live session')
+    const patch: Record<string, unknown> = {}
+    if (body.ambianceCaption != null) patch.ambiance_caption = body.ambianceCaption
+    if (body.ambianceImageUrl !== undefined) patch.ambiance_image_url = body.ambianceImageUrl
+    if (Object.keys(patch).length === 0) return {}
+    const { error } = await db().from('live_sessions').update(patch).eq('id', existing.id)
+    throwIf(error)
+    return {}
+  },
+
+  async uploadAmbiance(campaignId, file) {
+    await supabaseApi.ensureSession(campaignId)
+    const { data: existing, error: loadErr } = await db()
+      .from('live_sessions')
+      .select('id')
+      .eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    throwIf(loadErr)
+    if (!existing) throw new Error('No live session')
+    const path = `${campaignId}/ambiance/${crypto.randomUUID()}-${file.name}`
+    const { error: upErr } = await db().storage.from('maps').upload(path, file, { upsert: true })
+    if (upErr) {
+      throw new Error(
+        upErr.message.includes('Bucket not found') || upErr.message.includes('not found')
+          ? 'Create a public Storage bucket named "maps" in Supabase, then try the upload again.'
+          : upErr.message,
+      )
+    }
+    const { data: pub } = db().storage.from('maps').getPublicUrl(path)
+    const { error } = await db().from('live_sessions').update({ ambiance_image_url: pub.publicUrl }).eq('id', existing.id)
+    throwIf(error)
+    return {}
+  },
+
+  async finishEncounter(campaignId, outcome) {
+    const { data: existing, error: loadErr } = await db()
+      .from('live_sessions')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    throwIf(loadErr)
+    if (!existing) throw new Error('No live session')
+    if (existing.encounter_instance_id) {
+      const { error: stErr } = await db()
+        .from('encounter_instances')
+        .update({ status: 'completed' })
+        .eq('id', existing.encounter_instance_id)
+      throwIf(stErr)
+    }
+    const { error } = await db()
+      .from('live_sessions')
+      .update({ table_phase: outcome === 'won' ? 'victory' : 'defeat', last_outcome: outcome })
+      .eq('id', existing.id)
+    throwIf(error)
+    return {}
+  },
+
+  async returnToTable(campaignId) {
+    const { data: existing, error: loadErr } = await db()
+      .from('live_sessions')
+      .select('id')
+      .eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    throwIf(loadErr)
+    if (!existing) throw new Error('No live session')
+    const { error } = await db()
+      .from('live_sessions')
+      .update({ encounter_instance_id: null, table_phase: 'table' })
+      .eq('id', existing.id)
+    throwIf(error)
+    return {}
   },
 
   async peekJoin(code) {
@@ -819,14 +948,7 @@ export const supabaseApi: TableApi = {
     const chars = await hideCodes(campaignId, (characters ?? []).map((r) => characterFromRow(r as Record<string, unknown>)))
     return {
       campaign: { id: String(campaign.id), dmAccountId: String(campaign.dm_account_id), name: String(campaign.name) },
-      session: session
-        ? {
-            id: String(session.id),
-            joinCode: String(session.join_code),
-            campaignId: String(session.campaign_id),
-            encounterInstanceId: session.encounter_instance_id ? String(session.encounter_instance_id) : null,
-          }
-        : null,
+      session: session ? sessionFromRow(session as Record<string, unknown>) : null,
       instance: instance
         ? {
             id: String(instance.id),
@@ -857,6 +979,9 @@ export const supabaseApi: TableApi = {
         color: String(c.color ?? '#c4453c'),
         notes: String(c.notes ?? ''),
         constitution: Number((c as { constitution?: number }).constitution ?? 10),
+        advantageAgainst: Array.isArray((c as { advantage_against_json?: string[] }).advantage_against_json)
+          ? ((c as { advantage_against_json: string[] }).advantage_against_json)
+          : [],
       })),
       tokens: (tokens ?? []).map((t) => ({
         id: String(t.id),
@@ -1036,11 +1161,14 @@ export const supabaseApi: TableApi = {
       p_attack_index: body.attackIndex,
       p_d20: body.d20,
       p_damage: body.damage,
+      p_attacker: body.attackerId ?? null,
     })
     throwIf(error)
     return data as {
       hit: boolean
       crit: boolean
+      fumble: boolean
+      hadAdvantage: boolean
       total: number
       ac: number
       damage: number

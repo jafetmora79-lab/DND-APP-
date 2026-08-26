@@ -7,6 +7,7 @@ import cors from 'cors'
 import express from 'express'
 import multer from 'multer'
 import { WebSocketServer, type WebSocket } from 'ws'
+import { sessionFromRow } from '../src/lib/session.ts'
 import { emptySheet, type AuthUser, type FogState, type NamedEntry } from '../src/lib/types.ts'
 import {
     clampGridDim,
@@ -31,6 +32,7 @@ import {
   seedBestiaryForDm,
   spawnFromTemplate,
   resolvePlayerAttack,
+  resolveCombatAttack,
 } from './db.ts'
 import { parseCharacterPdf } from './pdf.ts'
 
@@ -145,9 +147,7 @@ function snapshot(campaignId: string) {
   const characters = db.prepare('SELECT * FROM player_characters WHERE campaign_id = ?').all(campaignId) as Record<string, unknown>[]
   return {
     campaign: { id: campaign.id, dmAccountId: campaign.dm_account_id, name: campaign.name },
-    session: session
-      ? { id: session.id, joinCode: session.join_code, campaignId: session.campaign_id, encounterInstanceId: session.encounter_instance_id }
-      : null,
+    session: session ? sessionFromRow(session) : null,
     instance: instance
       ? {
           id: instance.id,
@@ -178,6 +178,7 @@ function snapshot(campaignId: string) {
       color: c.color,
       notes: c.notes,
       constitution: Number(c.constitution ?? 10),
+      advantageAgainst: jparse<string[]>((c.advantage_against_json as string) || '[]', []),
     })),
     tokens: tokens.map((t) => ({
       id: t.id,
@@ -751,27 +752,164 @@ app.post('/api/instances/:id/status', requireDm, (req, res) => {
   res.json({ ok: true })
 })
 
+function liveSessionRow(campaignId: string) {
+  return db.prepare('SELECT * FROM live_sessions WHERE campaign_id = ? ORDER BY created_at DESC LIMIT 1').get(campaignId) as
+    | Record<string, unknown>
+    | undefined
+}
+
 app.post('/api/campaigns/:id/session', requireDm, (req, res) => {
-  if (!campaignOwned(param(req, 'id'), userOf(req).id)) {
+  const campaignId = param(req, 'id')
+  if (!campaignOwned(campaignId, userOf(req).id)) {
     res.status(404).json({ error: 'Not found' })
     return
   }
-  db.prepare('DELETE FROM live_sessions WHERE campaign_id = ?').run(param(req, 'id'))
-  const join = req.body.joinCode || ids.join()
-  const id = ids.id()
-  const encounterInstanceId = req.body.encounterInstanceId || null
-  if (encounterInstanceId) {
-    db.prepare(`UPDATE encounter_instances SET status = 'active' WHERE id = ?`).run(encounterInstanceId)
+  const rotate = Boolean(req.body?.rotateJoinCode)
+  const ensure = Boolean(req.body?.ensure)
+  const hasInstance = Object.prototype.hasOwnProperty.call(req.body ?? {}, 'encounterInstanceId')
+  const encounterInstanceId = hasInstance ? req.body.encounterInstanceId || null : undefined
+  let existing = liveSessionRow(campaignId)
+
+  if (!existing) {
+    const join = req.body.joinCode || ids.join()
+    const id = ids.id()
+    const inst = encounterInstanceId ?? null
+    if (inst) db.prepare(`UPDATE encounter_instances SET status = 'active' WHERE id = ?`).run(inst)
+    db.prepare(
+      `INSERT INTO live_sessions (id, join_code, campaign_id, encounter_instance_id, created_at, table_phase, ambiance_image_url, ambiance_caption, last_outcome)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+    ).run(id, join, campaignId, inst, now(), inst ? 'combat' : 'table', null, '', null)
+    pushCampaign(campaignId)
+    existing = liveSessionRow(campaignId)
+    res.json({ session: existing ? sessionFromRow(existing) : { id, joinCode: join, campaignId, encounterInstanceId: inst } })
+    return
   }
-  db.prepare('INSERT INTO live_sessions (id, join_code, campaign_id, encounter_instance_id, created_at) VALUES (?,?,?,?,?)').run(
-    id,
+
+  if (ensure && !rotate && encounterInstanceId === undefined) {
+    res.json({ session: sessionFromRow(existing) })
+    return
+  }
+
+  const join = rotate ? req.body.joinCode || ids.join() : existing.join_code
+  let inst = existing.encounter_instance_id
+  let phase = existing.table_phase
+  let lastOutcome = existing.last_outcome
+  if (encounterInstanceId !== undefined) {
+    inst = encounterInstanceId
+    phase = encounterInstanceId ? 'combat' : 'table'
+    lastOutcome = encounterInstanceId ? null : lastOutcome
+    if (encounterInstanceId) {
+      db.prepare(`UPDATE encounter_instances SET status = 'active' WHERE id = ?`).run(encounterInstanceId)
+    }
+  }
+  db.prepare('UPDATE live_sessions SET join_code=?, encounter_instance_id=?, table_phase=?, last_outcome=? WHERE id=?').run(
     join,
-    param(req, 'id'),
-    encounterInstanceId,
-    now(),
+    inst,
+    phase,
+    lastOutcome,
+    existing.id,
   )
-  pushCampaign(param(req, 'id'))
-  res.json({ session: { id, joinCode: join, campaignId: param(req, 'id'), encounterInstanceId } })
+  pushCampaign(campaignId)
+  const next = liveSessionRow(campaignId)
+  res.json({ session: next ? sessionFromRow(next) : sessionFromRow({ ...existing, join_code: join }) })
+})
+
+app.patch('/api/campaigns/:id/session', requireDm, (req, res) => {
+  const campaignId = param(req, 'id')
+  if (!campaignOwned(campaignId, userOf(req).id)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  const existing = liveSessionRow(campaignId)
+  if (!existing) {
+    res.status(404).json({ error: 'No live session' })
+    return
+  }
+  const caption = req.body?.ambianceCaption != null ? String(req.body.ambianceCaption) : existing.ambiance_caption
+  const imageUrl =
+    req.body?.ambianceImageUrl === undefined
+      ? existing.ambiance_image_url
+      : req.body.ambianceImageUrl
+        ? String(req.body.ambianceImageUrl)
+        : null
+  db.prepare('UPDATE live_sessions SET ambiance_caption=?, ambiance_image_url=? WHERE id=?').run(caption, imageUrl, existing.id)
+  pushCampaign(campaignId)
+  const next = liveSessionRow(campaignId)
+  res.json({ session: next ? sessionFromRow(next) : sessionFromRow(existing) })
+})
+
+app.post('/api/campaigns/:id/session/ambiance', requireDm, upload.single('image'), (req, res) => {
+  const campaignId = param(req, 'id')
+  if (!campaignOwned(campaignId, userOf(req).id)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  if (!req.file) {
+    res.status(400).json({ error: 'Image required' })
+    return
+  }
+  let existing = liveSessionRow(campaignId)
+  if (!existing) {
+    const id = ids.id()
+    db.prepare(
+      `INSERT INTO live_sessions (id, join_code, campaign_id, encounter_instance_id, created_at, table_phase, ambiance_image_url, ambiance_caption, last_outcome)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+    ).run(id, ids.join(), campaignId, null, now(), 'table', null, '', null)
+    existing = liveSessionRow(campaignId)
+  }
+  if (!existing) {
+    res.status(500).json({ error: 'Could not open the table' })
+    return
+  }
+  const imageUrl = `/uploads/${req.file.filename}`
+  db.prepare('UPDATE live_sessions SET ambiance_image_url=? WHERE id=?').run(imageUrl, existing.id)
+  pushCampaign(campaignId)
+  const next = liveSessionRow(campaignId)
+  res.json({ session: next ? sessionFromRow(next) : sessionFromRow(existing) })
+})
+
+app.post('/api/campaigns/:id/finish-encounter', requireDm, (req, res) => {
+  const campaignId = param(req, 'id')
+  if (!campaignOwned(campaignId, userOf(req).id)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  const outcome = req.body?.outcome === 'lost' ? 'lost' : req.body?.outcome === 'won' ? 'won' : null
+  if (!outcome) {
+    res.status(400).json({ error: 'Choose won or lost' })
+    return
+  }
+  const existing = liveSessionRow(campaignId)
+  if (!existing) {
+    res.status(404).json({ error: 'No live session' })
+    return
+  }
+  if (existing.encounter_instance_id) {
+    db.prepare(`UPDATE encounter_instances SET status = 'completed' WHERE id = ?`).run(existing.encounter_instance_id)
+  }
+  db.prepare('UPDATE live_sessions SET table_phase=?, last_outcome=? WHERE id=?').run(
+    outcome === 'won' ? 'victory' : 'defeat',
+    outcome,
+    existing.id,
+  )
+  pushCampaign(campaignId)
+  res.json({ ok: true })
+})
+
+app.post('/api/campaigns/:id/return-to-table', requireDm, (req, res) => {
+  const campaignId = param(req, 'id')
+  if (!campaignOwned(campaignId, userOf(req).id)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  const existing = liveSessionRow(campaignId)
+  if (!existing) {
+    res.status(404).json({ error: 'No live session' })
+    return
+  }
+  db.prepare('UPDATE live_sessions SET encounter_instance_id=NULL, table_phase=? WHERE id=?').run('table', existing.id)
+  pushCampaign(campaignId)
+  res.json({ ok: true })
 })
 
 app.get('/api/join/:code', (req, res) => {
@@ -890,26 +1028,36 @@ app.post('/api/instances/:id/combatants', requireDm, (req, res) => {
 
 app.post('/api/instances/:id/player-attack', requireUser, (req, res) => {
   const user = userOf(req)
-  if (user.role !== 'player') {
-    res.status(403).json({ error: 'Players resolve their own attacks from the table' })
-    return
-  }
   const inst = instanceRow(param(req, 'id'))
-  if (!inst || inst.campaign_id !== user.campaignId) {
+  if (!inst) {
     res.status(404).json({ error: 'Not found' })
     return
   }
   try {
-    const result = resolvePlayerAttack({
-      campaignId: user.campaignId,
-      characterId: user.characterId,
+    const body = {
       instanceId: String(inst.id),
       targetId: String(req.body.targetId ?? ''),
       attackIndex: Number(req.body.attackIndex),
       d20: Number(req.body.d20),
       damage: Number(req.body.damage),
-    })
-    pushCampaign(user.campaignId)
+    }
+    let result
+    if (user.role === 'player') {
+      if (inst.campaign_id !== user.campaignId) {
+        res.status(404).json({ error: 'Not found' })
+        return
+      }
+      result = resolvePlayerAttack({ ...body, campaignId: user.campaignId, characterId: user.characterId })
+    } else {
+      if (!campaignOwned(inst.campaign_id as string, user.id)) {
+        res.status(404).json({ error: 'Not found' })
+        return
+      }
+      const attackerId = String(req.body.attackerId ?? '')
+      if (!attackerId) throw new Error('Select the attacking creature first')
+      result = resolveCombatAttack({ ...body, campaignId: inst.campaign_id as string, attackerId })
+    }
+    pushCampaign(inst.campaign_id as string)
     res.json(result)
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'Attack failed' })

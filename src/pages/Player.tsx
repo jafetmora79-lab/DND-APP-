@@ -2,14 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { BookOpen, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { AttackBar } from '@/components/AttackBar'
 import { CharacterSheet } from '@/components/CharacterSheet'
+import { EncounterOutcomeOverlay } from '@/components/EncounterOutcome'
 import { MapBoard } from '@/components/map/MapBoard'
+import { TableHub } from '@/components/TableHub'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { decorateTokens, inRangeCombatantIds, parseAttackBonus, parseRangeFeet } from '@/lib/combat'
+import { decorateTokens, inRangeCombatantIds } from '@/lib/combat'
 import { useLive } from '@/lib/realtime'
+import { showCombatStage, showOutcome } from '@/lib/session'
 import type { Attack, EncounterSnapshot, PlayerCharacter } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -41,7 +44,7 @@ export function Player() {
   useLive(campaignId, setSnap)
 
   const me = user && user.role === 'player' ? snap?.characters.find((c) => c.id === user.characterId) : null
-  const viewing: PlayerCharacter | undefined = snap?.characters.find((c) => c.id === sheetId) ?? me ?? undefined
+  const viewing: PlayerCharacter | undefined = snap?.characters.find((c) => c.id === sheetId) ?? me ?? snap?.characters[0]
   const whose = snap
     ? [...snap.combatants].sort((a, b) => a.turnOrderPosition - b.turnOrderPosition)[snap.instance?.currentTurnPosition ?? 0]
     : undefined
@@ -51,7 +54,9 @@ export function Player() {
     return inRangeCombatantIds(snap.map, snap.tokens, snap.combatants, myCombatant.id, pending.attack)
   }, [snap, pending, myCombatant])
   const target = snap?.combatants.find((c) => c.id === targetId)
-  const tokens = snap ? decorateTokens(snap.tokens, snap.combatants, snap.characters) : []
+  const tokens = snap ? decorateTokens(snap.tokens, snap.combatants) : []
+  const combat = showCombatStage(snap?.session ?? null, snap?.instance ?? null, snap?.map ?? null)
+  const outcome = showOutcome(snap?.session ?? null)
 
   function pickAttack(attack: Attack, index: number) {
     setPending({ attack, index })
@@ -101,6 +106,56 @@ export function Player() {
     return <div className="p-6 text-muted">{error || 'Connecting to the table…'}</div>
   }
 
+  const sheet = viewing ? (
+    <CharacterSheet
+      character={viewing}
+      canEdit={user?.role === 'player' && viewing.id === user.characterId}
+      onChange={(patch) => api.patchCharacter(viewing.id, patch)}
+      onUseAttack={user?.role === 'player' && viewing.id === user.characterId ? pickAttack : undefined}
+    />
+  ) : (
+    <p className="text-sm text-muted">Your character sheet will appear here.</p>
+  )
+
+  if (!combat || !snap.instance || !snap.map) {
+    return (
+      <div className="flex h-dvh flex-col bg-bg">
+        <header className="flex items-center gap-2 border-b border-line px-3 py-2">
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-display text-gold">{snap.campaign.name}</div>
+            <div className="truncate text-xs text-muted">{snap.session?.ambianceCaption || 'At the table — waiting between encounters'}</div>
+          </div>
+          {me && (
+            <div className="stat-num text-sm">
+              {me.sheet.hpCurrent}/{me.sheet.hpMax} HP
+            </div>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              logout()
+              nav('/')
+            }}
+          >
+            Leave
+          </Button>
+        </header>
+        {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
+        <TableHub
+          campaignName={snap.campaign.name}
+          imageUrl={snap.session?.ambianceImageUrl ?? null}
+          caption={snap.session?.ambianceCaption ?? ''}
+          lastOutcome={snap.session?.lastOutcome ?? null}
+          characters={snap.characters}
+          selectedId={viewing?.id ?? null}
+          onSelectCharacter={setSheetId}
+          sheet={sheet}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-dvh flex-col bg-bg">
       <header className="flex items-center gap-2 border-b border-line px-3 py-2">
@@ -131,112 +186,72 @@ export function Player() {
 
       <div className="flex min-h-0 flex-1">
         <div className={cn('relative min-h-0 flex-1', tab === 'tracker' && 'hidden lg:block')}>
-          {snap.map && snap.instance ? (
-            <MapBoard
-              map={snap.map}
-              tokens={tokens}
-              fog={snap.instance.fogState}
-              isDm={false}
-              selectedId={targetId}
-              highlightIds={highlightIds}
-              onSelect={(id) => {
-                if (!pending) return
-                if (!id) {
-                  setTargetId(null)
-                  return
-                }
-                if (!highlightIds.includes(id)) {
-                  setAttackMsg('That creature is out of range for this attack.')
-                  return
-                }
-                setTargetId(id)
-                setAttackMsg('')
-              }}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center p-6 text-center text-muted">
-              The DM has not opened an encounter yet. Keep this page open — the map appears when the fight starts.
-            </div>
-          )}
+          <MapBoard
+            map={snap.map}
+            tokens={tokens}
+            fog={snap.instance.fogState}
+            isDm={false}
+            selectedId={targetId}
+            highlightIds={highlightIds}
+            onSelect={(id) => {
+              if (!pending) return
+              if (!id) {
+                setTargetId(null)
+                return
+              }
+              if (!highlightIds.includes(id)) {
+                setAttackMsg('That creature is out of range for this attack.')
+                return
+              }
+              setTargetId(id)
+              setAttackMsg('')
+            }}
+          />
         </div>
         <aside className={cn('w-full overflow-y-auto border-line p-3 lg:block lg:w-72 lg:border-l', tab === 'map' ? 'hidden lg:block' : 'block')}>
-          {snap.instance ? (
-            <Tracker
-              combatants={snap.combatants}
-              current={snap.instance.currentTurnPosition}
-              round={snap.instance.roundNumber}
-              isDm={false}
-              onSelect={() => undefined}
-              onPatch={() => undefined}
-              onNext={() => undefined}
-              onSort={() => undefined}
-              onReorder={() => undefined}
-            />
-          ) : (
-            <p className="text-sm text-muted">Initiative will appear here.</p>
-          )}
+          <Tracker
+            combatants={snap.combatants}
+            current={snap.instance.currentTurnPosition}
+            round={snap.instance.roundNumber}
+            isDm={false}
+            onSelect={() => undefined}
+            onPatch={() => undefined}
+            onNext={() => undefined}
+            onSort={() => undefined}
+            onReorder={() => undefined}
+          />
         </aside>
       </div>
 
-      {me && snap.instance && (
-        <div className="border-t border-line bg-panel px-3 py-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs uppercase tracking-wider text-muted">Attack</span>
-            {me.sheet.attacks
-              .map((atk, i) => ({ atk, i }))
-              .filter(({ atk }) => atk.name.trim())
-              .map(({ atk, i }) => (
-                <Button
-                  key={`${atk.name}-${i}`}
-                  size="sm"
-                  variant={pending?.index === i ? 'default' : 'outline'}
-                  onClick={() => pickAttack(atk, i)}
-                >
-                  {atk.name} {atk.bonus || ''}
-                </Button>
-              ))}
-            {pending && (
-              <Button size="sm" variant="ghost" onClick={() => { setPending(null); setTargetId(null); setAttackMsg('') }}>
-                Cancel
-              </Button>
-            )}
-          </div>
+      {me && (
+        <>
           {!myCombatant && (
-            <p className="mt-1 text-xs text-muted">You are not on the map yet. Ask the DM to place your character (or include you on the encounter template).</p>
-          )}
-          {pending && myCombatant && (
-            <div className="mt-2 grid gap-2 md:grid-cols-[1fr_5rem_5rem_auto] md:items-end">
-              <p className="text-sm text-muted">
-                {pending.attack.name} · {parseRangeFeet(pending.attack.range)} ft · {pending.attack.damage || 'damage on the sheet'}
-                {target ? ` → ${target.name} (AC ${target.ac})` : ' → tap a creature with a green ring'}
-              </p>
-              <Input
-                inputMode="numeric"
-                placeholder="d20"
-                value={d20}
-                onChange={(e) => setD20(e.target.value)}
-                aria-label="d20 roll"
-              />
-              <Input
-                inputMode="numeric"
-                placeholder="Dmg"
-                value={damage}
-                onChange={(e) => setDamage(e.target.value)}
-                aria-label="Damage rolled"
-              />
-              <Button disabled={busy || !targetId} onClick={submitAttack}>
-                Resolve
-              </Button>
-            </div>
-          )}
-          {pending && (
-            <p className="mt-1 text-xs text-muted">
-              Roll at the table. Enter the d20 (bonus {parseAttackBonus(pending.attack.bonus) >= 0 ? '+' : ''}
-              {parseAttackBonus(pending.attack.bonus)} is added for you) and the damage you rolled if it hits.
+            <p className="border-t border-line bg-panel px-3 py-2 text-xs text-muted">
+              You are not on the map yet. Ask the DM to place your character (or include you on the encounter template).
             </p>
           )}
-          {attackMsg && <p className="mt-1 text-sm text-gold">{attackMsg}</p>}
-        </div>
+          <AttackBar
+            attacks={me.sheet.attacks}
+            pendingIndex={pending?.index ?? null}
+            onPick={pickAttack}
+            onCancel={() => {
+              setPending(null)
+              setTargetId(null)
+              setAttackMsg('')
+            }}
+            targetName={target?.name}
+            targetAc={target?.ac}
+            hasAdvantage={Boolean(targetId && myCombatant?.advantageAgainst?.includes(targetId))}
+            d20={d20}
+            damage={damage}
+            onD20={setD20}
+            onDamage={setDamage}
+            onResolve={submitAttack}
+            canResolve={Boolean(targetId)}
+            busy={busy}
+            message={attackMsg}
+          />
+        </>
       )}
 
       {drawer && (
@@ -260,23 +275,16 @@ export function Player() {
                 </button>
               ))}
             </div>
-            <div className="min-h-0 flex-1 overflow-hidden pt-2">
-              {viewing && (
-                <CharacterSheet
-                  character={viewing}
-                  canEdit={user?.role === 'player' && viewing.id === user.characterId}
-                  onChange={(patch) => api.patchCharacter(viewing.id, patch)}
-                  onUseAttack={user?.role === 'player' && viewing.id === user.characterId ? pickAttack : undefined}
-                />
-              )}
-            </div>
+            <div className="min-h-0 flex-1 overflow-hidden pt-2">{sheet}</div>
           </div>
         </div>
       )}
 
+      {outcome && <EncounterOutcomeOverlay outcome={outcome} encounterName={snap.instance.name} />}
+
       <button
         type="button"
-        className={cn('fixed right-4 rounded-full bg-ember px-4 py-3 text-sm font-medium shadow-lg lg:hidden', me && snap.instance ? 'bottom-28' : 'bottom-4')}
+        className={cn('fixed right-4 rounded-full bg-ember px-4 py-3 text-sm font-medium shadow-lg lg:hidden', me ? 'bottom-28' : 'bottom-4')}
         onClick={() => {
           logout()
           nav('/')

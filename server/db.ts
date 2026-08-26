@@ -6,7 +6,7 @@ import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
 import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type FogState, type NamedEntry, type TemplateCharacter, type TemplateMonster } from '../src/lib/types.ts'
 import { parseBlockedCells, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
-import { applyDamage, attackOutcome, isAttackInRange, parseAttackBonus, parseRangeFeet, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
+import { applyDamage, attackOutcome, attacksFromMonster, consumeAdvantage, grantAdvantage, isAttackInRange, parseAttackBonus, parseRangeFeet, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { loadSrdMonsters } from './srd.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS combatants (
   color TEXT,
   notes TEXT,
   constitution INTEGER NOT NULL DEFAULT 10,
+  advantage_against_json TEXT NOT NULL DEFAULT '[]',
   FOREIGN KEY (encounter_instance_id) REFERENCES encounter_instances(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS tokens_on_map (
@@ -159,6 +160,10 @@ CREATE TABLE IF NOT EXISTS live_sessions (
   campaign_id TEXT NOT NULL,
   encounter_instance_id TEXT,
   created_at INTEGER NOT NULL,
+  table_phase TEXT NOT NULL DEFAULT 'table',
+  ambiance_image_url TEXT,
+  ambiance_caption TEXT NOT NULL DEFAULT '',
+  last_outcome TEXT,
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
 );
 `)
@@ -177,6 +182,36 @@ try {
   db.exec(`ALTER TABLE combatants ADD COLUMN constitution INTEGER NOT NULL DEFAULT 10`)
 } catch {
   /* already present */
+}
+try {
+  db.exec(`ALTER TABLE combatants ADD COLUMN advantage_against_json TEXT NOT NULL DEFAULT '[]'`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE live_sessions ADD COLUMN table_phase TEXT NOT NULL DEFAULT 'table'`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE live_sessions ADD COLUMN ambiance_image_url TEXT`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE live_sessions ADD COLUMN ambiance_caption TEXT NOT NULL DEFAULT ''`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE live_sessions ADD COLUMN last_outcome TEXT`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`UPDATE live_sessions SET table_phase = 'combat' WHERE encounter_instance_id IS NOT NULL AND (table_phase IS NULL OR table_phase = 'table')`)
+} catch {
+  /* ignore */
 }
 
 export function now() {
@@ -488,36 +523,32 @@ export function addCharacterCombatant(instanceId: string, characterId: string, s
   return { id: cid }
 }
 
-export function resolvePlayerAttack(opts: {
+export function resolveCombatAttack(opts: {
   campaignId: string
-  characterId: string
   instanceId: string
+  attackerId: string
   targetId: string
   attackIndex: number
   d20: number
   damage: number
 }): PlayerAttackResult {
-  const { campaignId, characterId, instanceId, targetId, attackIndex, d20, damage } = opts
+  const { campaignId, instanceId, attackerId, targetId, attackIndex, d20, damage } = opts
   if (!Number.isInteger(d20) || d20 < 1 || d20 > 20) throw new Error('d20 must be between 1 and 20')
   if (!Number.isFinite(damage) || damage < 0 || damage > 999) throw new Error('Damage looks wrong')
   const inst = db.prepare('SELECT * FROM encounter_instances WHERE id = ? AND campaign_id = ?').get(instanceId, campaignId) as
     | Record<string, unknown>
     | undefined
   if (!inst) throw new Error('Encounter not found')
-  const attacker = db
-    .prepare(`SELECT * FROM combatants WHERE encounter_instance_id = ? AND source = 'character' AND source_id = ?`)
-    .get(instanceId, characterId) as Record<string, unknown> | undefined
-  if (!attacker) throw new Error('You are not on the map yet. Ask the DM to place you.')
+  const attacker = db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(attackerId, instanceId) as
+    | Record<string, unknown>
+    | undefined
+  if (!attacker) throw new Error('Attacker is not on the map')
   const target = db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(targetId, instanceId) as
     | Record<string, unknown>
     | undefined
   if (!target) throw new Error('Target not found')
   if (String(target.id) === String(attacker.id)) throw new Error('Pick a different creature')
-  const ch = db.prepare('SELECT * FROM player_characters WHERE id = ?').get(characterId) as Record<string, unknown> | undefined
-  if (!ch) throw new Error('Character not found')
-  const sheet = jparse<CharacterSheetData>(ch.sheet_json as string, emptySheet())
-  const attack = sheet.attacks[attackIndex]
-  if (!attack?.name) throw new Error('That attack is not on your sheet')
+  const attack = lookupAttack(attacker, attackIndex)
   const map = inst.map_id ? (db.prepare('SELECT * FROM maps WHERE id = ?').get(inst.map_id) as Record<string, unknown> | undefined) : undefined
   const fromTok = db
     .prepare('SELECT * FROM tokens_on_map WHERE encounter_instance_id = ? AND ref_id = ?')
@@ -535,19 +566,33 @@ export function resolvePlayerAttack(opts: {
   if (!inRange) throw new Error(`That creature is out of range (${parseRangeFeet(attack.range)} ft)`)
   const bonus = parseAttackBonus(attack.bonus)
   const ac = Number(target.ac)
+  const attackerAdv = jparse<string[]>((attacker.advantage_against_json as string) || '[]', [])
+  const targetAdv = jparse<string[]>((target.advantage_against_json as string) || '[]', [])
+  const hadAdvantage = attackerAdv.includes(String(target.id))
   const outcome = attackOutcome(d20, bonus, ac)
   const total = d20 + bonus
-  if (outcome === 'miss') {
+  const nextAttackerAdv = consumeAdvantage(attackerAdv, String(target.id))
+  const nextTargetAdv = outcome === 'fumble' ? grantAdvantage(targetAdv, String(attacker.id)) : targetAdv
+  db.prepare('UPDATE combatants SET advantage_against_json = ? WHERE id = ?').run(JSON.stringify(nextAttackerAdv), attacker.id)
+  db.prepare('UPDATE combatants SET advantage_against_json = ? WHERE id = ?').run(JSON.stringify(nextTargetAdv), target.id)
+  const fumbleNote =
+    outcome === 'fumble' ? ` ${target.name} has advantage against ${attacker.name} next turn.` : ''
+  if (outcome === 'miss' || outcome === 'fumble') {
     return {
       hit: false,
       crit: false,
+      fumble: outcome === 'fumble',
+      hadAdvantage,
       total,
       ac,
       damage: 0,
       hpCurrent: Number(target.hp_current),
       hpTemp: Number(target.hp_temp),
       targetName: String(target.name),
-      message: d20 === 1 ? `Natural 1 against ${target.name} — miss.` : `${total} vs AC ${ac} — miss on ${target.name}.`,
+      message:
+        outcome === 'fumble'
+          ? `Natural 1 against ${target.name} — miss.${fumbleNote}`
+          : `${total} vs AC ${ac} — need higher than ${ac} to hit ${target.name}.${hadAdvantage ? ' (advantage used)' : ''}`,
     }
   }
   const next = applyDamage(Number(target.hp_current), Number(target.hp_temp), damage)
@@ -565,6 +610,8 @@ export function resolvePlayerAttack(opts: {
   return {
     hit: true,
     crit,
+    fumble: false,
+    hadAdvantage,
     total,
     ac,
     damage,
@@ -573,8 +620,41 @@ export function resolvePlayerAttack(opts: {
     targetName: String(target.name),
     message: crit
       ? `Natural 20! ${damage} damage to ${target.name} (${next.hpCurrent} HP left).`
-      : `Hit ${target.name} (${total} vs AC ${ac}) for ${damage} damage (${next.hpCurrent} HP left).`,
+      : `Hit ${target.name} (${total} beats AC ${ac}) for ${damage} damage (${next.hpCurrent} HP left).`,
   }
+}
+
+function lookupAttack(attacker: Record<string, unknown>, attackIndex: number) {
+  if (attacker.source === 'character') {
+    const ch = db.prepare('SELECT * FROM player_characters WHERE id = ?').get(attacker.source_id) as Record<string, unknown> | undefined
+    if (!ch) throw new Error('Character not found')
+    const sheet = jparse<CharacterSheetData>(ch.sheet_json as string, emptySheet())
+    const attack = sheet.attacks[attackIndex]
+    if (!attack?.name) throw new Error('That attack is not on the sheet')
+    return attack
+  }
+  const src = db.prepare('SELECT * FROM bestiary_monsters WHERE id = ?').get(attacker.source_id) as Record<string, unknown> | undefined
+  if (!src) throw new Error('Monster not found')
+  const attacks = attacksFromMonster({ actions: jparse(src.actions as string, []) })
+  const attack = attacks[attackIndex]
+  if (!attack?.name) throw new Error('That attack is not on the stat block')
+  return attack
+}
+
+export function resolvePlayerAttack(opts: {
+  campaignId: string
+  characterId: string
+  instanceId: string
+  targetId: string
+  attackIndex: number
+  d20: number
+  damage: number
+}): PlayerAttackResult {
+  const attacker = db
+    .prepare(`SELECT * FROM combatants WHERE encounter_instance_id = ? AND source = 'character' AND source_id = ?`)
+    .get(opts.instanceId, opts.characterId) as Record<string, unknown> | undefined
+  if (!attacker) throw new Error('You are not on the map yet. Ask the DM to place you.')
+  return resolveCombatAttack({ ...opts, attackerId: String(attacker.id) })
 }
 
 function seedDemo() {
@@ -694,12 +774,18 @@ function seedDemo() {
   const bug = combatants.find((c) => c.name === 'Bugbear')
   if (bug) db.prepare('UPDATE combatants SET hp_current = 18, conditions_json = ? WHERE id = ?').run(JSON.stringify(['Poisoned']), bug.id)
 
-  db.prepare('INSERT INTO live_sessions (id, join_code, campaign_id, encounter_instance_id, created_at) VALUES (?,?,?,?,?)').run(
+  db.prepare(
+    `INSERT INTO live_sessions (id, join_code, campaign_id, encounter_instance_id, created_at, table_phase, ambiance_caption, last_outcome)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(
     ids.id(),
     'HEARTH',
     campaignId,
-    instanceId,
+    null,
     now(),
+    'table',
+    'The Hearthkeeper tavern. Wet cloaks by the fire — the road to Cragmaw can wait.',
+    null,
   )
 }
 

@@ -115,7 +115,8 @@ create table if not exists public.combatants (
   turn_order_position int not null,
   color text,
   notes text,
-  constitution int not null default 10
+  constitution int not null default 10,
+  advantage_against_json jsonb not null default '[]'::jsonb
 );
 
 create table if not exists public.tokens_on_map (
@@ -136,7 +137,11 @@ create table if not exists public.live_sessions (
   join_code text not null unique,
   campaign_id uuid not null references public.campaigns (id) on delete cascade,
   encounter_instance_id uuid,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  table_phase text not null default 'table',
+  ambiance_image_url text,
+  ambiance_caption text not null default '',
+  last_outcome text
 );
 
 create or replace function public.is_dm_of_campaign(cid uuid)
@@ -225,13 +230,18 @@ grant execute on function public.plays_in_campaign(uuid) to authenticated;
 
 alter table public.encounter_templates add column if not exists characters_json jsonb not null default '[]'::jsonb;
 alter table public.combatants add column if not exists constitution int not null default 10;
+alter table public.combatants add column if not exists advantage_against_json jsonb not null default '[]'::jsonb;
+
+drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int);
+drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int, uuid);
 
 create or replace function public.resolve_player_attack(
   p_instance uuid,
   p_target uuid,
   p_attack_index int,
   p_d20 int,
-  p_damage int
+  p_damage int,
+  p_attacker uuid default null
 )
 returns json
 language plpgsql
@@ -247,17 +257,22 @@ declare
   from_tok record;
   to_tok record;
   map_row record;
+  beast record;
   atk jsonb;
   bonus int;
   range_ft int;
   dist_sq int;
   hit boolean;
   crit boolean;
+  fumble boolean;
+  had_adv boolean;
   total int;
   new_temp int;
   new_hp int;
   sheet jsonb;
   msg text;
+  attacker_adv jsonb;
+  target_adv jsonb;
 begin
   if auth.uid() is null then
     raise exception 'Sign-in required';
@@ -274,23 +289,32 @@ begin
     raise exception 'Encounter not found';
   end if;
 
-  select * into access_row from public.character_access
-    where user_id = auth.uid() and campaign_id = inst.campaign_id;
-  if not found then
-    raise exception 'You are not at this table';
-  end if;
-
-  select * into ch from public.player_characters where id = access_row.character_id;
-  if not found then
-    raise exception 'Character not found';
-  end if;
-
-  select * into attacker from public.combatants
-    where encounter_instance_id = inst.id
-      and source = 'character'
-      and source_id = ch.id::text;
-  if not found then
-    raise exception 'You are not on the map yet. Ask the DM to place you.';
+  if public.is_dm_of_campaign(inst.campaign_id) then
+    if p_attacker is null then
+      raise exception 'Select the attacking creature first';
+    end if;
+    select * into attacker from public.combatants
+      where id = p_attacker and encounter_instance_id = inst.id;
+    if not found then
+      raise exception 'Attacker is not on the map';
+    end if;
+  else
+    select * into access_row from public.character_access
+      where user_id = auth.uid() and campaign_id = inst.campaign_id;
+    if not found then
+      raise exception 'You are not at this table';
+    end if;
+    select * into ch from public.player_characters where id = access_row.character_id;
+    if not found then
+      raise exception 'Character not found';
+    end if;
+    select * into attacker from public.combatants
+      where encounter_instance_id = inst.id
+        and source = 'character'
+        and source_id = ch.id::text;
+    if not found then
+      raise exception 'You are not on the map yet. Ask the DM to place you.';
+    end if;
   end if;
 
   select * into target from public.combatants
@@ -302,17 +326,33 @@ begin
     raise exception 'Pick a different creature';
   end if;
 
-  sheet := ch.sheet_json;
-  if jsonb_typeof(sheet->'attacks') is distinct from 'array' then
-    raise exception 'No attacks on your sheet';
+  if attacker.source = 'character' then
+    select * into ch from public.player_characters where id = attacker.source_id::uuid;
+    if not found then
+      raise exception 'Character not found';
+    end if;
+    sheet := ch.sheet_json;
+    if jsonb_typeof(sheet->'attacks') is distinct from 'array' then
+      raise exception 'No attacks on the sheet';
+    end if;
+    atk := sheet->'attacks'->p_attack_index;
+    if atk is null or coalesce(atk->>'name','') = '' then
+      raise exception 'That attack is not on the sheet';
+    end if;
+    bonus := coalesce((regexp_match(coalesce(atk->>'bonus', '0'), '([+-]?[0-9]+)'))[1]::int, 0);
+    range_ft := coalesce((regexp_match(coalesce(nullif(atk->>'range', ''), '5'), '([0-9]+)'))[1]::int, 5);
+  else
+    select * into beast from public.bestiary_monsters where id = attacker.source_id::uuid;
+    if not found then
+      raise exception 'Monster not found';
+    end if;
+    atk := beast.actions->p_attack_index;
+    if atk is null or coalesce(atk->>'name','') = '' then
+      atk := jsonb_build_object('name', 'Strike', 'desc', 'Melee Weapon Attack: +0 to hit, reach 5 ft.');
+    end if;
+    bonus := coalesce((regexp_match(coalesce(atk->>'desc', atk->>'bonus', '0'), '([+-][0-9]+)\s*to hit'))[1]::int, coalesce((regexp_match(coalesce(atk->>'bonus', '0'), '([+-]?[0-9]+)'))[1]::int, 0));
+    range_ft := coalesce((regexp_match(coalesce(atk->>'desc', atk->>'range', '5'), '(?:reach|range)\s+([0-9]+)\s*ft'))[1]::int, coalesce((regexp_match(coalesce(atk->>'range', '5'), '([0-9]+)'))[1]::int, 5));
   end if;
-  atk := sheet->'attacks'->p_attack_index;
-  if atk is null or coalesce(atk->>'name','') = '' then
-    raise exception 'That attack is not on your sheet';
-  end if;
-
-  bonus := coalesce((regexp_match(coalesce(atk->>'bonus', '0'), '([+-]?[0-9]+)'))[1]::int, 0);
-  range_ft := coalesce((regexp_match(coalesce(nullif(atk->>'range', ''), '5'), '([0-9]+)'))[1]::int, 5);
   if range_ft <= 0 then range_ft := 5; end if;
 
   select * into from_tok from public.tokens_on_map
@@ -341,23 +381,39 @@ begin
 
   total := p_d20 + bonus;
   crit := p_d20 >= 20;
-  if p_d20 <= 1 then
+  fumble := p_d20 <= 1;
+  attacker_adv := coalesce(attacker.advantage_against_json, '[]'::jsonb);
+  target_adv := coalesce(target.advantage_against_json, '[]'::jsonb);
+  had_adv := attacker_adv @> to_jsonb(target.id::text);
+  attacker_adv := coalesce((
+    select jsonb_agg(to_jsonb(x))
+    from jsonb_array_elements_text(attacker_adv) x
+    where x <> target.id::text
+  ), '[]'::jsonb);
+  if fumble then
     hit := false;
+    if not (target_adv @> to_jsonb(attacker.id::text)) then
+      target_adv := target_adv || jsonb_build_array(attacker.id::text);
+    end if;
   elsif crit then
     hit := true;
   else
-    hit := total >= target.ac;
+    hit := total > target.ac;
   end if;
+  update public.combatants set advantage_against_json = attacker_adv where id = attacker.id;
+  update public.combatants set advantage_against_json = target_adv where id = target.id;
 
   if not hit then
-    if p_d20 = 1 then
-      msg := format('Natural 1 against %s — miss.', target.name);
+    if fumble then
+      msg := format('Natural 1 against %s — miss. %s has advantage against %s next turn.', target.name, target.name, attacker.name);
     else
-      msg := format('%s vs AC %s — miss on %s.', total, target.ac, target.name);
+      msg := format('%s vs AC %s — need higher than %s to hit %s.', total, target.ac, target.ac, target.name);
     end if;
     return json_build_object(
       'hit', false,
       'crit', false,
+      'fumble', fumble,
+      'hadAdvantage', had_adv,
       'total', total,
       'ac', target.ac,
       'damage', 0,
@@ -387,12 +443,14 @@ begin
   if crit then
     msg := format('Natural 20! %s damage to %s (%s HP left).', p_damage, target.name, new_hp);
   else
-    msg := format('Hit %s (%s vs AC %s) for %s damage (%s HP left).', target.name, total, target.ac, p_damage, new_hp);
+    msg := format('Hit %s (%s beats AC %s) for %s damage (%s HP left).', target.name, total, target.ac, p_damage, new_hp);
   end if;
 
   return json_build_object(
     'hit', true,
     'crit', crit,
+    'fumble', false,
+    'hadAdvantage', had_adv,
     'total', total,
     'ac', target.ac,
     'damage', p_damage,
@@ -404,7 +462,7 @@ begin
 end;
 $$;
 
-grant execute on function public.resolve_player_attack(uuid, uuid, int, int, int) to authenticated;
+grant execute on function public.resolve_player_attack(uuid, uuid, int, int, int, uuid) to authenticated;
 notify pgrst, 'reload schema';
 
 alter table public.dm_accounts enable row level security;
