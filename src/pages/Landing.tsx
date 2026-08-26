@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth'
 import { publicAsset, usingSupabase } from '@/lib/config'
+import { SAMPLE_ELARA_CODE, SAMPLE_JOIN_CODE, SAMPLE_TABLE_NAME, SAMPLE_TABLE_PASSCODE } from '@/lib/sample-table'
 import { LanguageToggle, useT } from '@/lib/i18n'
 
 export function Landing() {
@@ -13,10 +14,10 @@ export function Landing() {
   const [mode, setMode] = useState<'dm' | 'join'>('dm')
   const [creating, setCreating] = useState(false)
   const sampleTable = !usingSupabase && !import.meta.env.PROD
-  const [name, setName] = useState(sampleTable ? 'Hearthkeeper' : '')
-  const [passcode, setPasscode] = useState(sampleTable ? 'torch' : '')
-  const [joinCode, setJoinCode] = useState(sampleTable ? 'HEARTH' : '')
-  const [personal, setPersonal] = useState(sampleTable ? 'ELARA7K2' : '')
+  const [name, setName] = useState(sampleTable ? SAMPLE_TABLE_NAME : '')
+  const [passcode, setPasscode] = useState(sampleTable ? SAMPLE_TABLE_PASSCODE : '')
+  const [joinCode, setJoinCode] = useState(sampleTable ? SAMPLE_JOIN_CODE : '')
+  const [personal, setPersonal] = useState(sampleTable ? SAMPLE_ELARA_CODE : '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -95,7 +96,7 @@ export function Landing() {
                       value={passcode}
                       onChange={(e) => setPasscode(e.target.value)}
                       autoComplete="current-password"
-                      minLength={usingSupabase ? 6 : 4}
+                      minLength={6}
                       required
                     />
                   </Field>
