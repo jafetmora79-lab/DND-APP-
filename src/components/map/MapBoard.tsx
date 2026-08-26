@@ -19,6 +19,7 @@ type Props = {
   onMove?: (id: string, x: number, y: number) => void
   onFog?: (fog: FogState) => void
   onBlocked?: (blocked: number[]) => void
+  onCellClick?: (col: number, row: number) => void
 }
 
 function MapImage({ url, width, height }: { url: string; width: number; height: number }) {
@@ -39,6 +40,7 @@ export function MapBoard({
   onMove,
   onFog,
   onBlocked,
+  onCellClick,
 }: Props) {
   const wrap = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 800, h: 600 })
@@ -47,6 +49,7 @@ export function MapBoard({
   const painting = useRef(false)
   const lastPaint = useRef(-1)
   const dragOrigin = useRef<Record<string, { x: number; y: number }>>({})
+  const pointerDown = useRef<{ x: number; y: number } | null>(null)
 
   const worldW = map.gridCols * map.gridSize
   const worldH = map.gridRows * map.gridSize
@@ -135,16 +138,33 @@ export function MapBoard({
           setPos({ x: ptr.x - mousePointTo.x * next, y: ptr.y - mousePointTo.y * next })
         }}
         onMouseDown={(e) => {
+          const ptr = e.target.getStage()?.getPointerPosition()
+          pointerDown.current = ptr ? { x: ptr.x, y: ptr.y } : null
           if (e.target.findAncestor('.token')) return
           const cls = e.target.getClassName()
           if (cls === 'Circle' || cls === 'Text' || cls === 'Group') return
-          if (tool === 'select') onSelect?.(null)
+          if (tool === 'select' && !onCellClick) onSelect?.(null)
           if (paintingFog || paintingTerrain) {
             painting.current = true
             lastPaint.current = -1
             const w = worldFromEvent(e)
             if (w) paintAt(w.x, w.y)
           }
+        }}
+        onClick={(e) => {
+          if (!onCellClick || tool !== 'select') return
+          if (e.target.findAncestor('.token')) return
+          const cls = e.target.getClassName()
+          if (cls === 'Circle' || cls === 'Text' || cls === 'Group') return
+          const ptr = e.target.getStage()?.getPointerPosition()
+          const start = pointerDown.current
+          if (start && ptr && Math.hypot(ptr.x - start.x, ptr.y - start.y) > 6) return
+          const w = worldFromEvent(e)
+          if (!w) return
+          const col = Math.floor(w.x / map.gridSize)
+          const row = Math.floor(w.y / map.gridSize)
+          if (col < 0 || row < 0 || col >= map.gridCols || row >= map.gridRows) return
+          onCellClick(col, row)
         }}
         onMouseMove={(e) => {
           if (!painting.current) return

@@ -4,7 +4,7 @@ import { emptySheet, type AuthUser, type BattleMap, type FogState, type Monster,
 import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
-import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked } from './utils'
+import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter } from './utils'
 import { specCopyCell } from './combat'
 import { sessionFromRow } from './session'
 import type { TableApi } from './local-api'
@@ -197,6 +197,43 @@ async function insertCombatantRow(row: Record<string, unknown>) {
   return data
 }
 
+async function insertCharacterToken(
+  instanceId: string,
+  combatantId: string,
+  label: string,
+  color: string,
+  battle: ReturnType<typeof mapFromRow> | null,
+  startX?: number,
+  startY?: number,
+) {
+  const cell = battle?.gridSize ?? 70
+  const cols = battle?.gridCols ?? 20
+  const rows = battle?.gridRows ?? 15
+  const { data: tokens } = await db().from('tokens_on_map').select('x, y, size_squares').eq('encounter_instance_id', instanceId)
+  const occupied = tokenCellKeys(
+    (tokens ?? []).map((t) => ({ x: Number(t.x), y: Number(t.y), sizeSquares: Number(t.size_squares ?? 1) })),
+    cell,
+  )
+  const origin =
+    Number.isFinite(startX) && Number.isFinite(startY)
+      ? { col: Number(startX), row: Number(startY) }
+      : playerStartOrigin(cols, rows)
+  const found = spreadCells(origin, 1, cols, rows, battle?.blocked, occupied)[0]
+  const pos = battle ? cellCenter(found.col, found.row, cell) : { x: cell * found.col + cell / 2, y: cell * found.row + cell / 2 }
+  const { error: tokErr } = await db().from('tokens_on_map').insert({
+    encounter_instance_id: instanceId,
+    x: pos.x,
+    y: pos.y,
+    ref_type: 'combatant',
+    ref_id: combatantId,
+    label,
+    color,
+    size_squares: 1,
+    visible_to_players: true,
+  })
+  throwIf(tokErr)
+}
+
 async function insertCharacterCombatant(instanceId: string, characterId: string, startX?: number, startY?: number, turnOrder?: number) {
   const { data: existing } = await db()
     .from('combatants')
@@ -205,12 +242,23 @@ async function insertCharacterCombatant(instanceId: string, characterId: string,
     .eq('source', 'character')
     .eq('source_id', characterId)
     .maybeSingle()
-  if (existing) return
   const { data: inst, error: iErr } = await db().from('encounter_instances').select('*').eq('id', instanceId).single()
   throwIf(iErr)
   const { data: map } = inst.map_id ? await db().from('maps').select('*').eq('id', inst.map_id).maybeSingle() : { data: null }
   const battle = map ? mapFromRow(map as Record<string, unknown>) : null
-  const cell = battle?.gridSize ?? 70
+  const { data: ch, error } = await db().from('player_characters').select('*').eq('id', characterId).single()
+  throwIf(error)
+  const mapped = characterFromRow(ch as Record<string, unknown>)
+  if (existing) {
+    const { data: tok } = await db()
+      .from('tokens_on_map')
+      .select('id')
+      .eq('encounter_instance_id', instanceId)
+      .eq('ref_id', existing.id)
+      .maybeSingle()
+    if (!tok) await insertCharacterToken(instanceId, String(existing.id), mapped.name, mapped.tokenColor, battle, startX, startY)
+    return
+  }
   let nextPos = turnOrder
   if (nextPos == null) {
     const { data: maxRow } = await db()
@@ -222,9 +270,6 @@ async function insertCharacterCombatant(instanceId: string, characterId: string,
       .maybeSingle()
     nextPos = Number(maxRow?.turn_order_position ?? -1) + 1
   }
-  const { data: ch, error } = await db().from('player_characters').select('*').eq('id', characterId).single()
-  throwIf(error)
-  const mapped = characterFromRow(ch as Record<string, unknown>)
   const comb = await insertCombatantRow({
     encounter_instance_id: instanceId,
     name: mapped.name,
@@ -241,22 +286,7 @@ async function insertCharacterCombatant(instanceId: string, characterId: string,
     notes: '',
     constitution: mapped.sheet.abilities.con,
   })
-  const { count } = await db().from('tokens_on_map').select('id', { count: 'exact', head: true }).eq('encounter_instance_id', instanceId)
-  const col = Number.isFinite(startX) ? Number(startX) : 2 + ((count ?? 0) % 6)
-  const row = Number.isFinite(startY) ? Number(startY) : 10
-  const pos = battle ? walkablePixel(battle, col, row) : { x: cell * col + cell / 2, y: cell * row + cell / 2 }
-  const { error: tokErr } = await db().from('tokens_on_map').insert({
-    encounter_instance_id: instanceId,
-    x: pos.x,
-    y: pos.y,
-    ref_type: 'combatant',
-    ref_id: comb.id,
-    label: mapped.name,
-    color: mapped.tokenColor,
-    size_squares: 1,
-    visible_to_players: true,
-  })
-  throwIf(tokErr)
+  await insertCharacterToken(instanceId, String(comb.id), mapped.name, mapped.tokenColor, battle, startX, startY)
 }
 
 async function currentUserId() {
@@ -651,9 +681,15 @@ export const supabaseApi: TableApi = {
       monsters_json: body.monsters ?? [],
       characters_json: body.characters ?? [],
     }
+    const wantedChars = (body.characters ?? []) as unknown[]
     if (body.id) {
       const { error } = await db().from('encounter_templates').update(payload).eq('id', body.id)
       if (error && /characters_json/.test(error.message)) {
+        if (wantedChars.length > 0) {
+          throw new Error(
+            "Could not save player starting squares. In the Supabase SQL Editor run migrate-encounter-play.sql, then: notify pgrst, 'reload schema';",
+          )
+        }
         const { error: retry } = await db()
           .from('encounter_templates')
           .update({ name: body.name, map_id: body.mapId, monsters_json: body.monsters ?? [] })
@@ -666,6 +702,11 @@ export const supabaseApi: TableApi = {
     }
     const { data, error } = await db().from('encounter_templates').insert({ campaign_id: campaignId, ...payload }).select().single()
     if (error && /characters_json/.test(error.message)) {
+      if (wantedChars.length > 0) {
+        throw new Error(
+          "Could not save player starting squares. In the Supabase SQL Editor run migrate-encounter-play.sql, then: notify pgrst, 'reload schema';",
+        )
+      }
       const { data: retry, error: retryErr } = await db()
         .from('encounter_templates')
         .insert({ campaign_id: campaignId, map_id: body.mapId, name: body.name, monsters_json: body.monsters ?? [] })

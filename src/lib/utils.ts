@@ -238,6 +238,29 @@ export function pixelToCell(x: number, y: number, gridSize: number) {
   }
 }
 
+/** Default party start: near the south-center of the map, not a hardcoded row 10. */
+export function playerStartOrigin(cols: number, rows: number) {
+  return {
+    col: Math.min(Math.max(0, cols - 1), Math.max(0, Math.floor(cols / 2) - 1)),
+    row: Math.max(0, rows - 2),
+  }
+}
+
+export function tokenCellKeys(
+  tokens: { x: number; y: number; sizeSquares?: number }[],
+  gridSize: number,
+) {
+  const keys = new Set<string>()
+  for (const t of tokens) {
+    const { col, row } = pixelToCell(t.x, t.y, gridSize)
+    const size = Math.max(1, t.sizeSquares ?? 1)
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) keys.add(`${col + c},${row + r}`)
+    }
+  }
+  return keys
+}
+
 export function walkablePixel(
   map: { blocked?: number[]; gridCols: number; gridRows: number; gridSize: number },
   col: number,
