@@ -8,12 +8,14 @@ import {
   emptyTurnEconomy,
   formatDiceUsed,
   monsterSaveBonus,
+  parseCombatantStats,
   parseDeathState,
   parseRollMode,
   parseTurnEconomy,
   pickUsedD20,
   resolveDeathSave,
   resolveSavingThrow,
+  saveBonusForCombatant,
 } from '../src/lib/combat.ts'
 
 function check(name: string, fn: () => void) {
@@ -64,6 +66,21 @@ check('saving throw display math', () => {
   assert.equal(characterSaveBonus(16, true, 3), 6)
   assert.equal(monsterSaveBonus('Dex +5', 'dex', 10), 5)
   assert.equal(monsterSaveBonus('', 'str', 16), 3)
+  const goblin = {
+    stats: parseCombatantStats({ dex: 16, str: 8, con: 10, int: 10, wis: 8, cha: 8, savingThrows: 'Dex +4' }),
+    constitution: 10,
+    source: 'bestiary' as const,
+  }
+  assert.equal(saveBonusForCombatant(goblin, 'dex', null), 4)
+  assert.equal(saveBonusForCombatant(goblin, 'str', null), -1)
+  assert.equal(
+    saveBonusForCombatant({ stats: null, constitution: 14, source: 'bestiary' }, 'con', {
+      con: 18,
+      savingThrows: 'Con +6',
+    }),
+    6,
+  )
+  assert.equal(saveBonusForCombatant({ stats: null, constitution: 14, source: 'bestiary' }, 'con', null), 2)
 })
 
 check('unconscious and dying at 0 HP', () => {

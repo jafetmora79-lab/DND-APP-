@@ -5,7 +5,7 @@ import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
 import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter } from './utils'
-import { afterHpChange, emptyTurnEconomy, parseDeathState, parseTurnEconomy, resolveDeathSave, specCopyCell } from './combat'
+import { afterHpChange, combatantStatsFromMonster, emptyTurnEconomy, parseDeathState, parseTurnEconomy, resolveDeathSave, specCopyCell, statsForLiveCombatant } from './combat'
 import { sessionFromRow } from './session'
 import { applyEncounterRewards, parseHub } from './campaign-hub'
 import { packTemplateBody, templateFromRow, unpackTemplateJson } from './template-json'
@@ -219,16 +219,26 @@ function mapFromRow(row: Record<string, unknown>): BattleMap {
 }
 
 async function insertCombatantRow(row: Record<string, unknown>) {
-  const { data, error } = await db().from('combatants').insert(row).select().single()
-  if (error && /constitution/.test(error.message) && 'constitution' in row) {
-    const { constitution: _ignored, ...rest } = row
-    void _ignored
-    const retry = await db().from('combatants').insert(rest).select().single()
-    throwIf(retry.error)
-    return retry.data
+  let payload = { ...row }
+  for (let i = 0; i < 8; i++) {
+    const { data, error } = await db().from('combatants').insert(payload).select().single()
+    if (!error) return data
+    const col = schemaColumn(error.message)
+    if (col && col in payload) {
+      delete payload[col]
+      continue
+    }
+    if (/constitution/.test(error.message) && 'constitution' in payload) {
+      delete payload.constitution
+      continue
+    }
+    if (/stats_json/.test(error.message) && 'stats_json' in payload) {
+      delete payload.stats_json
+      continue
+    }
+    throwIf(error)
   }
-  throwIf(error)
-  return data
+  throw new Error('Could not insert combatant')
 }
 
 async function insertCharacterToken(
@@ -841,6 +851,7 @@ export const supabaseApi: TableApi = {
           color: spec.color,
           notes: '',
           constitution: Number(src.con ?? 10),
+          stats_json: combatantStatsFromMonster(src as Record<string, unknown>),
         })
         const { col, row: r } = specCopyCell(spec, i, placed)
         const size = tokenSizeSquares(String(src.size ?? 'Medium'))
@@ -977,12 +988,19 @@ export const supabaseApi: TableApi = {
     throwIf(loadErr)
     if (!existing) throw new Error('No live session')
     if (existing.encounter_instance_id) {
+      const { data: instRow, error: instErr } = await db()
+        .from('encounter_instances')
+        .select('status')
+        .eq('id', existing.encounter_instance_id)
+        .maybeSingle()
+      throwIf(instErr)
+      const firstFinish = instRow?.status !== 'completed'
       const { error: stErr } = await db()
         .from('encounter_instances')
         .update({ status: 'completed' })
         .eq('id', existing.encounter_instance_id)
       throwIf(stErr)
-      await applyHostedFinishRewards(campaignId, String(existing.encounter_instance_id), outcome)
+      if (firstFinish) await applyHostedFinishRewards(campaignId, String(existing.encounter_instance_id), outcome)
     }
     await updateLiveSession(String(existing.id), {
       table_phase: outcome === 'won' ? 'victory' : 'defeat',
@@ -1050,6 +1068,22 @@ export const supabaseApi: TableApi = {
     const { data: combatants } = instanceId
       ? await db().from('combatants').select('*').eq('encounter_instance_id', instanceId).order('turn_order_position')
       : { data: [] }
+    const missingBestiaryIds = [
+      ...new Set(
+        (combatants ?? [])
+          .filter((c) => c.source === 'bestiary' && !statsForLiveCombatant(c as { stats_json?: unknown; source?: unknown }, null))
+          .map((c) => String(c.source_id ?? ''))
+          .filter(Boolean),
+      ),
+    ]
+    const bestiaryById = new Map<string, Record<string, unknown>>()
+    if (missingBestiaryIds.length) {
+      const { data: mons } = await db()
+        .from('bestiary_monsters')
+        .select('id, str, dex, con, int, wis, cha, saving_throws')
+        .in('id', missingBestiaryIds)
+      for (const m of mons ?? []) bestiaryById.set(String(m.id), m as Record<string, unknown>)
+    }
     const { data: tokens } = instanceId ? await db().from('tokens_on_map').select('*').eq('encounter_instance_id', instanceId) : { data: [] }
     const { data: characters } = await db().from('player_characters').select('*').eq('campaign_id', campaignId)
     const chars = await hideCodes(campaignId, (characters ?? []).map((r) => characterFromRow(r as Record<string, unknown>)))
@@ -1091,6 +1125,10 @@ export const supabaseApi: TableApi = {
         color: String(c.color ?? '#c4453c'),
         notes: String(c.notes ?? ''),
         constitution: Number((c as { constitution?: number }).constitution ?? 10),
+        stats: statsForLiveCombatant(
+          c as { stats_json?: unknown; source?: unknown },
+          c.source === 'bestiary' ? bestiaryById.get(String(c.source_id ?? '')) : null,
+        ),
         advantageAgainst: Array.isArray((c as { advantage_against_json?: string[] }).advantage_against_json)
           ? ((c as { advantage_against_json: string[] }).advantage_against_json)
           : [],
@@ -1160,6 +1198,7 @@ export const supabaseApi: TableApi = {
           color: body.color || '#c4453c',
           notes: '',
           constitution: Number(src.con ?? 10),
+          stats_json: combatantStatsFromMonster(src as Record<string, unknown>),
         })
         const pos = battle ? walkablePixel(battle, 3 + i, 3) : { x: cell * (3 + i) + cell / 2, y: cell * 3 + cell / 2 }
         await db().from('tokens_on_map').insert({

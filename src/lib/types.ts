@@ -318,6 +318,16 @@ export type Campaign = {
   hub?: CampaignHub
 }
 
+export type CombatantStats = {
+  str: number
+  dex: number
+  con: number
+  int: number
+  wis: number
+  cha: number
+  savingThrows: string
+}
+
 export type Combatant = {
   id: string
   encounterInstanceId: string
@@ -334,6 +344,8 @@ export type Combatant = {
   color: string
   notes: string
   constitution: number
+  /** Ability scores and save text copied from the bestiary at spawn. */
+  stats: CombatantStats | null
   /** Combatant IDs this creature has advantage against on its next attack. */
   advantageAgainst: string[]
   deathState: DeathState
