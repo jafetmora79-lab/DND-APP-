@@ -78,6 +78,40 @@ export function templateTokenCell(
   return { col: baseCol + (copyIndex % 4), row: baseRow + Math.floor(copyIndex / 4) }
 }
 
+export function spreadCells(
+  origin: { col: number; row: number },
+  count: number,
+  cols: number,
+  rows: number,
+  blocked?: number[],
+  occupied?: Set<string>,
+) {
+  const result: { col: number; row: number }[] = []
+  const used = new Set(occupied)
+  const maxR = Math.max(cols, rows, 1)
+  for (let d = 0; d <= maxR && result.length < count; d++) {
+    for (let row = origin.row - d; row <= origin.row + d; row++) {
+      for (let col = origin.col - d; col <= origin.col + d; col++) {
+        if (d > 0 && Math.abs(col - origin.col) !== d && Math.abs(row - origin.row) !== d) continue
+        if (col < 0 || row < 0 || col >= cols || row >= rows) continue
+        const key = `${col},${row}`
+        if (used.has(key) || tokenOccupiesBlocked(blocked, col, row, cols, rows)) continue
+        used.add(key)
+        result.push({ col, row })
+        if (result.length >= count) break
+      }
+      if (result.length >= count) break
+    }
+  }
+  while (result.length < count) {
+    result.push({
+      col: Math.max(0, Math.min(cols - 1, origin.col)),
+      row: Math.max(0, Math.min(rows - 1, origin.row)),
+    })
+  }
+  return result
+}
+
 /** D&D tactical scale: one square is 5 feet. */
 export const FEET_PER_SQUARE = 5
 export const DEFAULT_SCRATCH_CELL = 48
@@ -221,4 +255,12 @@ export function hpColor(current: number, max: number) {
   if (r > 0.66) return 'bg-moss'
   if (r > 0.33) return 'bg-gold'
   return 'bg-blood'
+}
+
+export function hpBarFill(current: number, max: number) {
+  if (max <= 0) return '#6b7280'
+  const r = current / max
+  if (r > 0.66) return '#4ea36a'
+  if (r > 0.33) return '#d4b45a'
+  return '#c4453c'
 }

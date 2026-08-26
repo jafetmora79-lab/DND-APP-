@@ -1,8 +1,10 @@
 import { useRef, useState } from 'react'
+import { Check, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/input'
-import { ABILITIES, ABILITY_LABELS, SKILLS, sheetHasBio, sheetHasSkills, sheetHasSpells, type Ability, type PlayerCharacter } from '@/lib/types'
+import { ABILITIES, ABILITY_LABELS, SKILLS, sheetHasBio, sheetHasSkills, sheetHasSpells, type Ability, type Attack, type PlayerCharacter } from '@/lib/types'
 import { abilityMod, cn, proficiencyBonus, signed } from '@/lib/utils'
+import { copyText } from '@/lib/copy'
 
 type Props = {
   character: PlayerCharacter
@@ -11,14 +13,16 @@ type Props = {
   onChange: (patch: Partial<PlayerCharacter> & { sheet?: PlayerCharacter['sheet'] }) => void
   onImportPdf?: (file: File) => void
   onRegenCode?: () => void
+  onUseAttack?: (attack: Attack, index: number) => void
 }
 
 const tabs = ['Combat', 'Skills', 'Spells', 'Bio'] as const
 
-export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf, onRegenCode }: Props) {
+export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf, onRegenCode, onUseAttack }: Props) {
   const sheet = character.sheet
   const [tab, setTab] = useState<(typeof tabs)[number]>('Combat')
   const fileRef = useRef<HTMLInputElement>(null)
+  const [copied, setCopied] = useState(false)
   const pb = proficiencyBonus(sheet.level)
   const visibleTabs = tabs.filter((t) => {
     if (t === 'Combat') return true
@@ -45,9 +49,22 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
           <p className="mt-1 text-sm text-muted">
             {sheet.race} {sheet.className || 'Adventurer'} · played by {character.ownerDisplayName || 'unclaimed'}
           </p>
-          {isDm && (
-            <p className="mt-1 font-mono text-xs text-gold">
-              Personal code {character.personalCode}{' '}
+          {isDm && character.personalCode && character.personalCode !== '••••••••' && (
+            <p className="mt-1 flex flex-wrap items-center gap-2 font-mono text-xs text-gold">
+              Personal code {character.personalCode}
+              <button
+                className="inline-flex items-center gap-1 text-gold underline"
+                type="button"
+                onClick={async () => {
+                  const ok = await copyText(character.personalCode)
+                  if (!ok) return
+                  setCopied(true)
+                  window.setTimeout(() => setCopied(false), 1600)
+                }}
+              >
+                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? 'Copied' : 'Copy'}
+              </button>
               {onRegenCode && (
                 <button className="underline" onClick={onRegenCode} type="button">
                   regenerate
@@ -179,7 +196,7 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
             <div>
               <div className="mb-2 text-xs uppercase tracking-wider text-muted">Attacks</div>
               {sheet.attacks.map((atk, i) => (
-                <div key={i} className="mb-2 grid grid-cols-3 gap-2">
+                <div key={i} className="mb-2 grid grid-cols-2 gap-2 md:grid-cols-4">
                   <Input
                     disabled={!canEdit}
                     placeholder="Name"
@@ -210,13 +227,30 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
                       patchSheet({ attacks })
                     }}
                   />
+                  <div className="flex gap-1">
+                    <Input
+                      disabled={!canEdit}
+                      placeholder="Range"
+                      value={atk.range ?? '5 ft.'}
+                      onChange={(e) => {
+                        const attacks = sheet.attacks.slice()
+                        attacks[i] = { ...atk, range: e.target.value }
+                        patchSheet({ attacks })
+                      }}
+                    />
+                    {onUseAttack && atk.name.trim() && (
+                      <Button size="sm" variant="ember" type="button" onClick={() => onUseAttack(atk, i)}>
+                        Use
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
               {canEdit && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => patchSheet({ attacks: [...sheet.attacks, { name: '', bonus: '', damage: '' }] })}
+                  onClick={() => patchSheet({ attacks: [...sheet.attacks, { name: '', bonus: '', damage: '', range: '5 ft.' }] })}
                 >
                   Add attack
                 </Button>

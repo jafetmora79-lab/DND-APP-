@@ -4,7 +4,8 @@ import { emptySheet, type AuthUser, type BattleMap, type FogState, type Monster,
 import { parseCharacterPdf } from './parse-pdf'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
-import { parseBlockedCells, tokenSizeSquares, templateTokenCell, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked } from './utils'
+import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked } from './utils'
+import { specCopyCell } from './combat'
 import type { TableApi } from './local-api'
 
 const joinCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6)
@@ -125,6 +126,81 @@ function mapFromRow(row: Record<string, unknown>): BattleMap {
     gridType: 'square',
     blocked: parseBlockedCells(row.blocked_cells, gridCols, gridRows),
   }
+}
+
+async function insertCombatantRow(row: Record<string, unknown>) {
+  const { data, error } = await db().from('combatants').insert(row).select().single()
+  if (error && /constitution/.test(error.message) && 'constitution' in row) {
+    const { constitution: _ignored, ...rest } = row
+    void _ignored
+    const retry = await db().from('combatants').insert(rest).select().single()
+    throwIf(retry.error)
+    return retry.data
+  }
+  throwIf(error)
+  return data
+}
+
+async function insertCharacterCombatant(instanceId: string, characterId: string, startX?: number, startY?: number, turnOrder?: number) {
+  const { data: existing } = await db()
+    .from('combatants')
+    .select('id')
+    .eq('encounter_instance_id', instanceId)
+    .eq('source', 'character')
+    .eq('source_id', characterId)
+    .maybeSingle()
+  if (existing) return
+  const { data: inst, error: iErr } = await db().from('encounter_instances').select('*').eq('id', instanceId).single()
+  throwIf(iErr)
+  const { data: map } = inst.map_id ? await db().from('maps').select('*').eq('id', inst.map_id).maybeSingle() : { data: null }
+  const battle = map ? mapFromRow(map as Record<string, unknown>) : null
+  const cell = battle?.gridSize ?? 70
+  let nextPos = turnOrder
+  if (nextPos == null) {
+    const { data: maxRow } = await db()
+      .from('combatants')
+      .select('turn_order_position')
+      .eq('encounter_instance_id', instanceId)
+      .order('turn_order_position', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    nextPos = Number(maxRow?.turn_order_position ?? -1) + 1
+  }
+  const { data: ch, error } = await db().from('player_characters').select('*').eq('id', characterId).single()
+  throwIf(error)
+  const mapped = characterFromRow(ch as Record<string, unknown>)
+  const comb = await insertCombatantRow({
+    encounter_instance_id: instanceId,
+    name: mapped.name,
+    source: 'character',
+    source_id: mapped.id,
+    initiative: 0,
+    hp_current: mapped.sheet.hpCurrent,
+    hp_max: mapped.sheet.hpMax,
+    hp_temp: mapped.sheet.hpTemp,
+    ac: mapped.sheet.ac,
+    conditions_json: [],
+    turn_order_position: nextPos,
+    color: mapped.tokenColor,
+    notes: '',
+    constitution: mapped.sheet.abilities.con,
+  })
+  const { count } = await db().from('tokens_on_map').select('id', { count: 'exact', head: true }).eq('encounter_instance_id', instanceId)
+  const col = Number.isFinite(startX) ? Number(startX) : 2 + ((count ?? 0) % 6)
+  const row = Number.isFinite(startY) ? Number(startY) : 10
+  const pos = battle ? walkablePixel(battle, col, row) : { x: cell * col + cell / 2, y: cell * row + cell / 2 }
+  const { error: tokErr } = await db().from('tokens_on_map').insert({
+    encounter_instance_id: instanceId,
+    x: pos.x,
+    y: pos.y,
+    ref_type: 'combatant',
+    ref_id: comb.id,
+    label: mapped.name,
+    color: mapped.tokenColor,
+    size_squares: 1,
+    visible_to_players: true,
+  })
+  throwIf(tokErr)
 }
 
 async function currentUserId() {
@@ -507,24 +583,50 @@ export const supabaseApi: TableApi = {
         mapId: String(t.map_id),
         name: String(t.name),
         monsters: t.monsters_json ?? [],
+        characters: t.characters_json ?? [],
       })),
     }
   },
 
   async saveTemplate(campaignId, body) {
+    const payload = {
+      name: body.name,
+      map_id: body.mapId,
+      monsters_json: body.monsters ?? [],
+      characters_json: body.characters ?? [],
+    }
     if (body.id) {
-      const { error } = await db()
-        .from('encounter_templates')
-        .update({ name: body.name, map_id: body.mapId, monsters_json: body.monsters ?? [] })
-        .eq('id', body.id)
+      const { error } = await db().from('encounter_templates').update(payload).eq('id', body.id)
+      if (error && /characters_json/.test(error.message)) {
+        const { error: retry } = await db()
+          .from('encounter_templates')
+          .update({ name: body.name, map_id: body.mapId, monsters_json: body.monsters ?? [] })
+          .eq('id', body.id)
+        throwIf(retry)
+        return {}
+      }
       throwIf(error)
       return {}
     }
-    const { data, error } = await db()
-      .from('encounter_templates')
-      .insert({ campaign_id: campaignId, map_id: body.mapId, name: body.name, monsters_json: body.monsters ?? [] })
-      .select()
-      .single()
+    const { data, error } = await db().from('encounter_templates').insert({ campaign_id: campaignId, ...payload }).select().single()
+    if (error && /characters_json/.test(error.message)) {
+      const { data: retry, error: retryErr } = await db()
+        .from('encounter_templates')
+        .insert({ campaign_id: campaignId, map_id: body.mapId, name: body.name, monsters_json: body.monsters ?? [] })
+        .select()
+        .single()
+      throwIf(retryErr)
+      return {
+        template: {
+          id: String(retry.id),
+          campaignId,
+          mapId: String(retry.map_id),
+          name: String(retry.name),
+          monsters: retry.monsters_json ?? [],
+          characters: [],
+        },
+      }
+    }
     throwIf(error)
     return {
       template: {
@@ -533,6 +635,7 @@ export const supabaseApi: TableApi = {
         mapId: String(data.map_id),
         name: String(data.name),
         monsters: data.monsters_json ?? [],
+        characters: data.characters_json ?? [],
       },
     }
   },
@@ -594,37 +697,35 @@ export const supabaseApi: TableApi = {
       startX: number
       startY: number
       color: string
+      positions?: { x: number; y: number }[]
     }[]
     let order = 0
     let placed = 0
+    const battle = mapFromRow(map as Record<string, unknown>)
     for (const spec of specs) {
       const { data: src } = await db().from('bestiary_monsters').select('*').eq('id', spec.bestiaryMonsterId).maybeSingle()
       if (!src) continue
       for (let i = 0; i < spec.quantity; i++) {
         const label = spec.quantity > 1 ? `${spec.name} ${i + 1}` : spec.name
-        const { data: comb, error: cErr } = await db()
-          .from('combatants')
-          .insert({
-            encounter_instance_id: inst.id,
-            name: label,
-            source: 'bestiary',
-            source_id: spec.bestiaryMonsterId,
-            initiative: 0,
-            hp_current: src.hp_max,
-            hp_max: src.hp_max,
-            hp_temp: 0,
-            ac: src.ac_value,
-            conditions_json: [],
-            turn_order_position: order++,
-            color: spec.color,
-            notes: '',
-          })
-          .select()
-          .single()
-        throwIf(cErr)
-        const { col, row } = templateTokenCell(spec, i, placed)
+        const comb = await insertCombatantRow({
+          encounter_instance_id: inst.id,
+          name: label,
+          source: 'bestiary',
+          source_id: spec.bestiaryMonsterId,
+          initiative: 0,
+          hp_current: src.hp_max,
+          hp_max: src.hp_max,
+          hp_temp: 0,
+          ac: src.ac_value,
+          conditions_json: [],
+          turn_order_position: order++,
+          color: spec.color,
+          notes: '',
+          constitution: Number(src.con ?? 10),
+        })
+        const { col, row: r } = specCopyCell(spec, i, placed)
         const size = tokenSizeSquares(String(src.size ?? 'Medium'))
-        const pos = walkablePixel(mapFromRow(map as Record<string, unknown>), col, row, size)
+        const pos = walkablePixel(battle, col, r, size)
         const { error: tokErr } = await db().from('tokens_on_map').insert({
           encounter_instance_id: inst.id,
           x: pos.x,
@@ -639,6 +740,10 @@ export const supabaseApi: TableApi = {
         throwIf(tokErr)
         placed++
       }
+    }
+    const starters = (template.characters_json ?? []) as { characterId: string; startX: number; startY: number }[]
+    for (const spec of starters) {
+      await insertCharacterCombatant(String(inst.id), spec.characterId, spec.startX, spec.startY, order++)
     }
     return { instanceId: String(inst.id) }
   },
@@ -751,6 +856,7 @@ export const supabaseApi: TableApi = {
         turnOrderPosition: Number(c.turn_order_position),
         color: String(c.color ?? '#c4453c'),
         notes: String(c.notes ?? ''),
+        constitution: Number((c as { constitution?: number }).constitution ?? 10),
       })),
       tokens: (tokens ?? []).map((t) => ({
         id: String(t.id),
@@ -783,52 +889,13 @@ export const supabaseApi: TableApi = {
       .maybeSingle()
     const nextPos = Number(maxRow?.turn_order_position ?? -1) + 1
     if (body.characterId) {
-      const { data: existing } = await db()
-        .from('combatants')
-        .select('id')
-        .eq('encounter_instance_id', instanceId)
-        .eq('source', 'character')
-        .eq('source_id', body.characterId)
-        .maybeSingle()
-      if (existing) return {}
-      const { data: ch, error } = await db().from('player_characters').select('*').eq('id', body.characterId).single()
-      throwIf(error)
-      const mapped = characterFromRow(ch as Record<string, unknown>)
-      const { data: comb, error: cErr } = await db()
-        .from('combatants')
-        .insert({
-          encounter_instance_id: instanceId,
-          name: mapped.name,
-          source: 'character',
-          source_id: mapped.id,
-          initiative: 0,
-          hp_current: mapped.sheet.hpCurrent,
-          hp_max: mapped.sheet.hpMax,
-          hp_temp: mapped.sheet.hpTemp,
-          ac: mapped.sheet.ac,
-          conditions_json: [],
-          turn_order_position: nextPos,
-          color: mapped.tokenColor,
-          notes: '',
-        })
-        .select()
-        .single()
-      throwIf(cErr)
-      const { count } = await db().from('tokens_on_map').select('id', { count: 'exact', head: true }).eq('encounter_instance_id', instanceId)
-      const pos = battle
-        ? walkablePixel(battle, 2 + ((count ?? 0) % 6), 10)
-        : { x: cell * (2 + ((count ?? 0) % 6)) + cell / 2, y: cell * 10 + cell / 2 }
-      await db().from('tokens_on_map').insert({
-        encounter_instance_id: instanceId,
-        x: pos.x,
-        y: pos.y,
-        ref_type: 'combatant',
-        ref_id: comb.id,
-        label: mapped.name,
-        color: mapped.tokenColor,
-        size_squares: 1,
-        visible_to_players: true,
-      })
+      await insertCharacterCombatant(
+        instanceId,
+        String(body.characterId),
+        typeof body.startX === 'number' ? body.startX : undefined,
+        typeof body.startY === 'number' ? body.startY : undefined,
+        nextPos,
+      )
       return {}
     }
     if (body.bestiaryMonsterId) {
@@ -837,26 +904,22 @@ export const supabaseApi: TableApi = {
       const qty = Number(body.quantity ?? 1)
       for (let i = 0; i < qty; i++) {
         const label = qty > 1 ? `${src.name} ${i + 1}` : String(src.name)
-        const { data: comb, error: cErr } = await db()
-          .from('combatants')
-          .insert({
-            encounter_instance_id: instanceId,
-            name: label,
-            source: 'bestiary',
-            source_id: src.id,
-            initiative: 0,
-            hp_current: src.hp_max,
-            hp_max: src.hp_max,
-            hp_temp: 0,
-            ac: src.ac_value,
-            conditions_json: [],
-            turn_order_position: nextPos + i,
-            color: body.color || '#c4453c',
-            notes: '',
-          })
-          .select()
-          .single()
-        throwIf(cErr)
+        const comb = await insertCombatantRow({
+          encounter_instance_id: instanceId,
+          name: label,
+          source: 'bestiary',
+          source_id: src.id,
+          initiative: 0,
+          hp_current: src.hp_max,
+          hp_max: src.hp_max,
+          hp_temp: 0,
+          ac: src.ac_value,
+          conditions_json: [],
+          turn_order_position: nextPos + i,
+          color: body.color || '#c4453c',
+          notes: '',
+          constitution: Number(src.con ?? 10),
+        })
         const pos = battle ? walkablePixel(battle, 3 + i, 3) : { x: cell * (3 + i) + cell / 2, y: cell * 3 + cell / 2 }
         await db().from('tokens_on_map').insert({
           encounter_instance_id: instanceId,
@@ -964,6 +1027,28 @@ export const supabaseApi: TableApi = {
     const { error } = await db().from('encounter_instances').update({ fog_state: fogState }).eq('id', id)
     throwIf(error)
     return {}
+  },
+
+  async playerAttack(instanceId, body) {
+    const { data, error } = await db().rpc('resolve_player_attack', {
+      p_instance: instanceId,
+      p_target: body.targetId,
+      p_attack_index: body.attackIndex,
+      p_d20: body.d20,
+      p_damage: body.damage,
+    })
+    throwIf(error)
+    return data as {
+      hit: boolean
+      crit: boolean
+      total: number
+      ac: number
+      damage: number
+      hpCurrent: number
+      hpTemp: number
+      targetName: string
+      message: string
+    }
   },
 }
 

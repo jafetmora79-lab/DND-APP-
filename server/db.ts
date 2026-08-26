@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url'
 import bcrypt from 'bcryptjs'
 import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
-import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type FogState, type NamedEntry } from '../src/lib/types.ts'
-import { parseBlockedCells, templateTokenCell, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
+import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type FogState, type NamedEntry, type TemplateCharacter, type TemplateMonster } from '../src/lib/types.ts'
+import { parseBlockedCells, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
+import { applyDamage, attackOutcome, isAttackInRange, parseAttackBonus, parseRangeFeet, specCopyCell, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { loadSrdMonsters } from './srd.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -106,6 +107,7 @@ CREATE TABLE IF NOT EXISTS encounter_templates (
   map_id TEXT NOT NULL,
   name TEXT NOT NULL,
   monsters_json TEXT NOT NULL,
+  characters_json TEXT NOT NULL DEFAULT '[]',
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS encounter_instances (
@@ -135,6 +137,7 @@ CREATE TABLE IF NOT EXISTS combatants (
   turn_order_position INTEGER NOT NULL,
   color TEXT,
   notes TEXT,
+  constitution INTEGER NOT NULL DEFAULT 10,
   FOREIGN KEY (encounter_instance_id) REFERENCES encounter_instances(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS tokens_on_map (
@@ -164,6 +167,16 @@ try {
   db.exec(`ALTER TABLE maps ADD COLUMN blocked_cells TEXT NOT NULL DEFAULT '[]'`)
 } catch {
   /* already present on existing databases */
+}
+try {
+  db.exec(`ALTER TABLE encounter_templates ADD COLUMN characters_json TEXT NOT NULL DEFAULT '[]'`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE combatants ADD COLUMN constitution INTEGER NOT NULL DEFAULT 10`)
+} catch {
+  /* already present */
 }
 
 export function now() {
@@ -325,10 +338,8 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
     | undefined
   if (!template) throw new Error('Template not found')
   const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(template.map_id) as Record<string, unknown>
-  const monsters = jparse<{ bestiaryMonsterId: string; name: string; quantity: number; startX: number; startY: number; color: string }[]>(
-    template.monsters_json as string,
-    [],
-  )
+  const monsters = jparse<TemplateMonster[]>(template.monsters_json as string, [])
+  const starters = jparse<TemplateCharacter[]>((template.characters_json as string) || '[]', [])
   const instanceId = ids.id()
   const cell = Number(map.grid_size)
   db.prepare(
@@ -355,8 +366,8 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
       const cid = ids.id()
       const label = spec.quantity > 1 ? `${spec.name} ${i + 1}` : spec.name
       db.prepare(
-        `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).run(
         cid,
         instanceId,
@@ -372,8 +383,9 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
         order++,
         spec.color,
         '',
+        Number(src.con ?? 10),
       )
-      const { col, row } = templateTokenCell(spec, i, placed)
+      const { col, row } = specCopyCell(spec, i, placed)
       const size = tokenSizeSquares(String(src.size ?? 'Medium'))
       const pos = walkablePixel(
         {
@@ -404,10 +416,13 @@ export function spawnFromTemplate(campaignId: string, templateId: string, name?:
       placed++
     }
   }
+  for (const spec of starters) {
+    addCharacterCombatant(instanceId, spec.characterId, { col: spec.startX, row: spec.startY })
+  }
   return instanceId
 }
 
-export function addCharacterCombatant(instanceId: string, characterId: string) {
+export function addCharacterCombatant(instanceId: string, characterId: string, start?: { col: number; row: number }) {
   const ch = db.prepare('SELECT * FROM player_characters WHERE id = ?').get(characterId) as Record<string, unknown> | undefined
   if (!ch) throw new Error('Character not found')
   const existing = db
@@ -423,8 +438,8 @@ export function addCharacterCombatant(instanceId: string, characterId: string) {
   }
   const cid = ids.id()
   db.prepare(
-    `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO combatants (id, encounter_instance_id, name, source, source_id, initiative, hp_current, hp_max, hp_temp, ac, conditions_json, turn_order_position, color, notes, constitution)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     cid,
     instanceId,
@@ -440,6 +455,7 @@ export function addCharacterCombatant(instanceId: string, characterId: string) {
     maxPos.m + 1,
     ch.token_color,
     '',
+    sheet.abilities.con,
   )
   const count = db.prepare('SELECT COUNT(*) as c FROM tokens_on_map WHERE encounter_instance_id = ?').get(instanceId) as { c: number }
   const pos = walkablePixel(
@@ -451,8 +467,8 @@ export function addCharacterCombatant(instanceId: string, characterId: string) {
           gridSize: cell,
         }
       : { blocked: [], gridCols: 20, gridRows: 15, gridSize: cell },
-    2 + (count.c % 6),
-    10,
+    start?.col ?? 2 + (count.c % 6),
+    start?.row ?? 10,
   )
   db.prepare(
     `INSERT INTO tokens_on_map (id, encounter_instance_id, x, y, ref_type, ref_id, label, color, size_squares, visible_to_players)
@@ -470,6 +486,95 @@ export function addCharacterCombatant(instanceId: string, characterId: string) {
     1,
   )
   return { id: cid }
+}
+
+export function resolvePlayerAttack(opts: {
+  campaignId: string
+  characterId: string
+  instanceId: string
+  targetId: string
+  attackIndex: number
+  d20: number
+  damage: number
+}): PlayerAttackResult {
+  const { campaignId, characterId, instanceId, targetId, attackIndex, d20, damage } = opts
+  if (!Number.isInteger(d20) || d20 < 1 || d20 > 20) throw new Error('d20 must be between 1 and 20')
+  if (!Number.isFinite(damage) || damage < 0 || damage > 999) throw new Error('Damage looks wrong')
+  const inst = db.prepare('SELECT * FROM encounter_instances WHERE id = ? AND campaign_id = ?').get(instanceId, campaignId) as
+    | Record<string, unknown>
+    | undefined
+  if (!inst) throw new Error('Encounter not found')
+  const attacker = db
+    .prepare(`SELECT * FROM combatants WHERE encounter_instance_id = ? AND source = 'character' AND source_id = ?`)
+    .get(instanceId, characterId) as Record<string, unknown> | undefined
+  if (!attacker) throw new Error('You are not on the map yet. Ask the DM to place you.')
+  const target = db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(targetId, instanceId) as
+    | Record<string, unknown>
+    | undefined
+  if (!target) throw new Error('Target not found')
+  if (String(target.id) === String(attacker.id)) throw new Error('Pick a different creature')
+  const ch = db.prepare('SELECT * FROM player_characters WHERE id = ?').get(characterId) as Record<string, unknown> | undefined
+  if (!ch) throw new Error('Character not found')
+  const sheet = jparse<CharacterSheetData>(ch.sheet_json as string, emptySheet())
+  const attack = sheet.attacks[attackIndex]
+  if (!attack?.name) throw new Error('That attack is not on your sheet')
+  const map = inst.map_id ? (db.prepare('SELECT * FROM maps WHERE id = ?').get(inst.map_id) as Record<string, unknown> | undefined) : undefined
+  const fromTok = db
+    .prepare('SELECT * FROM tokens_on_map WHERE encounter_instance_id = ? AND ref_id = ?')
+    .get(instanceId, attacker.id) as Record<string, unknown> | undefined
+  const toTok = db
+    .prepare('SELECT * FROM tokens_on_map WHERE encounter_instance_id = ? AND ref_id = ?')
+    .get(instanceId, target.id) as Record<string, unknown> | undefined
+  if (!fromTok || !toTok || !map) throw new Error('Both creatures need to be on the map')
+  const gridSize = Number(map.grid_size)
+  const inRange = isAttackInRange(
+    { ...tokenCell({ x: Number(fromTok.x), y: Number(fromTok.y) }, gridSize), size: Number(fromTok.size_squares ?? 1) },
+    { ...tokenCell({ x: Number(toTok.x), y: Number(toTok.y) }, gridSize), size: Number(toTok.size_squares ?? 1) },
+    parseRangeFeet(attack.range),
+  )
+  if (!inRange) throw new Error(`That creature is out of range (${parseRangeFeet(attack.range)} ft)`)
+  const bonus = parseAttackBonus(attack.bonus)
+  const ac = Number(target.ac)
+  const outcome = attackOutcome(d20, bonus, ac)
+  const total = d20 + bonus
+  if (outcome === 'miss') {
+    return {
+      hit: false,
+      crit: false,
+      total,
+      ac,
+      damage: 0,
+      hpCurrent: Number(target.hp_current),
+      hpTemp: Number(target.hp_temp),
+      targetName: String(target.name),
+      message: d20 === 1 ? `Natural 1 against ${target.name} — miss.` : `${total} vs AC ${ac} — miss on ${target.name}.`,
+    }
+  }
+  const next = applyDamage(Number(target.hp_current), Number(target.hp_temp), damage)
+  db.prepare('UPDATE combatants SET hp_current = ?, hp_temp = ? WHERE id = ?').run(next.hpCurrent, next.hpTemp, target.id)
+  if (target.source === 'character') {
+    const victim = db.prepare('SELECT sheet_json FROM player_characters WHERE id = ?').get(target.source_id) as { sheet_json: string } | undefined
+    if (victim) {
+      const vs = jparse(victim.sheet_json, {} as Record<string, unknown>)
+      vs.hpCurrent = next.hpCurrent
+      vs.hpTemp = next.hpTemp
+      db.prepare('UPDATE player_characters SET sheet_json = ? WHERE id = ?').run(JSON.stringify(vs), target.source_id)
+    }
+  }
+  const crit = outcome === 'crit'
+  return {
+    hit: true,
+    crit,
+    total,
+    ac,
+    damage,
+    hpCurrent: next.hpCurrent,
+    hpTemp: next.hpTemp,
+    targetName: String(target.name),
+    message: crit
+      ? `Natural 20! ${damage} damage to ${target.name} (${next.hpCurrent} HP left).`
+      : `Hit ${target.name} (${total} vs AC ${ac}) for ${damage} damage (${next.hpCurrent} HP left).`,
+  }
 }
 
 function seedDemo() {
@@ -512,7 +617,7 @@ function seedDemo() {
     { name: 'Magic Missile', level: 1, prepared: true },
     { name: 'Misty Step', level: 2, prepared: true },
   ]
-  elaraSheet.attacks = [{ name: 'Fire Bolt', bonus: '+5', damage: '1d10 fire' }]
+  elaraSheet.attacks = [{ name: 'Fire Bolt', bonus: '+5', damage: '1d10 fire', range: '120 ft.' }]
   elaraSheet.personality = 'I speak in riddles when I am nervous, which is often.'
   elaraSheet.ideals = 'Knowledge should be shared over a full mug, not hoarded.'
   elaraSheet.bonds = 'Brok pulled me out of a collapsing watchtower. I owe him.'
@@ -534,7 +639,7 @@ function seedDemo() {
   brokSheet.speed = '25 ft.'
   brokSheet.savingThrowProf = { str: true, dex: false, con: true, int: false, wis: false, cha: false }
   brokSheet.skillProf = { athletics: true, intimidation: true, perception: true, survival: true }
-  brokSheet.attacks = [{ name: 'Warhammer', bonus: '+5', damage: '1d8+3 bludgeoning' }]
+  brokSheet.attacks = [{ name: 'Warhammer', bonus: '+5', damage: '1d8+3 bludgeoning', range: '5 ft.' }]
   brokSheet.personality = 'I measure a room by its exits, then by its ale.'
   brokSheet.ideals = 'Hold the line. The people behind you are why you fight.'
   brokSheet.bonds = 'Elara is the only wizard I trust with my back.'
@@ -557,7 +662,7 @@ function seedDemo() {
   const bugbear = db.prepare(`SELECT id FROM bestiary_monsters WHERE dm_account_id = ? AND name = 'Bugbear'`).get(dmId) as { id: string } | undefined
   const wolf = db.prepare(`SELECT id FROM bestiary_monsters WHERE dm_account_id = ? AND name = 'Wolf'`).get(dmId) as { id: string } | undefined
   const templateId = ids.id()
-  db.prepare('INSERT INTO encounter_templates (id, campaign_id, map_id, name, monsters_json) VALUES (?,?,?,?,?)').run(
+  db.prepare('INSERT INTO encounter_templates (id, campaign_id, map_id, name, monsters_json, characters_json) VALUES (?,?,?,?,?,?)').run(
     templateId,
     campaignId,
     mapId,
@@ -567,11 +672,13 @@ function seedDemo() {
       { bestiaryMonsterId: bugbear?.id, name: 'Bugbear', quantity: 1, startX: 11, startY: 4, color: '#c4453c' },
       { bestiaryMonsterId: wolf?.id, name: 'Wolf', quantity: 2, startX: 6, startY: 7, color: '#8a6a4a' },
     ]),
+    JSON.stringify([
+      { characterId: elaraId, name: 'Elara Voss', startX: 3, startY: 12, color: TOKEN_PALETTE[4] },
+      { characterId: brokId, name: 'Brok Ironvein', startX: 4, startY: 12, color: TOKEN_PALETTE[2] },
+    ]),
   )
 
   const instanceId = spawnFromTemplate(campaignId, templateId, 'Cragmaw Ambush')
-  addCharacterCombatant(instanceId, elaraId)
-  addCharacterCombatant(instanceId, brokId)
 
   const combatants = db.prepare('SELECT id, name FROM combatants WHERE encounter_instance_id = ?').all(instanceId) as { id: string; name: string }[]
   const inits: Record<string, number> = {}

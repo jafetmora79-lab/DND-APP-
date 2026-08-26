@@ -9,9 +9,11 @@ Monster stat blocks are seeded from the Systems Reference Document 5.1 (© Wizar
 - **Dungeon Master login** with a table name and passcode. Run as many campaigns as you want.
 - **Shared bestiary** across every campaign at that table (~300 SRD creatures, plus your own).
 - **Prep library** per campaign: square 5-ft battle maps you draw from scratch (optional picture as background, blocked squares tokens cannot walk on), encounter templates, player characters with personal join codes.
-- **Live session**: start a new fight from a template or resume a paused one. Players enter tonight’s join code plus their personal character code.
-- **Map & tokens** (Konva): pan/zoom, drag tokens on a square grid (5 ft per square), paint fog of war. Tokens snap back if dropped on a blocked square. Players watch; only the DM moves pieces.
+- **Live session**: start a new fight from a template or resume a paused one. Players enter tonight’s join code plus their personal character code. Copy buttons sit next to both codes.
+- **Map & tokens** (Konva): pan/zoom, drag tokens on a square grid (5 ft per square), paint fog of war. Tokens snap back if dropped on a blocked square. Each creature has a name, HP bar, Constitution, and a colored ring per condition (Poisoned, Unconscious / sleeping, and the rest of the tracker list).
 - **Encounter tracker**: initiative, current/max/temp HP, conditions, next-turn. State hangs off the encounter instance, not the night’s join code.
+- **Player attacks**: from the live table, a player picks an attack on their sheet, taps a creature in range (read from the attack’s range, default 5 ft), enters the d20 they rolled at the table, then the damage. A hit uses the weapon bonus vs AC (nat 20 hits, nat 1 misses).
+- **Encounter templates**: pick monsters from a bestiary dropdown (quantity places that many tokens). Place player characters on the map so you decide starting squares before you hit Start.
 - **Character sheets** with Combat / Skills / Spells / Bio. Empty tabs hide. Ability modifiers, skill bonuses, and passive Perception calculate automatically. Visible to everyone; editable by the owner and the DM.
 - **Fillable PDF import** reads named form fields (no OCR). Manual entry remains as a fallback.
 
