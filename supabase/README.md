@@ -41,14 +41,16 @@ Fill in the two `VITE_` values, then `npm run dev`. Claim a new table name — t
 
 ## GitHub Pages
 
-GitHub Pages can only host the static Vite build. It cannot run the SQLite server, so Pages **requires** the two `VITE_` secrets above.
+GitHub Pages can only host the static Vite build. It cannot run the SQLite server, so Pages **requires** the two `VITE_` secrets above. Add those secrets **once**. You do not re-add them after every push.
 
-This repo’s Pages source is still **Deploy from a branch → `/docs`**. The workflow copies each secret-baked build into `docs/` so that setting keeps working. Prefer switching Source to **GitHub Actions** when you can.
+The live site currently republishes `/docs` on every push to `main`. That folder is a setup page, not the app. Switch Source to **GitHub Actions** so the secret-baked workflow artifact is what phones load.
 
-1. Push this repo to GitHub.
-2. Settings → Pages → Build and deployment → Source: **GitHub Actions** (required; “Deploy from a branch” / `/docs` makes `actions/deploy-pages` 404).
-3. Repo **Actions secrets** (not Environments): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
+1. Settings → Pages → Build and deployment → Source: **GitHub Actions** (required; “Deploy from a branch” / `/docs` republishes the setup page and makes `actions/deploy-pages` fail).
+2. Repo **Actions secrets** (not Environments): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` — once.
+3. Actions → GitHub Pages → **Run workflow**. Wait about a minute.
 4. If the site is `https://user.github.io/repo-name/`, add Actions variable `VITE_BASE` = `/repo-name/`.
 5. The workflow sets `VITE_HASH_ROUTER=1` so refresh-on-a-subpath works.
+
+A later push only updates the live site when that workflow ran. Cloud-agent merges often skip it — click **Run workflow** if the site looks old. Do not touch secrets.
 
 Vercel or Netlify is simpler than Pages for a SPA (no hash router, no `VITE_BASE`) — same two env vars.

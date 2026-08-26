@@ -36,12 +36,17 @@ LOCAL (`npm run dev`)
 
 HOSTED (GitHub Pages + Supabase)
   Same UI. Postgres + RLS + Auth + Realtime + Storage.
-  Needs VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.
+  Needs VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY as repository
+  Actions secrets — once. Do not re-add them after every push.
+  Pages source must be GitHub Actions, not deploy-from-branch /docs.
+  After a push, wait only if the GitHub Pages workflow ran. Agent
+  merges often skip it — Actions → GitHub Pages → Run workflow.
   New projects: run supabase/schema.sql once.
   Older projects also need the migrate-*.sql files, then:
     notify pgrst, 'reload schema';
   Hosted passcodes must be 6+ characters. `torch` is local-only.
-  Without those env vars, Pages can show the static UI but phones cannot join.
+  Without those env vars, or if /docs is still the Pages source,
+  phones cannot join.
 
 
 WHO LOGS IN HOW
@@ -333,4 +338,6 @@ XP / loot missing after a win
   add them again.
 
 Player cannot join hosted table
-  Pages secrets set? schema.sql run? Anonymous auth on? Passcode 6+ chars?
+  Pages source GitHub Actions (not /docs)? Secrets already set (do not
+  re-add)? GitHub Pages workflow ran? schema.sql? Anonymous auth on?
+  Passcode 6+ chars?

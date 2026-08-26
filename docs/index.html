@@ -3,19 +3,113 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/DND-APP-/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#120e0b" />
-    <title>D&D Live Table</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#11100e" />
+    <title>D&amp;D Live Table — Pages source</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;600&display=swap"
       rel="stylesheet"
     />
-    <script type="module" crossorigin src="/DND-APP-/assets/index-BLK1ynDb.js"></script>
-    <link rel="stylesheet" crossorigin href="/DND-APP-/assets/index-CeWg1s7Y.css">
+    <style>
+      :root {
+        --bg: #11100e;
+        --panel: #211c17;
+        --ink: #e8ddc8;
+        --muted: #9d917f;
+        --gold: #d6b16a;
+        --line: #4a3a29;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: Inter, system-ui, sans-serif;
+      }
+      main {
+        max-width: 40rem;
+        margin: 0 auto;
+        padding: 2.5rem 1.25rem 4rem;
+      }
+      h1 {
+        font-family: Cinzel, Georgia, serif;
+        font-size: 1.35rem;
+        letter-spacing: 0.12em;
+        color: var(--gold);
+        font-weight: 700;
+      }
+      h2 {
+        font-family: Cinzel, Georgia, serif;
+        font-size: 0.95rem;
+        letter-spacing: 0.08em;
+        color: var(--gold);
+        margin-top: 1.75rem;
+      }
+      p, li { color: var(--muted); line-height: 1.55; }
+      strong { color: var(--ink); }
+      ol { padding-left: 1.2rem; }
+      li { margin: 0.45rem 0; }
+      a { color: var(--gold); }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 1.1rem 1.2rem;
+        margin: 1.25rem 0;
+      }
+      code {
+        font-family: ui-monospace, monospace;
+        font-size: 0.88em;
+        color: var(--ink);
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <main>
+      <h1>D&amp;D Live Table</h1>
+      <p>
+        This URL is still publishing the checked-in <code>/docs</code> folder.
+        That copy is not the hosted app, and it has no Supabase keys baked in.
+      </p>
+      <div class="card">
+        <p>
+          <strong>You do not re-add secrets after every push.</strong>
+          Repository Actions secrets stay set. The login error appears because
+          GitHub Pages is serving this folder instead of the workflow artifact
+          that was built with those secrets.
+        </p>
+      </div>
+      <h2>One-time fix</h2>
+      <ol>
+        <li>
+          Open
+          <a href="https://github.com/jafetmora79-lab/DND-APP-/settings/pages">Pages settings</a>
+          → <strong>Build and deployment → Source</strong> →
+          <strong>GitHub Actions</strong>
+          (not “Deploy from a branch” / <code>/docs</code>).
+        </li>
+        <li>
+          Confirm
+          <a href="https://github.com/jafetmora79-lab/DND-APP-/settings/secrets/actions">Actions secrets</a>
+          already include <code>VITE_SUPABASE_URL</code> and
+          <code>VITE_SUPABASE_ANON_KEY</code>. Add them only if they are missing.
+        </li>
+        <li>
+          Open
+          <a href="https://github.com/jafetmora79-lab/DND-APP-/actions/workflows/pages.yml">Actions → GitHub Pages</a>
+          → <strong>Run workflow</strong>. Wait about a minute.
+        </li>
+      </ol>
+      <h2>After that</h2>
+      <p>
+        You only wait when the <strong>GitHub Pages</strong> workflow actually ran.
+        A push to <code>main</code> from a cloud agent often does not start it.
+        If the live site looks old, click <strong>Run workflow</strong> once — do not
+        touch secrets.
+      </p>
+    </main>
   </body>
 </html>

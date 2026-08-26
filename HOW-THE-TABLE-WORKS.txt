@@ -32,10 +32,13 @@ HOSTED (GitHub Pages + Supabase)
   - Existing projects that predate later features also need the migrate-*.sql
     files, then:  notify pgrst, 'reload schema';
   - GitHub Pages must use GitHub Actions (not deploy-from-branch /docs)
-  - Repository secrets: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+  - Repository secrets: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (once)
+  - After a push, wait only if the GitHub Pages workflow actually ran.
+    Cloud-agent pushes often skip it — Actions → GitHub Pages → Run workflow.
+    Do not re-add secrets.
 
-Without those secrets, Pages can still show the static app, but phones cannot
-join a hosted table.
+Without those secrets, or if Pages is still serving /docs, phones cannot
+join a hosted table. The /docs folder is a setup page, not the app.
 
 
 2. WHO LOGS IN HOW
