@@ -9,7 +9,7 @@ export function publicAsset(path: string) {
 export function assertHostedBackend() {
   if (import.meta.env.PROD && !usingSupabase) {
     throw new Error(
-      'This GitHub Pages copy has no hosted backend yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY as repository Actions secrets, then re-run the Pages workflow.',
+      'This published copy was built without Supabase keys. Secrets are one-time — do not re-add them. Switch GitHub Pages source to GitHub Actions, then re-run the GitHub Pages workflow.',
     )
   }
 }

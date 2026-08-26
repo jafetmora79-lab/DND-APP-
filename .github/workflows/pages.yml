@@ -1,20 +1,22 @@
 name: GitHub Pages
 
+# Secrets are one-time repository Actions secrets. This workflow bakes them into
+# dist/ and deploys that artifact. Do not copy dist/ into docs/ — GitHub's
+# branch/folder Pages source would then republish a stale secret-less SPA on
+# every push to main, including pushes that never ran this workflow.
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'docs/**'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -31,7 +33,7 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
           if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
-            echo "::error::This Pages build has no hosted backend. Add repository Actions secrets VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (Settings → Secrets and variables → Actions), then re-run this workflow."
+            echo "::error::Add repository Actions secrets VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY once (Settings → Secrets and variables → Actions). Do not re-add them after every push. Then re-run this workflow."
             exit 1
           fi
       - run: npm ci
@@ -50,30 +52,6 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
-      - name: Publish /docs for branch-based Pages
-        if: github.ref == 'refs/heads/main'
-        run: |
-          set -euo pipefail
-          rm -rf docs
-          mkdir -p docs
-          cp -a dist/. docs/
-          cat > docs/_config.yml <<'EOF'
-          defaults:
-            - scope:
-                path: ""
-              values:
-                layout: none
-          EOF
-          touch docs/.nojekyll
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs
-          if git diff --staged --quiet; then
-            echo "docs/ already matches this build"
-            exit 0
-          fi
-          git commit -m "Publish GitHub Pages site to docs/"
-          git push origin HEAD:main
 
   deploy:
     needs: build
@@ -85,3 +63,8 @@ jobs:
       - id: deployment
         continue-on-error: true
         uses: actions/deploy-pages@v4
+      - name: Require Pages source GitHub Actions
+        if: steps.deployment.outcome == 'failure'
+        run: |
+          echo "::error::GitHub Pages source is still Deploy from a branch (/docs), so this secret-baked artifact was not published. Open Settings → Pages → Source → GitHub Actions (one time), then re-run this workflow. Do not re-add secrets."
+          exit 1

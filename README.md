@@ -36,13 +36,17 @@ Public repo: [jafetmora79-lab/DND-APP-](https://github.com/jafetmora79-lab/DND-A
 
 ### GitHub Pages (one-time)
 
-1. Open [Pages settings](https://github.com/jafetmora79-lab/DND-APP-/settings/pages) → **Build and deployment → Source** → **GitHub Actions** (not “Deploy from a branch” / `/docs`). This is required for `actions/deploy-pages`.
-2. Open [Actions secrets](https://github.com/jafetmora79-lab/DND-APP-/settings/secrets/actions) and add **repository secrets** (not Environments):
+You do **not** re-add secrets after every push. That login error means the *published JavaScript* was compiled without keys — almost always because Pages is still serving the checked-in `/docs` folder instead of the Actions artifact.
+
+Do this once:
+
+1. Open [Pages settings](https://github.com/jafetmora79-lab/DND-APP-/settings/pages) → **Build and deployment → Source** → **GitHub Actions** (not “Deploy from a branch” / `/docs`).
+2. Open [Actions secrets](https://github.com/jafetmora79-lab/DND-APP-/settings/secrets/actions) and confirm **repository secrets** (not Environments) exist:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-3. Re-run the **GitHub Pages** workflow (or push to `main`).
+3. Open [Actions → GitHub Pages](https://github.com/jafetmora79-lab/DND-APP-/actions/workflows/pages.yml) → **Run workflow**. Wait about a minute.
 
-Until Source is GitHub Actions, this repo is still set to **Deploy from a branch → `/docs`**. The Pages workflow therefore copies the secret-baked `dist/` into `docs/` on every `main` build so login works even while that setting stays on. Switching Source to **GitHub Actions** is still the better one-time fix (no extra `/docs` commit).
+After that you only wait when that **GitHub Pages** workflow actually ran (green check). A push to `main` from a cloud agent often does **not** start it. If the live site looks old or shows the `/docs` setup page, click **Run workflow** once — do not touch secrets.
 
 If those two secrets are missing the Pages workflow **fails** instead of publishing a UI that cannot sign anyone in. Hosted passcodes must be **at least 6 characters** (Supabase Auth). The local sample passcode `torch` only works on `npm run dev`.
 

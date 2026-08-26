@@ -126,7 +126,7 @@ export function Landing() {
           <p className="mt-6 text-center text-sm text-muted">Share tonight’s join code with the phones at the table.</p>
         ) : import.meta.env.PROD ? (
           <p className="mt-6 text-center text-sm text-muted">
-            This GitHub Pages copy needs VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY as repository Actions secrets.
+            This published copy was built without Supabase keys. Secrets are one-time. Switch Pages source to GitHub Actions, then re-run the GitHub Pages workflow.
           </p>
         ) : (
           <p className="mt-6 text-center text-sm text-muted">
