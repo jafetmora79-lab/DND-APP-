@@ -1,4 +1,4 @@
-import type { Attack, BattleMap, Combatant, MapToken, Monster, PlayerCharacter, TemplateMonster } from './types.ts'
+import type { Attack, BattleMap, Combatant, MapToken, TemplateMonster } from './types.ts'
 import { FEET_PER_SQUARE, pixelToCell, spreadCells, tokenOccupiesBlocked } from './utils.ts'
 
 export function parseAttackBonus(bonus: string | undefined) {
@@ -47,10 +47,31 @@ export function isAttackInRange(
   return minTokenDistanceSquares(from, to) * FEET_PER_SQUARE <= Math.max(0, rangeFeet)
 }
 
-export function attackOutcome(d20: number, bonus: number, ac: number): 'crit' | 'hit' | 'miss' {
-  if (d20 <= 1) return 'miss'
+export function attackOutcome(d20: number, bonus: number, ac: number): 'crit' | 'hit' | 'fumble' | 'miss' {
+  if (d20 <= 1) return 'fumble'
   if (d20 >= 20) return 'crit'
-  return d20 + bonus >= ac ? 'hit' : 'miss'
+  return d20 + bonus > ac ? 'hit' : 'miss'
+}
+
+export function grantAdvantage(list: string[] | undefined, vsId: string) {
+  const cur = list ?? []
+  return cur.includes(vsId) ? cur : [...cur, vsId]
+}
+
+export function consumeAdvantage(list: string[] | undefined, vsId: string) {
+  return (list ?? []).filter((id) => id !== vsId)
+}
+
+export function attacksFromMonster(monster: { actions?: { name: string; desc: string }[] }): Attack[] {
+  const parsed = (monster.actions ?? [])
+    .map((a) => {
+      const bonus = a.desc.match(/([+-]\d+)\s*to hit/i)?.[1] ?? '+0'
+      const rangeN = a.desc.match(/(?:reach|range)\s+(\d+)\s*ft/i)?.[1]
+      const dmg = a.desc.match(/Hit:\s*([^.]*)/i)?.[1]?.trim() ?? ''
+      return { name: a.name, bonus, damage: dmg, range: rangeN ? `${rangeN} ft.` : '5 ft.' } satisfies Attack
+    })
+    .filter((a) => a.name.trim())
+  return parsed.length ? parsed : [{ name: 'Strike', bonus: '+0', damage: '', range: '5 ft.' }]
 }
 
 export function applyDamage(hpCurrent: number, hpTemp: number, damage: number) {
@@ -97,24 +118,17 @@ export function monsterCopyCells(
   return out
 }
 
-export function decorateTokens(
-  tokens: MapToken[],
-  combatants: Combatant[],
-  characters: PlayerCharacter[],
-  monsters: Monster[] = [],
-): MapToken[] {
+export function decorateTokens(tokens: MapToken[], combatants: Combatant[]): MapToken[] {
   return tokens.map((t) => {
     const c = combatants.find((x) => x.id === t.refId)
     if (!c) return t
-    const pc = c.source === 'character' ? characters.find((ch) => ch.id === c.sourceId) : undefined
-    const mon = c.source === 'bestiary' ? monsters.find((m) => m.id === c.sourceId) : undefined
     return {
       ...t,
       label: c.name || t.label,
       hpCurrent: c.hpCurrent,
       hpMax: c.hpMax,
       hpTemp: c.hpTemp,
-      con: c.constitution ?? pc?.sheet.abilities.con ?? mon?.con,
+      ac: c.ac,
       conditions: c.conditions,
     }
   })
@@ -144,6 +158,8 @@ export function inRangeCombatantIds(
 export type PlayerAttackResult = {
   hit: boolean
   crit: boolean
+  fumble: boolean
+  hadAdvantage: boolean
   total: number
   ac: number
   damage: number

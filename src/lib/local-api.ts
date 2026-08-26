@@ -96,10 +96,15 @@ export const localApi = {
   reorder: (id: string, ids: string[]) => req(`/api/instances/${id}/reorder`, { method: 'POST', body: JSON.stringify({ ids }) }),
   moveToken: (id: string, body: Record<string, unknown>) => req(`/api/tokens/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   setFog: (id: string, fogState: FogState) => req(`/api/instances/${id}/fog`, { method: 'PATCH', body: JSON.stringify({ fogState }) }),
-  playerAttack: (instanceId: string, body: { targetId: string; attackIndex: number; d20: number; damage: number }) =>
+  playerAttack: (
+    instanceId: string,
+    body: { targetId: string; attackIndex: number; d20: number; damage: number; attackerId?: string },
+  ) =>
     req<{
       hit: boolean
       crit: boolean
+      fumble: boolean
+      hadAdvantage: boolean
       total: number
       ac: number
       damage: number

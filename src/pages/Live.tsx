@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Check, Copy, Eye, EyeOff, Pause, Play, Sword } from 'lucide-react'
+import { AttackBar } from '@/components/AttackBar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CharacterSheet } from '@/components/CharacterSheet'
@@ -8,9 +9,9 @@ import { MapBoard } from '@/components/map/MapBoard'
 import { StatBlock } from '@/components/StatBlock'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
-import { decorateTokens } from '@/lib/combat'
+import { attacksFromMonster, decorateTokens, inRangeCombatantIds } from '@/lib/combat'
 import { useLive } from '@/lib/realtime'
-import type { EncounterInstance, EncounterSnapshot, EncounterTemplate, FogState, Monster } from '@/lib/types'
+import type { Attack, EncounterInstance, EncounterSnapshot, EncounterTemplate, FogState, Monster } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
 
@@ -27,6 +28,12 @@ export function Live() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [copiedJoin, setCopiedJoin] = useState(false)
+  const [pending, setPending] = useState<{ attack: Attack; index: number } | null>(null)
+  const [targetId, setTargetId] = useState<string | null>(null)
+  const [d20, setD20] = useState('')
+  const [damage, setDamage] = useState('')
+  const [attackMsg, setAttackMsg] = useState('')
+  const [attackBusy, setAttackBusy] = useState(false)
 
   const load = useCallback(async () => {
     if (!campaignId) return
@@ -50,6 +57,64 @@ export function Live() {
     if (!selectedCombatant || selectedCombatant.source !== 'bestiary') return null
     return monsters.find((m) => m.id === selectedCombatant.sourceId) ?? null
   }, [monsters, selectedCombatant])
+  const attackerAttacks = useMemo<Attack[]>(() => {
+    if (!selectedCombatant) return []
+    if (selectedCombatant.source === 'character') {
+      const ch = snap?.characters.find((c) => c.id === selectedCombatant.sourceId)
+      return ch?.sheet.attacks ?? []
+    }
+    if (selectedMonster) return attacksFromMonster(selectedMonster)
+    return [{ name: 'Strike', bonus: '+0', damage: '', range: '5 ft.' }]
+  }, [selectedCombatant, selectedMonster, snap?.characters])
+  const highlightIds = useMemo(() => {
+    if (!snap?.map || !pending || !selectedCombatant) return []
+    return inRangeCombatantIds(snap.map, snap.tokens, snap.combatants, selectedCombatant.id, pending.attack)
+  }, [snap, pending, selectedCombatant])
+  const attackTarget = snap?.combatants.find((c) => c.id === targetId)
+
+  function pickAttack(attack: Attack, index: number) {
+    setPending({ attack, index })
+    setTargetId(null)
+    setD20('')
+    setDamage('')
+    setAttackMsg('')
+    setTool('select')
+  }
+
+  async function submitAttack() {
+    if (!instance || !pending || !targetId || !selectedCombatant) return
+    const roll = Number(d20)
+    const dmg = Number(damage)
+    if (!Number.isInteger(roll) || roll < 1 || roll > 20) {
+      setAttackMsg('Enter the d20 you rolled at the table (1–20).')
+      return
+    }
+    if (!Number.isFinite(dmg) || dmg < 0) {
+      setAttackMsg('Enter the damage you rolled (0 if you missed or deal none).')
+      return
+    }
+    setAttackBusy(true)
+    try {
+      const r = await api.playerAttack(instance.id, {
+        attackerId: selectedCombatant.id,
+        targetId,
+        attackIndex: pending.index,
+        d20: roll,
+        damage: dmg,
+      })
+      setAttackMsg(r.message)
+      if (r.hit) {
+        setPending(null)
+        setTargetId(null)
+        setD20('')
+        setDamage('')
+      }
+    } catch (e) {
+      setAttackMsg(e instanceof Error ? e.message : 'Attack failed')
+    } finally {
+      setAttackBusy(false)
+    }
+  }
 
   async function startFrom(templateId: string) {
     if (!campaignId) return
@@ -249,12 +314,28 @@ export function Live() {
         <main className="relative min-h-[45vh] flex-1">
           <MapBoard
             map={snap.map}
-            tokens={decorateTokens(snap.tokens, snap.combatants, snap.characters, monsters)}
+            tokens={decorateTokens(snap.tokens, snap.combatants)}
             fog={instance.fogState}
             isDm
-            selectedId={selected}
+            selectedId={targetId ?? selected}
+            highlightIds={highlightIds}
             tool={tool}
-            onSelect={setSelected}
+            onSelect={(id) => {
+              if (pending) {
+                if (!id) {
+                  setTargetId(null)
+                  return
+                }
+                if (!highlightIds.includes(id)) {
+                  setAttackMsg('That creature is out of range for this attack.')
+                  return
+                }
+                setTargetId(id)
+                setAttackMsg('')
+                return
+              }
+              setSelected(id)
+            }}
             onMove={(id, x, y) => api.moveToken(id, { x, y })}
             onFog={onFog}
           />
@@ -319,11 +400,34 @@ export function Live() {
           {panel === 'tracker' && (
             <p className="text-sm text-muted">
               HP, conditions, and turn order persist with this encounter instance. Pause whenever you want — next session resumes the same fight.
-              Condition colors on the tracker match the rings around tokens (green for Poisoned, indigo for Unconscious / sleeping, and so on).
+              Condition colors on the tracker match the rings around tokens. Attacks must roll higher than Armor Class; a natural 1 gives the target advantage against the attacker next turn.
             </p>
           )}
         </aside>
       </div>
+      {selectedCombatant && (
+        <AttackBar
+          attacks={attackerAttacks}
+          pendingIndex={pending?.index ?? null}
+          onPick={pickAttack}
+          onCancel={() => {
+            setPending(null)
+            setTargetId(null)
+            setAttackMsg('')
+          }}
+          targetName={attackTarget?.name}
+          targetAc={attackTarget?.ac}
+          hasAdvantage={Boolean(targetId && selectedCombatant.advantageAgainst?.includes(targetId))}
+          d20={d20}
+          damage={damage}
+          onD20={setD20}
+          onDamage={setDamage}
+          onResolve={submitAttack}
+          canResolve={Boolean(targetId)}
+          busy={attackBusy}
+          message={attackMsg}
+        />
+      )}
     </div>
   )
 }

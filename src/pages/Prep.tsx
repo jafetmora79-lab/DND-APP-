@@ -102,7 +102,7 @@ function placementTokens(
         visibleToPlayers: true,
         hpCurrent: src?.hpMax,
         hpMax: src?.hpMax,
-        con: src?.con,
+        ac: src?.acValue,
         conditions: [],
       })
     })
@@ -122,7 +122,7 @@ function placementTokens(
       visibleToPlayers: true,
       hpCurrent: pc?.sheet.hpCurrent,
       hpMax: pc?.sheet.hpMax,
-      con: pc?.sheet.abilities.con,
+      ac: pc?.sheet.ac,
       conditions: [],
     })
   })

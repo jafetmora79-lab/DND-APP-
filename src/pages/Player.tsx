@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { BookOpen, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { AttackBar } from '@/components/AttackBar'
 import { CharacterSheet } from '@/components/CharacterSheet'
 import { MapBoard } from '@/components/map/MapBoard'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { decorateTokens, inRangeCombatantIds, parseAttackBonus, parseRangeFeet } from '@/lib/combat'
+import { decorateTokens, inRangeCombatantIds } from '@/lib/combat'
 import { useLive } from '@/lib/realtime'
 import type { Attack, EncounterSnapshot, PlayerCharacter } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -51,7 +51,7 @@ export function Player() {
     return inRangeCombatantIds(snap.map, snap.tokens, snap.combatants, myCombatant.id, pending.attack)
   }, [snap, pending, myCombatant])
   const target = snap?.combatants.find((c) => c.id === targetId)
-  const tokens = snap ? decorateTokens(snap.tokens, snap.combatants, snap.characters) : []
+  const tokens = snap ? decorateTokens(snap.tokens, snap.combatants) : []
 
   function pickAttack(attack: Attack, index: number) {
     setPending({ attack, index })
@@ -179,64 +179,34 @@ export function Player() {
       </div>
 
       {me && snap.instance && (
-        <div className="border-t border-line bg-panel px-3 py-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs uppercase tracking-wider text-muted">Attack</span>
-            {me.sheet.attacks
-              .map((atk, i) => ({ atk, i }))
-              .filter(({ atk }) => atk.name.trim())
-              .map(({ atk, i }) => (
-                <Button
-                  key={`${atk.name}-${i}`}
-                  size="sm"
-                  variant={pending?.index === i ? 'default' : 'outline'}
-                  onClick={() => pickAttack(atk, i)}
-                >
-                  {atk.name} {atk.bonus || ''}
-                </Button>
-              ))}
-            {pending && (
-              <Button size="sm" variant="ghost" onClick={() => { setPending(null); setTargetId(null); setAttackMsg('') }}>
-                Cancel
-              </Button>
-            )}
-          </div>
+        <>
           {!myCombatant && (
-            <p className="mt-1 text-xs text-muted">You are not on the map yet. Ask the DM to place your character (or include you on the encounter template).</p>
-          )}
-          {pending && myCombatant && (
-            <div className="mt-2 grid gap-2 md:grid-cols-[1fr_5rem_5rem_auto] md:items-end">
-              <p className="text-sm text-muted">
-                {pending.attack.name} · {parseRangeFeet(pending.attack.range)} ft · {pending.attack.damage || 'damage on the sheet'}
-                {target ? ` → ${target.name} (AC ${target.ac})` : ' → tap a creature with a green ring'}
-              </p>
-              <Input
-                inputMode="numeric"
-                placeholder="d20"
-                value={d20}
-                onChange={(e) => setD20(e.target.value)}
-                aria-label="d20 roll"
-              />
-              <Input
-                inputMode="numeric"
-                placeholder="Dmg"
-                value={damage}
-                onChange={(e) => setDamage(e.target.value)}
-                aria-label="Damage rolled"
-              />
-              <Button disabled={busy || !targetId} onClick={submitAttack}>
-                Resolve
-              </Button>
-            </div>
-          )}
-          {pending && (
-            <p className="mt-1 text-xs text-muted">
-              Roll at the table. Enter the d20 (bonus {parseAttackBonus(pending.attack.bonus) >= 0 ? '+' : ''}
-              {parseAttackBonus(pending.attack.bonus)} is added for you) and the damage you rolled if it hits.
+            <p className="border-t border-line bg-panel px-3 py-2 text-xs text-muted">
+              You are not on the map yet. Ask the DM to place your character (or include you on the encounter template).
             </p>
           )}
-          {attackMsg && <p className="mt-1 text-sm text-gold">{attackMsg}</p>}
-        </div>
+          <AttackBar
+            attacks={me.sheet.attacks}
+            pendingIndex={pending?.index ?? null}
+            onPick={pickAttack}
+            onCancel={() => {
+              setPending(null)
+              setTargetId(null)
+              setAttackMsg('')
+            }}
+            targetName={target?.name}
+            targetAc={target?.ac}
+            hasAdvantage={Boolean(targetId && myCombatant?.advantageAgainst?.includes(targetId))}
+            d20={d20}
+            damage={damage}
+            onD20={setD20}
+            onDamage={setDamage}
+            onResolve={submitAttack}
+            canResolve={Boolean(targetId)}
+            busy={busy}
+            message={attackMsg}
+          />
+        </>
       )}
 
       {drawer && (

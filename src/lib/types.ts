@@ -251,6 +251,8 @@ export type Combatant = {
   color: string
   notes: string
   constitution: number
+  /** Combatant IDs this creature has advantage against on its next attack. */
+  advantageAgainst: string[]
 }
 
 export type MapToken = {
@@ -267,7 +269,7 @@ export type MapToken = {
   hpCurrent?: number
   hpMax?: number
   hpTemp?: number
-  con?: number
+  ac?: number
   conditions?: string[]
 }
 

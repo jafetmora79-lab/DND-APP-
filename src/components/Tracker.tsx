@@ -76,6 +76,11 @@ export function Tracker({ combatants, current, round, isDm, selectedId, onSelect
               )}
               <span className="text-muted">AC {c.ac}</span>
             </div>
+            {c.advantageAgainst?.length > 0 && (
+              <div className="mt-1 text-[10px] uppercase tracking-wide text-gold">
+                Adv vs {c.advantageAgainst.map((id) => combatants.find((x) => x.id === id)?.name ?? 'foe').join(', ')}
+              </div>
+            )}
             <div className="mt-1 flex items-center gap-2">
               {isDm ? (
                 <>

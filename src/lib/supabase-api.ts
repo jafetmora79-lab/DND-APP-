@@ -857,6 +857,9 @@ export const supabaseApi: TableApi = {
         color: String(c.color ?? '#c4453c'),
         notes: String(c.notes ?? ''),
         constitution: Number((c as { constitution?: number }).constitution ?? 10),
+        advantageAgainst: Array.isArray((c as { advantage_against_json?: string[] }).advantage_against_json)
+          ? ((c as { advantage_against_json: string[] }).advantage_against_json)
+          : [],
       })),
       tokens: (tokens ?? []).map((t) => ({
         id: String(t.id),
@@ -1036,11 +1039,14 @@ export const supabaseApi: TableApi = {
       p_attack_index: body.attackIndex,
       p_d20: body.d20,
       p_damage: body.damage,
+      p_attacker: body.attackerId ?? null,
     })
     throwIf(error)
     return data as {
       hit: boolean
       crit: boolean
+      fumble: boolean
+      hadAdvantage: boolean
       total: number
       ac: number
       damage: number

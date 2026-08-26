@@ -31,6 +31,7 @@ import {
   seedBestiaryForDm,
   spawnFromTemplate,
   resolvePlayerAttack,
+  resolveCombatAttack,
 } from './db.ts'
 import { parseCharacterPdf } from './pdf.ts'
 
@@ -178,6 +179,7 @@ function snapshot(campaignId: string) {
       color: c.color,
       notes: c.notes,
       constitution: Number(c.constitution ?? 10),
+      advantageAgainst: jparse<string[]>((c.advantage_against_json as string) || '[]', []),
     })),
     tokens: tokens.map((t) => ({
       id: t.id,
@@ -890,26 +892,36 @@ app.post('/api/instances/:id/combatants', requireDm, (req, res) => {
 
 app.post('/api/instances/:id/player-attack', requireUser, (req, res) => {
   const user = userOf(req)
-  if (user.role !== 'player') {
-    res.status(403).json({ error: 'Players resolve their own attacks from the table' })
-    return
-  }
   const inst = instanceRow(param(req, 'id'))
-  if (!inst || inst.campaign_id !== user.campaignId) {
+  if (!inst) {
     res.status(404).json({ error: 'Not found' })
     return
   }
   try {
-    const result = resolvePlayerAttack({
-      campaignId: user.campaignId,
-      characterId: user.characterId,
+    const body = {
       instanceId: String(inst.id),
       targetId: String(req.body.targetId ?? ''),
       attackIndex: Number(req.body.attackIndex),
       d20: Number(req.body.d20),
       damage: Number(req.body.damage),
-    })
-    pushCampaign(user.campaignId)
+    }
+    let result
+    if (user.role === 'player') {
+      if (inst.campaign_id !== user.campaignId) {
+        res.status(404).json({ error: 'Not found' })
+        return
+      }
+      result = resolvePlayerAttack({ ...body, campaignId: user.campaignId, characterId: user.characterId })
+    } else {
+      if (!campaignOwned(inst.campaign_id as string, user.id)) {
+        res.status(404).json({ error: 'Not found' })
+        return
+      }
+      const attackerId = String(req.body.attackerId ?? '')
+      if (!attackerId) throw new Error('Select the attacking creature first')
+      result = resolveCombatAttack({ ...body, campaignId: inst.campaign_id as string, attackerId })
+    }
+    pushCampaign(inst.campaign_id as string)
     res.json(result)
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'Attack failed' })
