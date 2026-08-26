@@ -921,7 +921,7 @@ export function Prep() {
                 setSelectedChar(r.character)
               }}
             >
-              Create character
+              {t('prep.createCharacter')}
             </Button>
             <ul className="mt-3 space-y-1">
               {characters.map((c) => (
@@ -981,7 +981,7 @@ export function Prep() {
               />
             </div>
           ) : (
-            <p className="text-muted">Create a character to mint a personal code. Players use that code plus tonight’s join code from any device, any week.</p>
+            <p className="text-muted">{t('prep.characterHint')}</p>
           )}
         </div>
       )}

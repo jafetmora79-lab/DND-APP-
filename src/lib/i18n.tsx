@@ -45,6 +45,9 @@ const en = {
   'prep.tab.bestiary': 'Bestiary',
   'prep.tab.encounters': 'Encounters',
   'prep.tab.characters': 'Characters',
+  'prep.createCharacter': 'Create character',
+  'prep.characterHint':
+    'Create a character to mint a personal code. Players use that code plus tonight’s join code from any device, any week.',
   'player.leave': 'Leave',
   'player.sheets': 'Sheets',
   'player.map': 'Map',
@@ -252,6 +255,9 @@ const es: Record<keyof typeof en, string> = {
   'prep.tab.bestiary': 'Bestiario',
   'prep.tab.encounters': 'Encuentros',
   'prep.tab.characters': 'Personajes',
+  'prep.createCharacter': 'Crear personaje',
+  'prep.characterHint':
+    'Crea un personaje para generar un código personal. Los jugadores usan ese código más el de la mesa de esta noche, desde cualquier dispositivo, cualquier semana.',
   'player.leave': 'Salir',
   'player.sheets': 'Hojas',
   'player.map': 'Mapa',
