@@ -879,6 +879,10 @@ app.post('/api/campaigns/:id/session', requireDm, (req, res) => {
   }
 
   if (ensure && !rotate && encounterInstanceId === undefined) {
+    if (!existing.encounter_instance_id && String(existing.table_phase ?? 'table') === 'table') {
+      applyHubStageToLiveSession(campaignId, '')
+      existing = liveSessionRow(campaignId) ?? existing
+    }
     res.json({ session: sessionFromRow(existing) })
     return
   }

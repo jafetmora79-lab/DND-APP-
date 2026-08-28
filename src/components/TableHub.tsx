@@ -1,11 +1,11 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { Check, ImagePlus, Play } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, ImagePlus, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AmbianceStage } from '@/components/AmbianceStage'
 import { StartFightDialog } from '@/components/StartFightDialog'
 import { CampaignHubPanel } from '@/components/CampaignHubPanel'
-import { currentRunPointer, isCombatBeat, nextUpcomingCombat, parseHub, remainingCombatBeats, sceneBeats, sortTemplates } from '@/lib/campaign-hub'
+import { adjacentSceneBeat, currentRunPointer, isCombatBeat, nextUpcomingCombat, parseHub, remainingCombatBeats, sceneBeats, sortTemplates, tableSceneBeat } from '@/lib/campaign-hub'
 import { templateReady } from '@/lib/token-look'
 import { applyShortRestHp, type StartFightOpts } from '@/lib/turn-flow'
 import type { CampaignHub, EncounterInstance, EncounterOutcome, EncounterTemplate, PlayerCharacter } from '@/lib/types'
@@ -33,6 +33,7 @@ type DmProps = {
   busy: boolean
   activeFight?: boolean
   onSelectScene?: (beatId: string) => void
+  onStepScene?: (direction: -1 | 1) => void
   onHubChange?: (hub: CampaignHub) => void
   onUploadStage?: (file: File) => Promise<string>
   onStartCampaign?: () => void
@@ -78,10 +79,13 @@ export function TableHub({
   const scenes = sceneBeats(parsedHub)
   const nextCombat = nextUpcomingCombat(parsedHub)
   const leftoverFights = remainingCombatBeats(parsedHub)
+  const tableScene = tableSceneBeat(parsedHub)
+  const prevScene = adjacentSceneBeat(parsedHub, -1)
+  const nextScene = adjacentSceneBeat(parsedHub, 1)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:flex-row">
-      <div className="relative h-[34vh] w-full min-w-0 shrink-0 xl:h-auto xl:min-h-0 xl:flex-1">
+      <div className={cn('relative w-full min-w-0', playerView ? 'h-[50vh] shrink-0 xl:h-auto xl:min-h-0 xl:flex-1' : 'h-[34vh] shrink-0 xl:h-auto xl:min-h-0 xl:flex-1')}>
         <AmbianceStage imageUrl={imageUrl} caption={caption} className="h-full min-h-0" />
         {lastOutcome && (
           <div
@@ -112,7 +116,7 @@ export function TableHub({
               <ImagePlus className="h-4 w-4" />
               {dm.hasImage ? 'Change scene' : 'Set scene'}
             </Button>
-            {dm.hasImage && (
+            {dm.hasImage && !tableScene?.imageUrl && (
               <Button size="sm" variant="ghost" className="min-h-10 bg-bg/70" disabled={dm.busy} onClick={dm.onClearImage}>
                 Use tavern scene
               </Button>
@@ -130,7 +134,7 @@ export function TableHub({
               className={cn('min-h-10 rounded px-3 py-1 text-sm capitalize', mobileTab === tab ? 'bg-gold text-bg' : 'text-muted')}
               onClick={() => setMobileTab(tab)}
             >
-              {tab === 'play' ? 'Play' : tab === 'order' ? 'Run order' : 'Sheet'}
+              {tab === 'play' ? 'Play' : tab === 'order' ? (playerView ? 'Campaign' : 'Run order') : 'Sheet'}
             </button>
           ))}
         </div>
@@ -141,7 +145,7 @@ export function TableHub({
           <p className="mt-1 text-sm text-muted">
             {dm
               ? 'The campaign is live. Narrate this scene, then start the next encounter when you need a fight. Finalize that fight and the next scene in your run order comes up.'
-              : 'This is the campaign table. Your sheet stays open while the party talks, travels, or waits on the next fight.'}
+              : 'This is the scene the DM is showing. Your sheet stays open while the party talks, travels, or waits on the next fight.'}
           </p>
           {dm && (
             <>
@@ -149,6 +153,30 @@ export function TableHub({
                 <Button className="mt-3 min-h-10 w-full" size="sm" disabled={dm.busy} onClick={dm.onStartCampaign}>
                   Show opening scene
                 </Button>
+              )}
+              {dm.onStepScene && scenes.length > 1 && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="min-h-10"
+                    disabled={dm.busy || !prevScene}
+                    onClick={() => dm.onStepScene?.(-1)}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous scene
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="min-h-10"
+                    disabled={dm.busy || !nextScene}
+                    onClick={() => dm.onStepScene?.(1)}
+                  >
+                    Next scene
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
               )}
               {(pointer.now || pointer.next) && (
                 <div className="mt-3 rounded-md border border-line bg-bg px-3 py-2 text-sm">
@@ -160,7 +188,7 @@ export function TableHub({
                   )}
                   {pointer.next && (
                     <div className={pointer.now ? 'mt-2' : ''}>
-                      <span className="text-[10px] uppercase tracking-wider text-muted">Next</span>
+                      <span className="text-[10px] uppercase tracking-wider text-muted">Next (only you see this)</span>
                       <div>{isCombatBeat(pointer.next) ? `Encounter — ${pointer.next.title}` : pointer.next.title}</div>
                     </div>
                   )}
@@ -257,7 +285,8 @@ export function TableHub({
                       </li>
                     )
                   })
-                : sortTemplates(dm.templates).map((t) => (
+                : parsedHub.beats.length === 0
+                  ? sortTemplates(dm.templates).map((t) => (
                     <li key={t.id} className="flex flex-col gap-2 rounded-lg border border-line bg-bg px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 truncate">
@@ -272,7 +301,8 @@ export function TableHub({
                         Start
                       </Button>
                     </li>
-                  ))}
+                  ))
+                  : null}
               {leftoverFights.length === 0 && dm.templates.length === 0 && (
                 <li className="text-sm text-muted">Build an encounter in prep, add it to the run order, then start it from this table.</li>
               )}

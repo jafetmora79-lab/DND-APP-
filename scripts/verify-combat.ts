@@ -236,4 +236,40 @@ check('fog and visibleToPlayers hide tokens from players', () => {
   assert.equal(snap.characters.find((c) => c.id === 'you')?.personalCode, '••••••••')
 })
 
+check('player snapshots hide upcoming run-order beats', () => {
+  const snap = snapshotForPlayer(
+    {
+      campaign: {
+        id: 'c',
+        dmAccountId: 'd',
+        name: 'T',
+        hub: {
+          recap: '',
+          sessionTitle: 'Night',
+          sessionNotes: 'Secret plan',
+          beats: [
+            { id: 'b0', kind: 'social', title: 'Cabin', notes: 'DM hook', templateId: '', status: 'active', imageUrl: '/cabin.jpg', caption: 'Dawn' },
+            { id: 'b1', kind: 'social', title: 'Store', notes: '', templateId: '', status: 'upcoming', imageUrl: '/store.jpg', caption: 'Aisle' },
+          ],
+          quests: [],
+          npcs: [],
+          loot: [],
+          stages: [],
+        },
+      },
+      session: null,
+      instance: null,
+      map: null,
+      combatants: [],
+      tokens: [],
+      characters: [],
+    },
+    'me',
+  )
+  assert.equal(snap.campaign.hub?.beats.length, 1)
+  assert.equal(snap.campaign.hub?.beats[0]?.title, 'Cabin')
+  assert.equal(snap.campaign.hub?.sessionNotes, '')
+  assert.equal(snap.campaign.hub?.beats.some((b) => b.title === 'Store'), false)
+})
+
 console.log('all combat checks passed')

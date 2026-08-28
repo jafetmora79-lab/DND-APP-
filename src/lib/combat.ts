@@ -15,6 +15,7 @@ import {
   type TemplateMonster,
   type TurnEconomy,
 } from './types.ts'
+import { hubForPlayer } from './campaign-hub.ts'
 import { monsterTokenLook, playerTokenLook } from './token-look.ts'
 import {
   abilityMod,
@@ -468,6 +469,7 @@ export function snapshotForPlayer(snap: EncounterSnapshot, characterId?: string 
   }
   return {
     ...snap,
+    campaign: snap.campaign ? { ...snap.campaign, hub: hubForPlayer(snap.campaign.hub) } : snap.campaign,
     instance: snap.instance ? { ...snap.instance, fogState: fog ?? snap.instance.fogState } : null,
     characters: snap.characters.map((c) => (c.id === characterId ? c : { ...c, personalCode: '••••••••' })),
     tokens,
