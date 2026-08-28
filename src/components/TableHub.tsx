@@ -80,8 +80,8 @@ export function TableHub({
   const leftoverFights = remainingCombatBeats(parsedHub)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-      <div className="relative h-[34vh] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:flex-row">
+      <div className="relative h-[34vh] w-full min-w-0 shrink-0 xl:h-auto xl:min-h-0 xl:flex-1">
         <AmbianceStage imageUrl={imageUrl} caption={caption} className="h-full min-h-0" />
         {lastOutcome && (
           <div
@@ -94,7 +94,7 @@ export function TableHub({
           </div>
         )}
         {dm && (
-          <div className="absolute right-2 top-2 z-10 flex flex-wrap justify-end gap-2 lg:bottom-3 lg:top-auto">
+          <div className="absolute right-2 top-2 z-10 flex flex-wrap justify-end gap-2 xl:bottom-3 xl:top-auto">
             <input
               ref={fileRef}
               type="file"
@@ -121,8 +121,8 @@ export function TableHub({
         )}
       </div>
 
-      <aside className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-line bg-panel lg:w-[28rem] lg:flex-none lg:border-l lg:border-t-0">
-        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-2 py-1 lg:hidden">
+      <aside className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-line bg-panel xl:w-[28rem] xl:flex-none xl:border-l xl:border-t-0">
+        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-2 py-1 xl:hidden">
           {(dm ? (['play', 'order', 'sheet'] as const) : (['order', 'sheet'] as const)).map((tab) => (
             <button
               key={tab}
@@ -135,7 +135,7 @@ export function TableHub({
           ))}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <div className={cn('border-b border-line p-3', mobileTab === 'play' || (!dm && mobileTab === 'sheet') ? 'block' : 'hidden lg:block')}>
+        <div className={cn('border-b border-line p-3', mobileTab === 'play' || (!dm && mobileTab === 'sheet') ? 'block' : 'hidden xl:block')}>
           <p className="text-xs uppercase tracking-[0.3em] text-gold">{campaignName}</p>
           <h2 className="font-display text-xl text-gold-2">{dm ? 'The table' : 'Your character'}</h2>
           <p className="mt-1 text-sm text-muted">
@@ -195,7 +195,7 @@ export function TableHub({
         </div>
 
         {dm && (
-          <div className={cn('border-b border-line p-3', mobileTab === 'play' ? 'block' : 'hidden lg:block')}>
+          <div className={cn('border-b border-line p-3', mobileTab === 'play' ? 'block' : 'hidden xl:block')}>
             {dm.paused.length > 0 && (
               <section className="mb-4">
                 <h3 className="text-xs uppercase tracking-wider text-muted">Paused fights</h3>
@@ -284,7 +284,7 @@ export function TableHub({
         )}
 
         {hub && (
-          <div className={cn('border-b border-line p-3', mobileTab === 'order' ? 'block' : 'hidden lg:block')}>
+          <div className={cn('border-b border-line p-3', mobileTab === 'order' ? 'block' : 'hidden xl:block')}>
             <CampaignHubPanel
               hub={hub}
               characters={characters}
@@ -297,7 +297,7 @@ export function TableHub({
             />
           </div>
         )}
-        <div className={cn('p-3', mobileTab === 'sheet' ? 'block' : 'hidden lg:block')}>
+        <div className={cn('p-3', mobileTab === 'sheet' ? 'block' : 'hidden xl:block')}>
           <div className="mb-2 flex gap-2 overflow-x-auto">
             {characters.map((c) => (
               <button

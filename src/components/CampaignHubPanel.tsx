@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { emptyBeat, parseHub, emptyHub, isCombatBeat } from '@/lib/campaign-hub'
@@ -23,8 +23,36 @@ function nid() {
 
 export function CampaignHubPanel({ hub, characters, templates = [], canEdit, compact, playerView, onChange, onUploadImage }: Props) {
   const data = parseHub(hub ?? emptyHub())
+  const [addedId, setAddedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!addedId) return
+    document.getElementById(`run-beat-${addedId}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [addedId, data.beats.length])
+
   function patch(next: CampaignHub) {
     onChange?.({ ...next, stages: [] })
+  }
+
+  function addBeat(kind: 'social' | 'combat') {
+    const id = nid()
+    const beat =
+      kind === 'combat'
+        ? emptyBeat({
+            id,
+            kind: 'combat',
+            title: templates[0]?.name || 'Encounter',
+            templateId: templates[0]?.id ?? '',
+            status: 'upcoming',
+          })
+        : emptyBeat({
+            id,
+            kind: 'social',
+            title: 'New scene',
+            status: 'upcoming',
+          })
+    setAddedId(id)
+    patch({ ...data, beats: [...data.beats, beat] })
   }
 
   return (
@@ -53,58 +81,21 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
           <h3 className="text-xs uppercase tracking-wider text-muted">Run order</h3>
           {canEdit && (
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="min-h-10"
-                onClick={() =>
-                  patch({
-                    ...data,
-                    beats: [
-                      ...data.beats,
-                      emptyBeat({
-                        id: nid(),
-                        kind: 'social',
-                        title: 'New scene',
-                        status: 'upcoming',
-                      }),
-                    ],
-                  })
-                }
-              >
+              <Button type="button" size="sm" variant="outline" className="min-h-10 flex-1 sm:flex-none" onClick={() => addBeat('social')}>
                 Add scene
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="min-h-10"
-                onClick={() =>
-                  patch({
-                    ...data,
-                    beats: [
-                      ...data.beats,
-                      emptyBeat({
-                        id: nid(),
-                        kind: 'combat',
-                        title: templates[0]?.name || 'Encounter',
-                        templateId: templates[0]?.id ?? '',
-                        status: 'upcoming',
-                      }),
-                    ],
-                  })
-                }
-              >
+              <Button type="button" size="sm" variant="outline" className="min-h-10 flex-1 sm:flex-none" onClick={() => addBeat('combat')}>
                 Add encounter
               </Button>
             </div>
           )}
         </div>
         <p className="mt-1 text-xs text-muted">
-          Top to bottom is what Live follows: opening scene, then Start encounter, then the next scene after that fight ends.
+          Top to bottom is what Live follows: opening scene, then Start encounter, then the next scene after that fight ends. Add scene / Add encounter appends at the bottom.
         </p>
         <ul className="mt-2 space-y-2">
           {data.beats.map((b, i) => (
-            <li key={b.id} className="rounded-lg border border-line bg-bg px-3 py-2">
+            <li key={b.id} id={`run-beat-${b.id}`} className="rounded-lg border border-line bg-bg px-3 py-2">
               {canEdit ? (
                 <BeatEditor
                   beat={b}
@@ -112,6 +103,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                   total={data.beats.length}
                   templates={templates}
                   compact={compact}
+                  forceOpen={addedId === b.id}
                   onChange={(next) => {
                     const beats = data.beats.slice()
                     beats[i] = next
@@ -347,6 +339,7 @@ function BeatEditor({
   total,
   templates,
   compact,
+  forceOpen,
   onChange,
   onMove,
   onRemove,
@@ -357,6 +350,7 @@ function BeatEditor({
   total: number
   templates: EncounterTemplate[]
   compact?: boolean
+  forceOpen?: boolean
   onChange: (next: SessionBeat) => void
   onMove: (dir: -1 | 1) => void
   onRemove: () => void
@@ -364,9 +358,9 @@ function BeatEditor({
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [open, setOpen] = useState(!compact)
+  const [open, setOpen] = useState(!compact || Boolean(forceOpen))
   const combat = isCombatBeat(beat)
-  const details = open || !compact
+  const details = open || !compact || Boolean(forceOpen)
 
   async function onFile(file: File) {
     if (!onUploadImage) return
