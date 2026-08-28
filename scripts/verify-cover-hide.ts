@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { emptyTurnEconomy, hasHiddenAdvantage, snapshotForPlayer, tokenHiddenFromPlayers } from '../src/lib/combat.ts'
 import { emptyHub } from '../src/lib/campaign-hub.ts'
 import { passivePerception, resolveCheck, skillBonusFromSheet } from '../src/lib/checks.ts'
-import { canAttemptHide, hideDcFor, isHiding, resolveHideAttempt, withHiding } from '../src/lib/stealth.ts'
+import { canAttemptHide, hideDcFor, hidingBrokenByWatchers, isHiding, resolveHideAttempt, withHiding } from '../src/lib/stealth.ts'
 import { emptySheet, type Combatant, type MapToken } from '../src/lib/types.ts'
 import { isCellBlocked, TERRAIN, terrainEnterCostFeet } from '../src/lib/utils.ts'
 import { coverBonusAlongLine, hasLineOfSight } from '../src/lib/vision.ts'
@@ -155,6 +155,23 @@ check('hide is allowed when a wall breaks enemy line of sight', () => {
     monster: null,
   })
   assert.equal(win.success, true)
+})
+
+check('standing on trees or stone lets you hide even if enemies have line of sight', () => {
+  const hider = combatant({ id: 'p', name: 'Elara', source: 'character', sourceId: 'elara' })
+  const gob = combatant({ id: 'g', name: 'Goblin', source: 'bestiary', sourceId: 'gob' })
+  const tokens = [token('p', 0, 0), token('g', 4, 0)]
+  const trees = { ...map5, blocked: [TERRAIN.HALF_COVER, 0, 0, 0, 0] }
+  const stone = { ...map5, blocked: [TERRAIN.THREE_QUARTER_COVER, 0, 0, 0, 0] }
+  assert.equal(hasLineOfSight(trees.blocked, 5, 1, { col: 4, row: 0 }, { col: 0, row: 0 }), true)
+  const treeGate = canAttemptHide(hider, [hider, gob], tokens, trees)
+  assert.equal(treeGate.ok, true)
+  assert.equal(treeGate.seenBy.length, 1)
+  assert.equal(canAttemptHide(hider, [hider, gob], tokens, stone).ok, true)
+  const hidden = { ...hider, conditions: withHiding([]) }
+  assert.equal(hidingBrokenByWatchers(hidden, [hidden, gob], tokens, trees), false)
+  const open = { ...map5, blocked: [0, 0, 0, 0, 0] }
+  assert.equal(hidingBrokenByWatchers(hidden, [hidden, gob], tokens, open), true)
 })
 
 check('hiding tokens are masked from other players but not the owner or DM', () => {

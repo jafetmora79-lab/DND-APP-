@@ -444,7 +444,7 @@ export function PlayerTurnPanel({
                   <p className="text-sm text-blood">{hideGate.error}</p>
                   {hideGate.seenBy && hideGate.seenBy.length > 0 && (
                     <div className="mt-2">
-                      <p className="text-xs text-muted">Enemies who can see you:</p>
+                      <p className="text-xs text-muted">Enemies who can see you clearly:</p>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {hideGate.seenBy.map((c) => (
                           <span key={c.id} className="rounded-md px-2 py-1 text-xs bg-blood/20 text-blood">
@@ -458,7 +458,9 @@ export function PlayerTurnPanel({
               ) : (
                 <div className="mt-2 space-y-2">
                   <p className="text-sm text-muted">
-                    No enemy can see you. Break line of sight before hiding.
+                    {hideGate && hideGate.seenBy.length > 0
+                      ? 'You are in trees or stone. Enemies can still see you, but not clearly — roll Stealth vs their passive Perception.'
+                      : 'No enemy has a clear view of you. Roll Stealth vs the highest passive Perception among enemies.'}
                   </p>
                   <div className="rounded-md border border-line bg-bg px-3 py-2">
                     <div className="flex items-center justify-between">

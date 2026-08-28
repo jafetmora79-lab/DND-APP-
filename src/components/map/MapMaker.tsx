@@ -196,7 +196,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
             </Button>
           </div>
           <p className="text-xs text-muted">
-            Walls block walking and sight. Holes cannot be walked but you can see across them. Difficult, ice, fire, and water cost 10 ft per square. Half cover is +2 AC and Dex saves; three-quarters is +5. Full cover is a wall in the way.
+            Walls block walking and sight. Holes cannot be walked but you can see across them. Difficult, ice, fire, and water cost 10 ft per square. Half cover (trees) is +2 AC and Dex saves; three-quarters (stone) is +5. Standing on trees or stone lets you attempt Hide even if enemies can still see you. Full cover is a wall in the way.
           </p>
           <div className="rounded-md border border-line p-2">
             <div className="flex items-center gap-2 text-sm">

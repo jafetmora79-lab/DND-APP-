@@ -1,6 +1,6 @@
 import type { BattleMap, CharacterSheetData, Combatant, MapToken, Monster, PlayerCharacter } from './types.ts'
 import { passivePerception, resolveCheck, skillBonusForCombatant } from './checks.ts'
-import { pixelToCell } from './utils.ts'
+import { pixelToCell, TERRAIN, terrainAt } from './utils.ts'
 import { hasLineOfSight } from './vision.ts'
 
 export function isHiding(c: { conditions?: string[] }) {
@@ -52,6 +52,19 @@ export function watchersWhoSee(
   })
 }
 
+/** Trees (half) and stone (¾) hide you from a clear view without blocking sight. */
+export function coverConceals(
+  hider: Pick<Combatant, 'id'>,
+  tokens: MapToken[],
+  map: Pick<BattleMap, 'gridCols' | 'gridRows' | 'gridSize' | 'blocked'>,
+) {
+  const tok = tokenFor(hider.id, tokens)
+  if (!tok) return false
+  const cell = cellOf(tok, map.gridSize)
+  const code = terrainAt(map.blocked, cell.col, cell.row, map.gridCols, map.gridRows)
+  return code === TERRAIN.HALF_COVER || code === TERRAIN.THREE_QUARTER_COVER
+}
+
 export function canAttemptHide(
   hider: Combatant,
   combatants: Combatant[],
@@ -60,14 +73,14 @@ export function canAttemptHide(
 ) {
   if (!tokenFor(hider.id, tokens)) return { ok: false as const, error: 'Get on the map before you hide.' }
   const seenBy = watchersWhoSee(hider, combatants, tokens, map)
-  if (seenBy.length > 0) {
+  if (seenBy.length > 0 && !coverConceals(hider, tokens, map)) {
     return {
       ok: false as const,
-      error: `Enemies can see you (${seenBy.map((c) => c.name).join(', ')}). Break line of sight first.`,
+      error: `Enemies can see you clearly (${seenBy.map((c) => c.name).join(', ')}). Duck into trees or stone, or break line of sight first.`,
       seenBy,
     }
   }
-  return { ok: true as const, seenBy: [] as Combatant[] }
+  return { ok: true as const, seenBy }
 }
 
 export function hideDcFor(
@@ -129,5 +142,6 @@ export function hidingBrokenByWatchers(
   map: Pick<BattleMap, 'gridCols' | 'gridRows' | 'gridSize' | 'blocked'>,
 ) {
   if (!isHiding(hider)) return false
+  if (coverConceals(hider, tokens, map)) return false
   return watchersWhoSee(hider, combatants, tokens, map).length > 0
 }
