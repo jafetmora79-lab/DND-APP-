@@ -309,7 +309,7 @@ export function Prep() {
           <button
             key={name}
             type="button"
-            className={cn('rounded-md px-3 py-1.5 text-sm', tab === name ? 'bg-gold text-bg' : 'text-muted hover:bg-panel-2')}
+            className={cn('min-h-10 rounded-md px-3 py-1.5 text-sm', tab === name ? 'bg-gold text-bg' : 'text-muted hover:bg-panel-2')}
             onClick={() => setTab(name)}
           >
             {t(`prep.tab.${name.toLowerCase()}`)}
@@ -344,16 +344,16 @@ export function Prep() {
             />
           </div>
           <Button
-            className="mt-4"
+            className="mt-4 min-h-11 w-full sm:w-auto"
             onClick={() => {
               if (!campaignId) return
               api
-                .patchCampaign(campaignId, { hub })
-                .then(() => setMsg('Campaign hub saved.'))
+                .patchCampaign(campaignId, { hub: { ...hub, stages: [] } })
+                .then(() => setMsg('Run order saved.'))
                 .catch((e) => setMsg(e instanceof Error ? e.message : 'Could not save the hub.'))
             }}
           >
-            Save campaign hub
+            Save run order
           </Button>
         </div>
       )}
