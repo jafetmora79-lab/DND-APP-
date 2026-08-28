@@ -24,7 +24,7 @@ function nid() {
 export function CampaignHubPanel({ hub, characters, templates = [], canEdit, compact, playerView, onChange, onUploadImage }: Props) {
   const data = parseHub(hub ?? emptyHub())
   function patch(next: CampaignHub) {
-    onChange?.(next)
+    onChange?.({ ...next, stages: [] })
   }
 
   return (
@@ -49,13 +49,14 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
       </section>
 
       <section>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-xs uppercase tracking-wider text-muted">Run order</h3>
           {canEdit && (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
-                variant="ghost"
+                variant="outline"
+                className="min-h-10"
                 onClick={() =>
                   patch({
                     ...data,
@@ -75,7 +76,8 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
               </Button>
               <Button
                 size="sm"
-                variant="ghost"
+                variant="outline"
+                className="min-h-10"
                 onClick={() =>
                   patch({
                     ...data,
@@ -109,6 +111,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                   index={i}
                   total={data.beats.length}
                   templates={templates}
+                  compact={compact}
                   onChange={(next) => {
                     const beats = data.beats.slice()
                     beats[i] = next
@@ -194,9 +197,9 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                     quests[i] = { ...q, notes: e.target.value }
                     patch({ ...data, quests })
                   }} placeholder="Notes" />
-                  <button type="button" className="text-left text-xs text-blood" onClick={() => patch({ ...data, quests: data.quests.filter((x) => x.id !== q.id) })}>
+                  <Button type="button" size="sm" variant="danger" className="min-h-10 w-fit" onClick={() => patch({ ...data, quests: data.quests.filter((x) => x.id !== q.id) })}>
                     Remove quest
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <div className="text-sm">
@@ -240,9 +243,9 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                     npcs[i] = { ...n, notes: e.target.value }
                     patch({ ...data, npcs })
                   }} placeholder="Notes" />
-                  <button type="button" className="text-left text-xs text-blood" onClick={() => patch({ ...data, npcs: data.npcs.filter((x) => x.id !== n.id) })}>
+                  <Button type="button" size="sm" variant="danger" className="min-h-10 w-fit" onClick={() => patch({ ...data, npcs: data.npcs.filter((x) => x.id !== n.id) })}>
                     Remove NPC
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <div className="text-sm">
@@ -304,9 +307,9 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                     loot[i] = { ...item, notes: e.target.value }
                     patch({ ...data, loot })
                   }} placeholder="Notes" />
-                  <button type="button" className="text-left text-xs text-blood" onClick={() => patch({ ...data, loot: data.loot.filter((x) => x.id !== item.id) })}>
+                  <Button type="button" size="sm" variant="danger" className="min-h-10 w-fit" onClick={() => patch({ ...data, loot: data.loot.filter((x) => x.id !== item.id) })}>
                     Remove loot
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <div className="text-sm">
@@ -343,6 +346,7 @@ function BeatEditor({
   index,
   total,
   templates,
+  compact,
   onChange,
   onMove,
   onRemove,
@@ -352,6 +356,7 @@ function BeatEditor({
   index: number
   total: number
   templates: EncounterTemplate[]
+  compact?: boolean
   onChange: (next: SessionBeat) => void
   onMove: (dir: -1 | 1) => void
   onRemove: () => void
@@ -359,7 +364,9 @@ function BeatEditor({
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [open, setOpen] = useState(!compact)
   const combat = isCombatBeat(beat)
+  const details = open || !compact
 
   async function onFile(file: File) {
     if (!onUploadImage) return
@@ -377,112 +384,122 @@ function BeatEditor({
 
   return (
     <div className="grid gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] uppercase tracking-wider text-muted">
-          {index + 1}. {combat ? 'Encounter' : 'Scene'}
-        </span>
-        <div className="flex gap-1">
-          <button type="button" className="text-xs text-muted disabled:opacity-40" disabled={index === 0} onClick={() => onMove(-1)}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+        <button
+          type="button"
+          className="min-h-10 min-w-0 flex-1 text-left"
+          onClick={() => compact && setOpen((v) => !v)}
+        >
+          <span className="text-[10px] uppercase tracking-wider text-muted">
+            {index + 1}. {combat ? 'Encounter' : 'Scene'}
+            {compact ? (details ? ' · hide' : ' · edit') : ''}
+          </span>
+          <div className="truncate font-medium">{beat.title || (combat ? 'Encounter' : 'Scene')}</div>
+        </button>
+        <div className="flex shrink-0 flex-wrap gap-1">
+          <Button type="button" size="sm" variant="outline" className="min-h-10" disabled={index === 0} onClick={() => onMove(-1)}>
             Up
-          </button>
-          <button type="button" className="text-xs text-muted disabled:opacity-40" disabled={index === total - 1} onClick={() => onMove(1)}>
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="min-h-10" disabled={index === total - 1} onClick={() => onMove(1)}>
             Down
-          </button>
+          </Button>
+          <Button type="button" size="sm" variant="danger" className="min-h-10" onClick={onRemove}>
+            Remove
+          </Button>
         </div>
       </div>
-      <Input value={beat.title} onChange={(e) => onChange({ ...beat, title: e.target.value })} placeholder={combat ? 'Encounter name' : 'Scene name'} />
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-        <select
-          className="h-10 rounded-md border border-line bg-bg px-2 text-sm"
-          value={combat ? 'combat' : beat.kind === 'combat' ? 'social' : beat.kind}
-          onChange={(e) => {
-            const kind = e.target.value as SessionBeatKind
-            if (kind === 'combat') {
-              onChange({
-                ...beat,
-                kind: 'combat',
-                templateId: beat.templateId || templates[0]?.id || '',
-                imageUrl: '',
-                caption: beat.caption,
-              })
-            } else {
-              onChange({ ...beat, kind, templateId: '' })
-            }
-          }}
-        >
-          <option value="social">Scene — social</option>
-          <option value="travel">Scene — travel</option>
-          <option value="other">Scene — other</option>
-          <option value="combat">Encounter</option>
-        </select>
-        <select
-          className="h-10 rounded-md border border-line bg-bg px-2 text-sm"
-          value={beat.status}
-          onChange={(e) => onChange({ ...beat, status: e.target.value as SessionBeatStatus })}
-        >
-          <option value="upcoming">Upcoming</option>
-          <option value="active">Active</option>
-          <option value="done">Done</option>
-        </select>
-        {combat ? (
-          <select
-            className="h-10 rounded-md border border-line bg-bg px-2 text-sm"
-            value={beat.templateId}
-            onChange={(e) => {
-              const templateId = e.target.value
-              const t = templates.find((x) => x.id === templateId)
-              onChange({ ...beat, templateId, title: beat.title === 'Encounter' || !beat.title ? t?.name || beat.title : beat.title })
-            }}
-          >
-            <option value="">Pick encounter</option>
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <div className="hidden md:block" />
-        )}
-      </div>
-      {!combat && (
+      {details && (
         <>
-          {beat.imageUrl ? (
-            <img src={beat.imageUrl} alt="" className="h-24 w-full rounded object-cover" />
-          ) : (
-            <div className="flex h-24 items-center justify-center rounded border border-dashed border-line text-xs text-muted">No image yet</div>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            {onUploadImage && (
-              <label className="inline-flex h-10 cursor-pointer items-center rounded-md border border-line bg-bg px-3 text-sm">
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-                  className="hidden"
-                  disabled={busy}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    e.target.value = ''
-                    if (file) void onFile(file)
-                  }}
-                />
-                {busy ? 'Uploading…' : beat.imageUrl ? 'Change image' : 'Upload image'}
-              </label>
-            )}
-            {beat.imageUrl && (
-              <button type="button" className="text-xs text-muted" onClick={() => onChange({ ...beat, imageUrl: '' })}>
-                Remove image
-              </button>
-            )}
+          <Input value={beat.title} onChange={(e) => onChange({ ...beat, title: e.target.value })} placeholder={combat ? 'Encounter name' : 'Scene name'} />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+            <select
+              className="h-10 min-h-10 rounded-md border border-line bg-bg px-2 text-sm"
+              value={combat ? 'combat' : beat.kind === 'combat' ? 'social' : beat.kind}
+              onChange={(e) => {
+                const kind = e.target.value as SessionBeatKind
+                if (kind === 'combat') {
+                  onChange({
+                    ...beat,
+                    kind: 'combat',
+                    templateId: beat.templateId || templates[0]?.id || '',
+                    imageUrl: '',
+                    caption: beat.caption,
+                  })
+                } else {
+                  onChange({ ...beat, kind, templateId: '' })
+                }
+              }}
+            >
+              <option value="social">Scene — social</option>
+              <option value="travel">Scene — travel</option>
+              <option value="other">Scene — other</option>
+              <option value="combat">Encounter</option>
+            </select>
+            <select
+              className="h-10 min-h-10 rounded-md border border-line bg-bg px-2 text-sm"
+              value={beat.status}
+              onChange={(e) => onChange({ ...beat, status: e.target.value as SessionBeatStatus })}
+            >
+              <option value="upcoming">Upcoming</option>
+              <option value="active">Active</option>
+              <option value="done">Done</option>
+            </select>
+            {combat ? (
+              <select
+                className="h-10 min-h-10 rounded-md border border-line bg-bg px-2 text-sm"
+                value={beat.templateId}
+                onChange={(e) => {
+                  const templateId = e.target.value
+                  const t = templates.find((x) => x.id === templateId)
+                  onChange({ ...beat, templateId, title: beat.title === 'Encounter' || !beat.title ? t?.name || beat.title : beat.title })
+                }}
+              >
+                <option value="">Pick encounter</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
           </div>
-          <Input value={beat.caption} onChange={(e) => onChange({ ...beat, caption: e.target.value })} placeholder="Caption on the table" />
+          {!combat && (
+            <>
+              {beat.imageUrl ? (
+                <img src={beat.imageUrl} alt="" className="h-24 w-full rounded object-cover" />
+              ) : (
+                <div className="flex h-24 items-center justify-center rounded border border-dashed border-line text-xs text-muted">No image yet</div>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {onUploadImage && (
+                  <label className="inline-flex min-h-10 cursor-pointer items-center rounded-md border border-line bg-bg px-3 text-sm">
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                      className="hidden"
+                      disabled={busy}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        e.target.value = ''
+                        if (file) void onFile(file)
+                      }}
+                    />
+                    {busy ? 'Uploading…' : beat.imageUrl ? 'Change image' : 'Upload image'}
+                  </label>
+                )}
+                {beat.imageUrl && (
+                  <Button type="button" size="sm" variant="ghost" className="min-h-10" onClick={() => onChange({ ...beat, imageUrl: '' })}>
+                    Remove image
+                  </Button>
+                )}
+              </div>
+              <Input value={beat.caption} onChange={(e) => onChange({ ...beat, caption: e.target.value })} placeholder="Caption on the table" />
+            </>
+          )}
+          <Input value={beat.notes} onChange={(e) => onChange({ ...beat, notes: e.target.value })} placeholder="Notes" />
+          {error && <p className="text-xs text-blood">{error}</p>}
         </>
       )}
-      <Input value={beat.notes} onChange={(e) => onChange({ ...beat, notes: e.target.value })} placeholder="Notes" />
-      {error && <p className="text-xs text-blood">{error}</p>}
-      <button type="button" className="text-left text-xs text-blood" onClick={onRemove}>
-        Remove {combat ? 'encounter' : 'scene'}
-      </button>
     </div>
   )
 }

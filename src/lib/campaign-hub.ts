@@ -284,7 +284,8 @@ export function parseHub(raw: unknown): CampaignHub {
     quests: Array.isArray(o.quests) ? o.quests.map(asQuest).filter((x): x is CampaignQuest => Boolean(x)) : [],
     npcs: Array.isArray(o.npcs) ? o.npcs.map(asNpc).filter((x): x is CampaignNpc => Boolean(x)) : [],
     loot: Array.isArray(o.loot) ? o.loot.map(asLoot).filter((x): x is PartyLoot => Boolean(x)) : [],
-    stages,
+    /** Consumed into beats so edits (Remove scene) cannot be resurrected on the next parse. */
+    stages: [],
   }
 }
 
