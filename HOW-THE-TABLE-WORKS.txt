@@ -70,18 +70,19 @@ a personal code from Prep.
     characters. The monster bestiary is shared across every campaign at that
     DM table.
 
-  Prep library (four tabs)
-    Maps, Bestiary, Encounters, Characters. Details in section 4.
+  Prep library
+    Maps, Encounters, Run order, Characters, Bestiary. Details in section 4.
 
   Live hub (no fight)
-    Same join code. Scene image + caption (default tavern hearth). Character
-    sheets stay visible. Optional short rest: type the HP recovered from hit
-    dice (the app never rolls). DM can:
-      - Start the next ready encounter template (checklist: who is placed,
+    Same join code. Opening scenery from the run order (default tavern if
+    none is set). Character sheets stay visible. Optional short rest: type
+    the HP recovered from hit dice (the app never rolls). DM can:
+      - Show the opening scene
+      - Start the next encounter in the run (checklist: who is placed,
         Day/Night/Inside, surprise)
       - Resume a paused fight
-      - Upload a new scene picture and caption
-    Ready templates show a check when they have a map and at least one monster.
+      - Upload a new scene picture and add it to the run order
+    After Finalize, the next scene in the run order appears automatically.
 
   Setup (after Start, before round 1)
     The map and tracker open. An initiative popup walks each monster and
@@ -103,8 +104,8 @@ a personal code from Prep.
   After the fight
     When no enemies are standing, the DM is nudged to Finalize. Won or Lost
     shows the overlay. XP from the template goes only to characters who were
-    combatants in that fight. Optional loot holder. Then the table returns
-    to the hub. Next encounter loads the next template on the same join code.
+    combatants in that fight. Optional loot holder. Then the next scene in
+    the run order is on the table. Start the next encounter when you need it.
 
 
 4. PREP LIBRARY
@@ -146,6 +147,13 @@ ENCOUNTERS (templates)
 
   Edit placement on a saved template reloads it so you can move tokens again.
   Remember to Save after moving.
+
+RUN ORDER
+  Maps and encounters first, then this tab. One list, top to bottom:
+    scene → encounter → scene → encounter → …
+  Add scene (picture + caption for the table) or Add encounter (pick a
+  template). Up/Down is the night’s sequence. Start campaign shows the first
+  scene. Finalize a fight shows the next scene after that encounter.
 
 
 5. HOW PLAYERS GET ONTO AN ENCOUNTER
@@ -312,21 +320,20 @@ Local SQLite adds missing columns automatically on boot.
   2. Open the campaign. Prep → Characters: confirm names, colors, codes.
      Copy personal codes to the players.
   3. Prep → Maps: make or open the battle map. Paint walls, cover, and other terrain.
+     Upload scenery pictures on Run order as scene beats.
   4. Prep → Encounters: name it, pick the map, add monsters, Place each
      player, drag them, SAVE.
-  5. Open Live. Copy the join code. Players join with that code + personal
-     code. You are all at the tavern table.
-  6. Start the ready encounter. Checklist: who is placed, Day/Night/Inside,
-     surprise. Tokens appear where you placed them. Missing someone? Use
-     + Name or Join this fight.
-  7. Initiative popup walks each creature. Enter the table d20 or let the
+  5. Prep → Run order: opening scene first, then the encounter, then the
+     next scene, and so on. Up/Down to sort.
+  6. Start campaign (Open Live). Copy the join code. Players join with that
+     code + personal code. The opening scene is on the table. Narrate.
+  7. Start the next encounter when you need a fight. Checklist: who is placed,
+     Day/Night/Inside, surprise. Tokens appear where you placed them.
+  8. Initiative popup walks each creature. Enter the table d20 or let the
      app roll (Dex is added). Sort and begin round 1.
-  8. Fight: move tokens, attack with d20 + damage, Day/Night/Inside for fog.
-     Players see out to darkvision at night; walls block sight. Next turn
-     skips the dead. Tap a monster token to open its stat block.
-  9. Finalize Won or Lost (loot holder optional). Back at the tavern. Short
-     rest HP is typed on the hub. Next encounter when ready, or Pause / Table
-     to pick up later.
+  9. Fight: move tokens, attack with d20 + damage, Day/Night/Inside for fog.
+  10. Finalize Won or Lost. The next scene in the run order comes up. Repeat
+      until the campaign run is done.
 
 If a player token never appears, check in this order:
   - Was the character created in this campaign?

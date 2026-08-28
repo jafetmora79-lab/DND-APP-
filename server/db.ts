@@ -9,7 +9,7 @@ import { abilityMod, cellCenter, parseBlockedCells, playerStartOrigin, proficien
 import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, characterSaveBonus, combatantStatsFromMonster, combatantStatsFromSheet, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, hasHiddenAdvantage, isAttackInRange, movementCostFeet, parseAttackBonus, parseCombatantStats, parseDeathState, parseRangeFeet, parseRollMode, parseSpeedFeet, parseTurnEconomy, pickUsedD20, resolveDeathSave, resolveSavingThrow, saveBonusForCombatant, spendMovement, specCopyCell, statsForLiveCombatant, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { appendActivity, parseActivity, parsePrompt } from '../src/lib/combat-activity.ts'
 import { loadSrdMonsters } from './srd.ts'
-import { applyEncounterRewards, emptyBrief, parseHub, stageAfterTemplate, stageHasContent } from '../src/lib/campaign-hub.ts'
+import { ambianceFromBeat, applyEncounterRewards, emptyBrief, openingSceneBeat, parseHub, sceneAfterEncounter } from '../src/lib/campaign-hub.ts'
 import { unpackTemplateJson } from '../src/lib/template-json.ts'
 import { coverBonusAlongLine, lightingFromStart, makeStartFog } from '../src/lib/vision.ts'
 import { actionRevealsHiding, hidingBrokenByWatchers, isHiding, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from '../src/lib/stealth.ts'
@@ -1197,11 +1197,13 @@ function lookupAttack(attacker: Record<string, unknown>, attackIndex: number) {
 export function applyHubStageToLiveSession(campaignId: string, afterTemplateId: string | null | undefined) {
   const camp = db.prepare('SELECT hub_json FROM campaigns WHERE id = ?').get(campaignId) as { hub_json?: string } | undefined
   if (!camp) return
-  const stage = stageAfterTemplate(parseHub(jparse(camp.hub_json as string, {})), afterTemplateId)
-  if (!stageHasContent(stage)) return
+  const hub = parseHub(jparse(camp.hub_json as string, {}))
+  const beat = afterTemplateId ? sceneAfterEncounter(hub, afterTemplateId) : openingSceneBeat(hub)
+  const ambiance = ambianceFromBeat(beat)
+  if (!ambiance) return
   db.prepare('UPDATE live_sessions SET ambiance_image_url = ?, ambiance_caption = ? WHERE campaign_id = ?').run(
-    stage.imageUrl.trim() || null,
-    stage.caption,
+    ambiance.imageUrl,
+    ambiance.caption,
     campaignId,
   )
 }
@@ -1484,8 +1486,9 @@ function seedDemo() {
       sessionTitle: 'Night of the Cragmaw',
       sessionNotes: 'Ambush on the Triboar Trail, then rumors in town.',
       beats: [
-        { id: 'b1', kind: 'combat', title: 'Cragmaw Ambush', notes: 'Goblins on the trail.', templateId, status: 'active' },
-        { id: 'b2', kind: 'social', title: 'Stonehill Inn', notes: 'Ask about Gundren.', templateId: '', status: 'upcoming' },
+        { id: 'b0', kind: 'travel', title: 'Triboar Trail', notes: 'Narrate the road before the fight.', templateId: '', status: 'upcoming', imageUrl: '', caption: 'A wagon, a trail, and the wrong kind of quiet.' },
+        { id: 'b1', kind: 'combat', title: 'Cragmaw Ambush', notes: 'Goblins on the trail.', templateId, status: 'upcoming', imageUrl: '', caption: '' },
+        { id: 'b2', kind: 'social', title: 'Stonehill Inn', notes: 'Ask about Gundren.', templateId: '', status: 'upcoming', imageUrl: '', caption: 'Warm fire. Rumors of Gundren.' },
       ],
       quests: [{ id: 'q1', name: 'Find Gundren', status: 'open', notes: 'Taken east by the Cragmaw.', npcIds: ['n1'] }],
       npcs: [

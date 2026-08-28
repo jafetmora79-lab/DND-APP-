@@ -11,7 +11,7 @@ import { lightingFromStart, makeStartFog, coverBonusAlongLine } from './vision'
 import { hidingBrokenByWatchers, isHiding, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from './stealth'
 import { attackActivityLines, parseActivity, parsePrompt } from './combat-activity'
 import { sessionFromRow } from './session'
-import { applyEncounterRewards, parseHub, stageAfterTemplate, stageHasContent } from './campaign-hub'
+import { ambianceFromBeat, applyEncounterRewards, openingSceneBeat, parseHub, sceneAfterEncounter } from './campaign-hub'
 import { packTemplateBody, templateFromRow, unpackTemplateJson } from './template-json'
 import type { TableApi } from './local-api'
 import {
@@ -251,8 +251,10 @@ async function applyHostedFinishRewards(campaignId: string, instanceId: string, 
 async function applyHostedHubStage(campaignId: string, afterTemplateId: string | null | undefined) {
   const { data: camp } = await db().from('campaigns').select('hub_json').eq('id', campaignId).maybeSingle()
   if (!camp) return
-  const stage = stageAfterTemplate(parseHub((camp as { hub_json?: unknown }).hub_json), afterTemplateId)
-  if (!stageHasContent(stage)) return
+  const hub = parseHub((camp as { hub_json?: unknown }).hub_json)
+  const beat = afterTemplateId ? sceneAfterEncounter(hub, afterTemplateId) : openingSceneBeat(hub)
+  const ambiance = ambianceFromBeat(beat)
+  if (!ambiance) return
   const { data: existing } = await db()
     .from('live_sessions')
     .select('id')
@@ -262,8 +264,8 @@ async function applyHostedHubStage(campaignId: string, afterTemplateId: string |
     .maybeSingle()
   if (!existing) return
   await updateLiveSession(String(existing.id), {
-    ambiance_image_url: stage.imageUrl.trim() || null,
-    ambiance_caption: stage.caption,
+    ambiance_image_url: ambiance.imageUrl,
+    ambiance_caption: ambiance.caption,
   })
 }
 

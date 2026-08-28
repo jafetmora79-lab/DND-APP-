@@ -15,7 +15,7 @@ WHAT YOU SEE (SCREENS)
 
   /                         Home. Tavern art. DM Start, or player Join.
   /dm                       Campaign list (DM after login).
-  /dm/:campaignId           Prep library: Maps, Bestiary, Encounters, Characters.
+  /dm/:campaignId           Prep library: Maps, Encounters, Run order, Characters, Bestiary.
   /dm/:campaignId/live      Live table: hub between fights, combat during a fight.
   /play/:campaignId         Player phone: same hub / combat, no DM tools.
 
@@ -69,14 +69,18 @@ regenerate a personal code in Prep. Other players’ codes are masked as
 THE NIGHT, IN ORDER
 -------------------
 
-  1. DM logs in, opens a campaign.
-  2. Prep: maps, monsters, character sheets, encounter templates (starts).
-  3. Live hub (tavern table). Players join. Sheets + campaign notebook.
-  4. Start a ready encounter (checklist, then initiative, then Begin round 1).
-  5. Combat: map, tracker (skips the dead), attacks, saves, movement, fog.
-  6. Finalize Won or Lost. XP to combatants in that fight. Overlay, then
-     back to the hub. Same join code. Short rest HP is typed, not rolled.
-  7. Repeat, or Pause / Table and pick up later.
+  PREP (before anyone sits down)
+  1. Maps / scenery — battle maps and scene pictures.
+  2. Encounters — one fight per template, on a map.
+  3. Run order — line up scenes and encounters top to bottom.
+
+  LIVE
+  4. Start campaign. The opening scene is on the table. Narrate. Players join.
+  5. Start encounter when a fight is needed (checklist, initiative, Begin round 1).
+  6. Combat: map, tracker, attacks, saves, movement, fog.
+  7. Finalize Won or Lost. XP to combatants in that fight. Overlay, then the
+     next scene in the run order. Same join code. Short rest HP is typed.
+  8. Repeat until the run is done. Pause / Table picks up the same fight later.
 
 Joining as a player does NOT put a token on a fight. Tokens come from the
 template’s player starts (and Save), from + Name during combat, or from
@@ -123,6 +127,15 @@ ENCOUNTER TEMPLATES
     Hosted: player starts still save even if characters_json is missing
     (packed with the monster JSON).
 
+RUN ORDER (Prep → Run order tab)
+  One list, top to bottom, of scenes and encounters. Up/Down to reorder.
+  Scene: title, optional image, caption shown on the live table, notes.
+  Encounter: linked template. Start encounter on Live uses the next one
+  that is not done.
+  Opening Live / Start campaign shows the first scene.
+  Finalize a fight shows the next scene after that encounter in this list.
+  Older After/Before “stage” slots are folded into this list on load.
+
 
 LIVE HUB (BETWEEN FIGHTS)
 -------------------------
@@ -130,23 +143,24 @@ LIVE HUB (BETWEEN FIGHTS)
 One live session, one join code, for the night (or across nights).
 
 Everyone sees:
-  Scene image + caption (default tavern hearth; DM can upload/edit)
+  Scene image + caption (opening scenery from the run order; default tavern
+  if none is set)
   Character sheets
-  Campaign notebook: session title, timeline beats, quests, NPCs, party loot,
-  recap
+  Campaign notebook: session title, run order, quests, NPCs, party loot, recap
 
 DM also sees / can edit:
   Session notes
   Beat / quest / NPC notes
-  Start next ready template
+  Start the next encounter in the run (or another leftover template)
   Resume a paused fight
-  Scene picture and caption
+  Scene picture and caption; jump to a saved scene
+  Show opening scene
 
 Players (playerView):
   Titles, roles, loot names, recap, beat/quest status stay visible.
   Session notes and DM-only beat/quest/NPC notes are hidden.
 
-Won/Lost overlay shows after Finalize, then everyone returns here.
+Won/Lost overlay shows after Finalize, then the next scene in the run order.
 
 
 CAMPAIGN NOTEBOOK
@@ -155,18 +169,20 @@ CAMPAIGN NOTEBOOK
 Stored on campaigns.hub_json.
 
   Tonight     session title + DM session notes
-  Timeline    beats (combat / social / travel / other), status upcoming /
-              active / done, optional link to an encounter template
+  Run order   scenes (image + caption) and encounters (template), status
+              upcoming / active / done. Top to bottom is Live’s sequence.
   Quests      open / complete / failed + notes
   NPCs        name, role, notes
   Party loot  name, qty, holder, notes
   Recap       running text; Finalize appends a victory/defeat line
 
-Starting a template that is linked to a beat marks that beat active.
-Finalize Won marks the linked beat done, adds XP only to characters who
-were combatants on that instance, and appends loot from the template loot
-notes (one line) to party loot, with an optional holder. Finalize Lost
-awards no XP and no loot, recap still gets a defeat line.
+Starting a template that is linked to a beat marks that beat active and
+earlier beats done.
+Finalize Won marks the fight done, the following scene active, adds XP only
+to characters who were combatants on that instance, and appends loot from
+the template loot notes (one line) to party loot, with an optional holder.
+Finalize Lost awards no XP and no loot, recap still gets a defeat line, and
+the next scene still comes up.
 Rewards apply only the first time that instance is set completed. A second
 Won does not double XP or loot.
 
