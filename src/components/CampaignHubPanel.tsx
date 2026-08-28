@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
-import { emptyHub, parseHub } from '@/lib/campaign-hub'
-import type { CampaignHub, EncounterTemplate, PlayerCharacter, QuestStatus, SessionBeatKind, SessionBeatStatus } from '@/lib/types'
+import { emptyHub, parseHub, stagePlacementLabel } from '@/lib/campaign-hub'
+import type { CampaignHub, CampaignStage, EncounterTemplate, PlayerCharacter, QuestStatus, SessionBeatKind, SessionBeatStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -13,13 +14,14 @@ type Props = {
   /** Hide DM notes; keep titles, status, roles, loot, and recap. */
   playerView?: boolean
   onChange?: (hub: CampaignHub) => void
+  onUploadImage?: (file: File) => Promise<string>
 }
 
 function nid() {
   return crypto.randomUUID().slice(0, 8)
 }
 
-export function CampaignHubPanel({ hub, characters, templates = [], canEdit, compact, playerView, onChange }: Props) {
+export function CampaignHubPanel({ hub, characters, templates = [], canEdit, compact, playerView, onChange, onUploadImage }: Props) {
   const data = parseHub(hub ?? emptyHub())
   function patch(next: CampaignHub) {
     onChange?.(next)
@@ -140,6 +142,72 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
             </li>
           ))}
           {data.beats.length === 0 && <li className="text-sm text-muted">No beats yet. Add the night’s order here.</li>}
+        </ul>
+      </section>
+
+      <section>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-xs uppercase tracking-wider text-muted">Stage scenes</h3>
+          {canEdit && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                patch({
+                  ...data,
+                  stages: [
+                    ...data.stages,
+                    {
+                      id: nid(),
+                      name: 'New scene',
+                      imageUrl: '',
+                      caption: '',
+                      afterTemplateId: '',
+                      beforeTemplateId: templates[0]?.id ?? '',
+                    },
+                  ],
+                })
+              }
+            >
+              Add scene
+            </Button>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-muted">
+          Images for the table between fights. Pick which encounter each scene sits after and before.
+        </p>
+        <ul className="mt-2 space-y-2">
+          {data.stages.map((s, i) => (
+            <li key={s.id} className="rounded-lg border border-line bg-bg px-3 py-2">
+              {canEdit ? (
+                <StageEditor
+                  stage={s}
+                  templates={templates}
+                  onChange={(next) => {
+                    const stages = data.stages.slice()
+                    stages[i] = next
+                    patch({ ...data, stages })
+                  }}
+                  onRemove={() => patch({ ...data, stages: data.stages.filter((x) => x.id !== s.id) })}
+                  onUploadImage={onUploadImage}
+                />
+              ) : (
+                <div className="flex gap-3">
+                  {s.imageUrl ? (
+                    <img src={s.imageUrl} alt="" className="h-14 w-20 shrink-0 rounded object-cover" />
+                  ) : null}
+                  <div className="min-w-0">
+                    <div className="font-medium">{s.name}</div>
+                    <div className="text-xs text-muted">{stagePlacementLabel(s, templates)}</div>
+                    {!playerView && s.caption ? <p className="text-xs text-muted">{s.caption}</p> : null}
+                  </div>
+                </div>
+              )}
+            </li>
+          ))}
+          {data.stages.length === 0 && (
+            <li className="text-sm text-muted">No stage scenes yet. Add one for the tavern, the road, or the room between fights.</li>
+          )}
         </ul>
       </section>
 
@@ -320,6 +388,110 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
           <p className="mt-1 whitespace-pre-wrap text-sm text-muted">{data.recap || 'No recap yet.'}</p>
         )}
       </section>
+    </div>
+  )
+}
+
+function StageEditor({
+  stage,
+  templates,
+  onChange,
+  onRemove,
+  onUploadImage,
+}: {
+  stage: CampaignStage
+  templates: EncounterTemplate[]
+  onChange: (next: CampaignStage) => void
+  onRemove: () => void
+  onUploadImage?: (file: File) => Promise<string>
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const ordered = [...templates].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name))
+
+  async function onFile(file: File) {
+    if (!onUploadImage) return
+    setBusy(true)
+    setError('')
+    try {
+      const imageUrl = await onUploadImage(file)
+      onChange({ ...stage, imageUrl })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-2">
+      <Input value={stage.name} onChange={(e) => onChange({ ...stage, name: e.target.value })} placeholder="Scene name" />
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <label className="grid gap-1 text-xs text-muted">
+          After
+          <select
+            className="h-10 rounded-md border border-line bg-bg px-2 text-sm text-ink"
+            value={stage.afterTemplateId}
+            onChange={(e) => onChange({ ...stage, afterTemplateId: e.target.value })}
+          >
+            <option value="">Start of night</option>
+            {ordered.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs text-muted">
+          Before
+          <select
+            className="h-10 rounded-md border border-line bg-bg px-2 text-sm text-ink"
+            value={stage.beforeTemplateId}
+            onChange={(e) => onChange({ ...stage, beforeTemplateId: e.target.value })}
+          >
+            <option value="">End of night</option>
+            {ordered.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <p className="text-xs text-muted">{stagePlacementLabel(stage, ordered)}</p>
+      {stage.imageUrl ? (
+        <img src={stage.imageUrl} alt="" className="h-24 w-full rounded object-cover" />
+      ) : (
+        <div className="flex h-24 items-center justify-center rounded border border-dashed border-line text-xs text-muted">No image yet</div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {onUploadImage && (
+          <label className="inline-flex h-10 cursor-pointer items-center rounded-md border border-line bg-bg px-3 text-sm">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+              className="hidden"
+              disabled={busy}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (file) void onFile(file)
+              }}
+            />
+            {busy ? 'Uploading…' : stage.imageUrl ? 'Change image' : 'Upload image'}
+          </label>
+        )}
+        {stage.imageUrl && (
+          <button type="button" className="text-xs text-muted" onClick={() => onChange({ ...stage, imageUrl: '' })}>
+            Remove image
+          </button>
+        )}
+      </div>
+      <Input value={stage.caption} onChange={(e) => onChange({ ...stage, caption: e.target.value })} placeholder="Caption on the table" />
+      {error && <p className="text-xs text-blood">{error}</p>}
+      <button type="button" className="text-left text-xs text-blood" onClick={onRemove}>
+        Remove scene
+      </button>
     </div>
   )
 }

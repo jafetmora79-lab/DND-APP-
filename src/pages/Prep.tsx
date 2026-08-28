@@ -325,10 +325,24 @@ export function Prep() {
         <div className="mt-6 rounded-xl border border-line bg-panel p-4">
           <h2 className="font-display text-xl text-gold">Campaign hub</h2>
           <p className="mt-1 text-sm text-muted">
-            Session timeline, quests, NPCs, and party loot. The live table shows this to everyone between fights.
+            Session timeline, stage scenes between fights, quests, NPCs, and party loot. The live table shows this to everyone between fights.
           </p>
           <div className="mt-4">
-            <CampaignHubPanel hub={hub} characters={characters} templates={templates} canEdit onChange={setHub} />
+            <CampaignHubPanel
+              hub={hub}
+              characters={characters}
+              templates={templates}
+              canEdit
+              onChange={setHub}
+              onUploadImage={
+                campaignId
+                  ? async (file) => {
+                      const r = await api.uploadStageImage(campaignId, file)
+                      return r.imageUrl
+                    }
+                  : undefined
+              }
+            />
           </div>
           <Button
             className="mt-4"

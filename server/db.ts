@@ -9,7 +9,7 @@ import { abilityMod, cellCenter, parseBlockedCells, playerStartOrigin, proficien
 import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, characterSaveBonus, combatantStatsFromMonster, combatantStatsFromSheet, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, hasHiddenAdvantage, isAttackInRange, movementCostFeet, parseAttackBonus, parseCombatantStats, parseDeathState, parseRangeFeet, parseRollMode, parseSpeedFeet, parseTurnEconomy, pickUsedD20, resolveDeathSave, resolveSavingThrow, saveBonusForCombatant, spendMovement, specCopyCell, statsForLiveCombatant, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { appendActivity, parseActivity, parsePrompt } from '../src/lib/combat-activity.ts'
 import { loadSrdMonsters } from './srd.ts'
-import { applyEncounterRewards, emptyBrief, parseHub } from '../src/lib/campaign-hub.ts'
+import { applyEncounterRewards, emptyBrief, parseHub, stageAfterTemplate, stageHasContent } from '../src/lib/campaign-hub.ts'
 import { unpackTemplateJson } from '../src/lib/template-json.ts'
 import { coverBonusAlongLine, lightingFromStart, makeStartFog } from '../src/lib/vision.ts'
 import { actionRevealsHiding, hidingBrokenByWatchers, isHiding, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from '../src/lib/stealth.ts'
@@ -1194,6 +1194,18 @@ function lookupAttack(attacker: Record<string, unknown>, attackIndex: number) {
   return attack
 }
 
+export function applyHubStageToLiveSession(campaignId: string, afterTemplateId: string | null | undefined) {
+  const camp = db.prepare('SELECT hub_json FROM campaigns WHERE id = ?').get(campaignId) as { hub_json?: string } | undefined
+  if (!camp) return
+  const stage = stageAfterTemplate(parseHub(jparse(camp.hub_json as string, {})), afterTemplateId)
+  if (!stageHasContent(stage)) return
+  db.prepare('UPDATE live_sessions SET ambiance_image_url = ?, ambiance_caption = ? WHERE campaign_id = ?').run(
+    stage.imageUrl.trim() || null,
+    stage.caption,
+    campaignId,
+  )
+}
+
 export function applyFinishRewards(campaignId: string, instanceId: unknown, outcome: 'won' | 'lost', lootHolder?: string) {
   const camp = db.prepare('SELECT hub_json FROM campaigns WHERE id = ?').get(campaignId) as { hub_json?: string } | undefined
   if (!camp) return
@@ -1220,6 +1232,7 @@ export function applyFinishRewards(campaignId: string, instanceId: unknown, outc
     lootHolder,
   })
   db.prepare('UPDATE campaigns SET hub_json = ? WHERE id = ?').run(JSON.stringify(next.hub), campaignId)
+  applyHubStageToLiveSession(campaignId, templateId)
   if (next.xp <= 0) return
   const combatantIds = instanceId
     ? (db

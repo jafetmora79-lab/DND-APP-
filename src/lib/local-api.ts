@@ -103,6 +103,11 @@ export const localApi = {
     form.append('image', file)
     return req(`/api/campaigns/${campaignId}/session/ambiance`, { method: 'POST', body: form })
   },
+  uploadStageImage: (campaignId: string, file: File) => {
+    const form = new FormData()
+    form.append('image', file)
+    return req<{ imageUrl: string }>(`/api/campaigns/${campaignId}/stage-image`, { method: 'POST', body: form })
+  },
   finishEncounter: (campaignId: string, outcome: 'won' | 'lost', opts?: { lootHolder?: string }) =>
     req(`/api/campaigns/${campaignId}/finish-encounter`, { method: 'POST', body: JSON.stringify({ outcome, lootHolder: opts?.lootHolder }) }),
   returnToTable: (campaignId: string) => req(`/api/campaigns/${campaignId}/return-to-table`, { method: 'POST' }),

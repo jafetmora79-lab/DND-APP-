@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { applyEncounterRewards, emptyHub, markBeatForTemplate, parseBrief, parseHub, sortTemplates } from '../src/lib/campaign-hub.ts'
+import { applyEncounterRewards, emptyHub, markBeatForTemplate, parseBrief, parseHub, sortTemplates, stageAfterTemplate, stageHasContent, stagePlacementLabel } from '../src/lib/campaign-hub.ts'
 import { packMonstersJson, unpackTemplateJson } from '../src/lib/template-json.ts'
 
 function check(name: string, fn: () => void) {
@@ -36,6 +36,7 @@ check('rewards on win', () => {
     ...emptyHub(),
     recap: 'Hired in Neverwinter.',
     beats: [{ id: 'b1', kind: 'combat', title: 'Ambush', notes: '', templateId: 't1', status: 'active' }],
+    stages: [{ id: 's0', name: 'Tavern', imageUrl: '/t.jpg', caption: 'Fire', afterTemplateId: 't1', beforeTemplateId: '' }],
   })
   const next = applyEncounterRewards({
     hub,
@@ -50,6 +51,7 @@ check('rewards on win', () => {
   assert.equal(next.hub.loot[0].name, 'Potion of healing')
   assert.equal(next.hub.loot[0].holder, 'Elara')
   assert.match(next.hub.recap, /victory/)
+  assert.equal(next.hub.stages[0]?.name, 'Tavern')
 })
 
 check('loss awards no XP', () => {
@@ -76,6 +78,31 @@ check('mark beat active and sort templates', () => {
     { name: 'A', sortOrder: 1 },
   ])
   assert.equal(sorted[0].name, 'A')
+})
+
+check('legacy hubs get an empty stages list', () => {
+  const hub = parseHub({ sessionTitle: 'Old', beats: [] })
+  assert.deepEqual(hub.stages, [])
+})
+
+check('stage after a finished fight and start-of-night slot', () => {
+  const hub = parseHub({
+    stages: [
+      { id: 's0', name: 'Tavern', imageUrl: '/tavern.jpg', caption: 'Warm fire', afterTemplateId: '', beforeTemplateId: 't1' },
+      { id: 's1', name: 'Road', imageUrl: '/road.jpg', caption: 'Dust', afterTemplateId: 't1', beforeTemplateId: 't2' },
+    ],
+  })
+  assert.equal(stageAfterTemplate(hub, '')?.name, 'Tavern')
+  assert.equal(stageAfterTemplate(hub, 't1')?.name, 'Road')
+  assert.equal(stageAfterTemplate(hub, 't2'), null)
+  assert.equal(stageHasContent(hub.stages[0]!), true)
+  assert.equal(
+    stagePlacementLabel(hub.stages[1]!, [
+      { id: 't1', name: 'Ambush' },
+      { id: 't2', name: 'Cave' },
+    ]),
+    'After Ambush, before Cave',
+  )
 })
 
 console.log('all hub checks passed')

@@ -26,6 +26,7 @@ import { packTemplateBody, templateFromRow } from '../src/lib/template-json.ts'
 import {
   addCharacterCombatant,
   applyFinishRewards,
+  applyHubStageToLiveSession,
   characterFromRow,
   db,
   ids,
@@ -870,6 +871,7 @@ app.post('/api/campaigns/:id/session', requireDm, (req, res) => {
       '',
       null,
     )
+    if (!inst) applyHubStageToLiveSession(campaignId, '')
     pushCampaign(campaignId)
     existing = liveSessionRow(campaignId)
     res.json({ session: existing ? sessionFromRow(existing) : { id, joinCode: join, campaignId, encounterInstanceId: inst } })
@@ -977,6 +979,19 @@ app.post('/api/campaigns/:id/session/ambiance', requireDm, upload.single('image'
   pushCampaign(campaignId)
   const next = liveSessionRow(campaignId)
   res.json({ session: next ? sessionFromRow(next) : sessionFromRow(existing) })
+})
+
+app.post('/api/campaigns/:id/stage-image', requireDm, upload.single('image'), (req, res) => {
+  const campaignId = param(req, 'id')
+  if (!campaignOwned(campaignId, userOf(req).id)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  if (!req.file) {
+    res.status(400).json({ error: 'Image required' })
+    return
+  }
+  res.json({ imageUrl: `/uploads/${req.file.filename}` })
 })
 
 app.post('/api/campaigns/:id/finish-encounter', requireDm, (req, res) => {

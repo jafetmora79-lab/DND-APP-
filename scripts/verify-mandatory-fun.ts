@@ -66,6 +66,11 @@ check('hub has 3 combat beats, 2 maps in the runbook, and the nice NPCs', () => 
   assert.ok(hub.npcs.some((n) => n.name === 'Mayor Blink Harrow'))
   assert.ok(hub.npcs.some((n) => /Vizz/.test(n.name)))
   assert.match(hub.recap, /two maps|second map|Corner Office/i)
+  assert.equal(hub.stages.length, 4)
+  assert.equal(hub.stages[0]?.afterTemplateId, '')
+  assert.equal(hub.stages[1]?.afterTemplateId, 'e1')
+  assert.equal(hub.stages[2]?.afterTemplateId, 'e2')
+  assert.equal(hub.stages[3]?.afterTemplateId, 'e3')
 })
 
 check('packed templates unpack with briefs and monster positions', () => {
