@@ -1,0 +1,47 @@
+WHAT IS STILL OUT OF SCOPE
+==========================
+
+The regular campaign loop now works: hub → start checklist → initiative
+(setup) → Begin round 1 → turns that skip the dead → Finalize (XP to
+combatants, optional loot holder) → hub, with optional typed short rest.
+
+This file is what this app still does not do on purpose. None of these are
+required to run a normal night at a real table.
+
+
+1. RULES ENGINE
+---------------
+
+No automatic legendary / lair action economy, concentration ticks,
+AoE templates, spell-slot spend, hidden initiative, poison clocks, or
+condition expiry. Conditions are labels you add and remove. Dice stay
+physical. Half / three-quarters cover and Hide are on the map; a separate
+non-combat Challenge scene mode (skip initiative) is not.
+
+
+2. VTT EXTRAS
+-------------
+
+No hex grids, token animation, sound, multiple maps in
+one fight, OCR of photos, or an external monster API. Fog is day/night/inside
+with darkvision range and walls blocking sight — not a full lighting engine.
+
+
+3. CHARACTER BUILDING
+---------------------
+
+Sheets store what you type or import from a PDF. There is no full builder,
+feat picker, or automatic class features.
+
+
+4. HOSTED PROJECTS
+------------------
+
+Existing Supabase projects that predate this flow also need:
+
+  supabase/migrate-campaign-flow.sql
+  supabase/migrate-vision-terrain.sql
+  supabase/migrate-cover-hide.sql
+  then:  notify pgrst, 'reload schema';
+
+New projects that ran the current schema.sql already have the RPCs.

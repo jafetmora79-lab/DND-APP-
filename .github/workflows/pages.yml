@@ -1,0 +1,70 @@
+name: GitHub Pages
+
+# Secrets are one-time repository Actions secrets. This workflow bakes them into
+# dist/ and deploys that artifact. Do not copy dist/ into docs/ — GitHub's
+# branch/folder Pages source would then republish a stale secret-less SPA on
+# every push to main, including pushes that never ran this workflow.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Require Supabase secrets
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::Add repository Actions secrets VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY once (Settings → Secrets and variables → Actions). Do not re-add them after every push. Then re-run this workflow."
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_HASH_ROUTER: "1"
+          VITE_BASE: ${{ vars.VITE_BASE || '/DND-APP-/' }}
+      - name: Confirm backend was baked in
+        run: |
+          if ! grep -q 'supabase.co' dist/assets/*.js; then
+            echo "::error::Vite build did not embed a Supabase URL. Check VITE_SUPABASE_URL."
+            exit 1
+          fi
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+      - name: Require Pages source GitHub Actions
+        if: steps.deployment.outcome == 'failure'
+        run: |
+          echo "::error::GitHub Pages source is still Deploy from a branch (/docs), so this secret-baked artifact was not published. Open Settings → Pages → Source → GitHub Actions (one time), then re-run this workflow. Do not re-add secrets."
+          exit 1

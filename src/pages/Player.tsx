@@ -1,0 +1,395 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Users, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { CharacterSheet } from '@/components/CharacterSheet'
+import { EncounterOutcomeOverlay } from '@/components/EncounterOutcome'
+import { InitiativePopup } from '@/components/InitiativePopup'
+import { MapBoard } from '@/components/map/MapBoard'
+import { PartyOverview } from '@/components/PartyOverview'
+import { PlayerTurnPanel, type MapPickMode } from '@/components/PlayerTurnPanel'
+import { StatBlock } from '@/components/StatBlock'
+import { TableHub } from '@/components/TableHub'
+import { Tracker } from '@/components/Tracker'
+import { api } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
+import { decorateTokens, monsterForCombatant } from '@/lib/combat'
+import { tableAmbiance } from '@/lib/campaign-hub'
+import { LanguageToggle, useT } from '@/lib/i18n'
+import { useLive } from '@/lib/realtime'
+import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
+import type { Attack, EncounterSnapshot, PlayerCharacter } from '@/lib/types'
+import { cn } from '@/lib/utils'
+
+export function Player() {
+  const { campaignId } = useParams()
+  const { user, logout } = useAuth()
+  const { t } = useT()
+  const nav = useNavigate()
+  const [snap, setSnap] = useState<EncounterSnapshot | null>(null)
+  const [drawer, setDrawer] = useState(false)
+  const [sheetId, setSheetId] = useState<string | null>(user && user.role === 'player' ? user.characterId : null)
+  const [tab, setTab] = useState<'map' | 'tracker'>('map')
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+  const [targetId, setTargetId] = useState<string | null>(null)
+  const [focusId, setFocusId] = useState<string | null>(null)
+  const [mapPick, setMapPick] = useState<MapPickMode>('select')
+  const [launchAttack, setLaunchAttack] = useState<{ attack: Attack; index: number } | null>(null)
+  const [initOpen, setInitOpen] = useState(true)
+  const [statOpen, setStatOpen] = useState(false)
+
+  const load = useCallback(() => {
+    if (!campaignId) return
+    api.live(campaignId).then(setSnap).catch((e) => setError(e.message))
+  }, [campaignId])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const refreshLive = useLive(campaignId, setSnap)
+
+  const me = user && user.role === 'player' ? snap?.characters.find((c) => c.id === user.characterId) : null
+  const viewing: PlayerCharacter | undefined = snap?.characters.find((c) => c.id === sheetId) ?? me ?? snap?.characters[0]
+  const whose = snap
+    ? [...snap.combatants].sort((a, b) => a.turnOrderPosition - b.turnOrderPosition)[snap.instance?.currentTurnPosition ?? 0]
+    : undefined
+  const myCombatant = snap?.combatants.find((c) => c.source === 'character' && c.sourceId === me?.id)
+  const saveTargetId = focusId ?? myCombatant?.id ?? null
+  const highlightIds = useMemo(() => {
+    if (!myCombatant || (mapPick !== 'attack' && mapPick !== 'help')) return []
+    return snap?.combatants.filter((c) => c.id !== myCombatant.id).map((c) => c.id) ?? []
+  }, [snap, myCombatant, mapPick])
+  const tokens = snap ? decorateTokens(snap.tokens, snap.combatants) : []
+  const combat = showCombatStage(snap?.session ?? null, snap?.instance ?? null, snap?.map ?? null)
+  const outcome = showOutcome(snap?.session ?? null)
+  const setup = isFightSetup(snap?.session ?? null, snap?.instance ?? null)
+  const focusedCombatant = snap?.combatants.find((c) => c.id === focusId)
+  const focusedMonster = monsterForCombatant(focusedCombatant, snap?.monsters)
+
+  const onUseAttack = useCallback((attack: Attack, index: number) => {
+    setLaunchAttack({ attack, index })
+    setDrawer(false)
+    setTab('map')
+  }, [])
+
+  if (!snap) {
+    return <div className="p-6 text-muted">{error || t('player.connecting')}</div>
+  }
+
+  if (!snap.session) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-bg p-6 text-center">
+        <h1 className="font-display text-2xl text-gold-2">{t('player.ended')}</h1>
+        <p className="max-w-sm text-sm text-muted">{t('player.endedHint')}</p>
+        <Button
+          onClick={() => {
+            logout()
+            nav('/')
+          }}
+        >
+          {t('player.leave')}
+        </Button>
+      </div>
+    )
+  }
+
+  const sheet = viewing ? (
+    <CharacterSheet
+      character={viewing}
+      canEdit={user?.role === 'player' && viewing.id === user.characterId}
+      onChange={(patch) => api.patchCharacter(viewing.id, patch)}
+      onUseAttack={user?.role === 'player' && viewing.id === user.characterId ? onUseAttack : undefined}
+    />
+  ) : (
+    <p className="text-sm text-muted">{t('player.noSheet')}</p>
+  )
+
+  if (!combat || !snap.instance || !snap.map) {
+    const stage = tableAmbiance(snap.campaign.hub, snap.session)
+    return (
+      <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
+        <header className="flex items-center gap-2 border-b border-line px-3 py-2">
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-display text-gold">{snap.campaign.name}</div>
+            <div className="truncate text-xs text-muted">{stage.caption || t('player.waiting')}</div>
+          </div>
+          {me && (
+            <div className="stat-num text-sm">
+              {me.sheet.hpCurrent}/{me.sheet.hpMax} {t('player.hp')}
+            </div>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              logout()
+              nav('/')
+            }}
+          >
+            {t('player.leave')}
+          </Button>
+          <LanguageToggle />
+        </header>
+        {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
+        <TableHub
+          campaignName={snap.campaign.name}
+          imageUrl={stage.imageUrl}
+          caption={stage.caption}
+          lastOutcome={snap.session?.lastOutcome ?? null}
+          hub={snap.campaign.hub}
+          characters={snap.characters}
+          selectedId={viewing?.id ?? null}
+          onSelectCharacter={setSheetId}
+          sheet={sheet}
+          playerView
+          onShortRest={
+            me
+              ? (characterId, hpCurrent) => {
+                  if (characterId !== me.id) return
+                  void api.patchCharacter(me.id, { sheet: { ...me.sheet, hpCurrent } }).then(load)
+                }
+              : undefined
+          }
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
+      <header className="flex shrink-0 items-center gap-3 border-b border-line bg-panel-2/30 px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-display text-gold-2 text-sm">{snap.campaign.name}</div>
+          <div className="truncate text-xs text-muted">
+            {isFightSetup(snap.session, snap.instance)
+              ? t('player.initHint')
+              : snap.instance
+                ? `${t('player.round')} ${snap.instance.roundNumber} · ${whose?.name ?? t('player.waitingName')} ${t('player.turn')}`
+                : t('player.noEncounter')}
+          </div>
+        </div>
+        {me && (
+          <div className="stat-num text-sm">
+            {me.sheet.hpCurrent}/{me.sheet.hpMax} {t('player.hp')}
+          </div>
+        )}
+        {setup && (
+          <Button size="sm" variant="outline" onClick={() => setInitOpen(true)} className="h-8 px-3 text-xs">
+            {t('init.title')}
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setDrawer(true)}
+          className="h-8 px-3 text-xs"
+        >
+          <Users className="h-4 w-4" /> Party
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            logout()
+            nav('/')
+          }}
+          className="h-8 px-3 text-xs"
+        >
+          {t('player.leave')}
+        </Button>
+        <LanguageToggle />
+      </header>
+      {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
+
+      <div className="flex shrink-0 gap-1 border-b border-line bg-panel-2/30 px-2 py-1 lg:hidden">
+        <button type="button" className={cn('rounded px-3 py-1 text-sm transition-all', tab === 'map' ? 'bg-gold text-bg' : 'text-muted hover:text-ink')} onClick={() => setTab('map')}>
+          {t('player.map')}
+        </button>
+        <button type="button" className={cn('rounded px-3 py-1 text-sm transition-all', tab === 'tracker' ? 'bg-gold text-bg' : 'text-muted hover:text-ink')} onClick={() => setTab('tracker')}>
+          {t('player.tracker')}
+        </button>
+      </div>
+
+      <div className="flex min-h-0 flex-1">
+        <div className={cn('relative min-h-0 flex-1', tab === 'tracker' && 'hidden lg:block')}>
+          <MapBoard
+            map={snap.map}
+            tokens={tokens}
+            fog={snap.instance.fogState}
+            isDm={false}
+            selectedId={targetId ?? focusId}
+            highlightIds={highlightIds}
+            dragRefIds={myCombatant && whose?.id === myCombatant.id ? [myCombatant.id] : []}
+            viewerCharacterId={user?.role === 'player' ? user.characterId : null}
+            combatants={snap.combatants}
+            onSelect={(id) => {
+              if (mapPick === 'attack' || mapPick === 'help') {
+                setTargetId(id)
+                if (id) setFocusId(id)
+                return
+              }
+              setFocusId(id)
+              const c = snap.combatants.find((row) => row.id === id)
+              setStatOpen(Boolean(c && c.source === 'bestiary'))
+            }}
+            onMove={
+              myCombatant
+                ? async (id, x, y) => {
+                    const prev = snap.tokens.find((t) => t.id === id)
+                    setSnap((s) =>
+                      s ? { ...s, tokens: s.tokens.map((t) => (t.id === id ? { ...t, x, y } : t)) } : s,
+                    )
+                    try {
+                      await api.moveToken(id, { x, y })
+                      setError('')
+                      refreshLive()
+                    } catch (e) {
+                      if (prev) {
+                        setSnap((s) =>
+                          s ? { ...s, tokens: s.tokens.map((t) => (t.id === id ? { ...t, x: prev.x, y: prev.y } : t)) } : s,
+                        )
+                      }
+                      const msg = e instanceof Error ? e.message : 'Could not move'
+                      setError(msg)
+                      throw e instanceof Error ? e : new Error(msg)
+                    }
+                  }
+                : undefined
+            }
+          />
+        </div>
+        <aside className={cn('min-h-0 w-full overflow-y-auto border-line p-3 lg:block lg:w-72 lg:border-l', tab === 'map' ? 'hidden lg:block' : 'block min-h-0 flex-1')}>
+          <Tracker
+            combatants={snap.combatants}
+            current={snap.instance.currentTurnPosition}
+            round={snap.instance.roundNumber}
+            isDm={false}
+            setup={isFightSetup(snap.session, snap.instance)}
+            selectedId={saveTargetId}
+            economyId={myCombatant?.id}
+            onSelect={(id) => setFocusId(id)}
+            onPatch={(id, body) => {
+              if (!myCombatant || id !== myCombatant.id) return
+              setSnap((s) =>
+                s
+                  ? {
+                      ...s,
+                      combatants: s.combatants.map((c) => (c.id === id ? { ...c, ...body } : c)),
+                    }
+                  : s,
+              )
+              if (body.turnEconomy) {
+                void api
+                  .setTurnEconomy(id, body.turnEconomy as { action: boolean; bonus: boolean; reaction: boolean; movement: boolean })
+                  .then(() => refreshLive())
+              }
+            }}
+            onNext={() => undefined}
+            onSort={() => undefined}
+            onReorder={() => undefined}
+            onDeathSave={(id, d20v) => {
+              if (!myCombatant || id !== myCombatant.id) return
+              void api
+                .deathSave(id, { d20: d20v })
+                .then((r) => {
+                  setNote(r.message)
+                  refreshLive()
+                })
+                .catch((e) => setNote(e instanceof Error ? e.message : 'Death save failed'))
+            }}
+          />
+        </aside>
+      </div>
+
+      {me && (
+        <>
+          {!myCombatant && (
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-panel px-3 py-2 text-sm">
+              <span className="text-muted">You are not on the map yet.</span>
+              <Button
+                size="sm"
+                variant="ember"
+                onClick={() => {
+                  void api
+                    .joinFight(snap.instance!.id)
+                    .then(() => {
+                      setNote('You are on the map.')
+                      refreshLive()
+                    })
+                    .catch((e) => setError(e instanceof Error ? e.message : 'Could not join the fight'))
+                }}
+              >
+                Join this fight
+              </Button>
+            </div>
+          )}
+          {note && <p className="shrink-0 border-t border-line bg-panel px-3 py-1 text-sm text-gold">{note}</p>}
+          <div className="max-h-[40vh] shrink-0 overflow-y-auto pb-[env(safe-area-inset-bottom)] lg:max-h-[30vh]">
+          <PlayerTurnPanel
+            instanceId={snap.instance.id}
+            character={me}
+            combatant={myCombatant}
+            whose={whose}
+            combatants={snap.combatants}
+            prompt={snap.instance.prompt}
+            selectedId={targetId}
+            onSelectedId={setTargetId}
+            onMapPick={setMapPick}
+            launchAttack={launchAttack}
+            onLaunchHandled={() => setLaunchAttack(null)}
+            onSettled={refreshLive}
+            setup={isFightSetup(snap.session, snap.instance)}
+            currentTurnPosition={snap.instance.currentTurnPosition}
+            map={snap.map}
+            tokens={snap.tokens}
+            monsters={snap.monsters}
+          />
+          </div>
+        </>
+      )}
+
+      {drawer && (
+        <PartyOverview
+          characters={snap.characters}
+          selectedId={sheetId}
+          onSelectCharacter={setSheetId}
+          onClose={() => setDrawer(false)}
+          canEdit={user?.role === 'player' && viewing?.id === user.characterId}
+        />
+      )}
+
+      {setup && initOpen && campaignId && (
+        <InitiativePopup
+          instanceId={snap.instance.id}
+          campaignId={campaignId}
+          combatants={snap.combatants}
+          characters={snap.characters}
+          isDm={false}
+          myCombatantId={myCombatant?.id}
+          onSettled={refreshLive}
+          onClose={() => setInitOpen(false)}
+        />
+      )}
+
+      {statOpen && focusedMonster && (
+        <div className="fixed inset-0 z-40 flex items-end bg-black/60 md:items-stretch md:justify-end">
+          <div className="flex h-[80dvh] w-full flex-col rounded-t-2xl border border-line bg-panel p-4 md:h-full md:max-w-lg md:rounded-none">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-lg text-gold">Stat block</h2>
+              <button type="button" onClick={() => setStatOpen(false)} aria-label="Close">
+                <X />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+              <StatBlock monster={focusedMonster} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {outcome && <EncounterOutcomeOverlay outcome={outcome} encounterName={snap.instance.name} />}
+    </div>
+  )
+}

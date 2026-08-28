@@ -1,0 +1,400 @@
+D&D LIVE TABLE — HOW THE APP WORKS (CURRENT)
+============================================
+
+Plain overview of what this app is, every feature that actually exists, and
+how a night at the table flows. Written from the running code, not a roadmap.
+
+This is a campaign companion for Dungeons & Dragons 5e at a REAL table. Dice
+are rolled in person. The app tracks the map, tokens, HP, turns, sheets, and
+the campaign notebook. It is not a VTT with hex grids, sound, or a rules engine
+that rolls attacks for you. Fog uses day/night/inside plus darkvision and walls.
+
+
+WHAT YOU SEE (SCREENS)
+----------------------
+
+  /                         Home. Tavern art. DM Start, or player Join.
+  /dm                       Campaign list (DM after login).
+  /dm/:campaignId           Prep library: Maps, Encounters, Run order, Characters, Bestiary.
+  /dm/:campaignId/live      Live table: hub between fights, combat during a fight.
+  /play/:campaignId         Player phone: same hub / combat, no DM tools.
+
+GitHub Pages often uses a hash router + /DND-APP-/ base path. Locally it is
+http://127.0.0.1:4731 (UI) and http://127.0.0.1:4732 (API).
+
+
+TWO WAYS IT RUNS
+----------------
+
+LOCAL (`npm run dev`)
+  SQLite in data/table.sqlite. WebSocket live updates. Uploads in /uploads.
+  Seeded sample:
+    DM     table Hearthkeeper, passcode torch
+    Join   HEARTH
+    Elara  ELARA7K2
+    Brok   BROK4M9X
+
+HOSTED (GitHub Pages + Supabase)
+  Same UI. Postgres + RLS + Auth + Realtime + Storage.
+  Needs VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY as repository
+  Actions secrets — once. Do not re-add them after every push.
+  Pages source must be GitHub Actions, not deploy-from-branch /docs.
+  After a push, wait only if the GitHub Pages workflow ran. Agent
+  merges often skip it — Actions → GitHub Pages → Run workflow.
+  New projects: run supabase/schema.sql once.
+  Older projects also need the migrate-*.sql files, then:
+    notify pgrst, 'reload schema';
+  Hosted passcodes must be 6+ characters. `torch` is local-only.
+  Without those env vars, or if /docs is still the Pages source,
+  phones cannot join.
+
+
+WHO LOGS IN HOW
+---------------
+
+DM
+  Home → Start → table name + passcode (register or login).
+  Then campaigns → Prep and/or Live.
+
+PLAYER
+  Home → six-character TABLE join code (on the DM live header) + personal
+  CHARACTER code (Prep → Characters). Lands on the same campaign live table.
+
+The table join code belongs to the campaign session. It does not change when
+you start the next fight. Personal codes belong to characters. DM can
+regenerate a personal code in Prep. Other players’ codes are masked as
+•••••••• in player snapshots.
+
+
+THE NIGHT, IN ORDER
+-------------------
+
+  PREP (before anyone sits down)
+  1. Maps / scenery — battle maps and scene pictures.
+  2. Encounters — one fight per template, on a map.
+  3. Run order — line up scenes and encounters top to bottom.
+
+  LIVE
+  4. Start campaign. The opening scene is on the table. Narrate. Players join.
+  5. Start encounter when a fight is needed (checklist, initiative, Begin round 1).
+  6. Combat: map, tracker, attacks, saves, movement, fog.
+  7. Finalize Won or Lost. XP to combatants in that fight. Overlay, then the
+     next scene in the run order. Same join code. Short rest HP is typed.
+  8. Repeat until the run is done. Pause / Table picks up the same fight later.
+
+Joining as a player does NOT put a token on a fight. Tokens come from the
+template’s player starts (and Save), from + Name during combat, or from
+Join this fight on the player phone.
+
+
+PREP LIBRARY
+------------
+
+MAPS
+  Square grid. One square = 5 feet. Typical 20×15, size is editable.
+  Blank grid or a background picture.
+  Paint walls (block walking and sight), holes, difficult, ice, fire, water,
+  half cover (+2 AC / Dex), three-quarters cover (+5).
+  Tokens cannot stop on walls or holes. Difficult/ice/fire/water cost 10 ft.
+  Cover is walkable and does not block sight. Map maker is on the 5-ft grid
+  only (no hex, no freehand walls).
+
+BESTIARY
+  Shared across every campaign at that DM table.
+  Seeded from SRD 5.1 (~300 creatures) plus anything you add.
+  Full stat block editor (abilities, actions, traits, etc.).
+  Quantity on an encounter = that many separate tokens, not one stack.
+
+CHARACTERS
+  Name, owner label, token color, personal join code.
+  Sheet tabs: Combat / Skills / Spells / Bio. Empty tabs hide for viewers.
+  Mods, skill bonuses, passive Perception calculate from abilities + prof.
+  XP lives on the Combat tab (sheet.xp).
+  Optional PDF import (D&D Beyond character PDFs or a fillable 5e sheet).
+  Owner and DM can edit; whole table can read.
+  Creating a character does not place them on any encounter by itself.
+
+ENCOUNTER TEMPLATES
+  Name, map, monsters (dropdown + quantity + start squares), player starts.
+  Optional brief packed with the template: notes, objective, difficulty,
+  XP award, loot notes, sort order.
+  A template is “Ready” when it has a map and at least one monster.
+  SAVE after placing/moving tokens. Unsaved starts are not stored.
+
+  Player starts (Prep → Encounters):
+    Place on map (south-center walkable square by default), drag, or click
+    a square. Remove takes them off the template only, not the roster.
+    Hosted: player starts still save even if characters_json is missing
+    (packed with the monster JSON).
+
+RUN ORDER (Prep → Run order tab)
+  One list, top to bottom, of scenes and encounters. Up/Down to reorder.
+  Scene: title, optional image, caption shown on the live table, notes.
+  Encounter: linked template. Start encounter on Live uses the next one
+  that is not done.
+  Opening Live / Start campaign shows the first scene.
+  Finalize a fight shows the next scene after that encounter in this list.
+  Older After/Before “stage” slots are folded into this list on load.
+
+
+LIVE HUB (BETWEEN FIGHTS)
+-------------------------
+
+One live session, one join code, for the night (or across nights).
+
+Everyone sees:
+  Scene image + caption (opening scenery from the run order; default tavern
+  if none is set)
+  Character sheets
+  Campaign notebook: session title, run order, quests, NPCs, party loot, recap
+
+DM also sees / can edit:
+  Session notes
+  Beat / quest / NPC notes
+  Start the next encounter in the run (or another leftover template)
+  Resume a paused fight
+  Scene picture and caption; jump to a saved scene
+  Show opening scene
+
+Players (playerView):
+  Titles, roles, loot names, recap, beat/quest status stay visible.
+  Session notes and DM-only beat/quest/NPC notes are hidden.
+
+Won/Lost overlay shows after Finalize, then the next scene in the run order.
+
+
+CAMPAIGN NOTEBOOK
+-----------------
+
+Stored on campaigns.hub_json.
+
+  Tonight     session title + DM session notes
+  Run order   scenes (image + caption) and encounters (template), status
+              upcoming / active / done. Top to bottom is Live’s sequence.
+  Quests      open / complete / failed + notes
+  NPCs        name, role, notes
+  Party loot  name, qty, holder, notes
+  Recap       running text; Finalize appends a victory/defeat line
+
+Starting a template that is linked to a beat marks that beat active and
+earlier beats done.
+Finalize Won marks the fight done, the following scene active, adds XP only
+to characters who were combatants on that instance, and appends loot from
+the template loot notes (one line) to party loot, with an optional holder.
+Finalize Lost awards no XP and no loot, recap still gets a defeat line, and
+the next scene still comes up.
+Rewards apply only the first time that instance is set completed. A second
+Won does not double XP or loot.
+
+
+COMBAT
+------
+
+Shown when the session is in the setup or combat phase with a map + instance
+that is not completed. Start opens a checklist (who is placed, fog, surprise)
+then setup: type initiative, Sort (Dex ties), Begin round 1. New fights store
+round 0 until Begin round 1, so Table / Resume during initiative does not
+skip into combat. Pause keeps the fight; Table pauses and returns to the hub;
+Finalize ends it.
+
+MAP
+  Konva. Pan, zoom, drag tokens. Snap to 5-ft squares.
+  Blocked square: token snaps back.
+  Name, HP bar, AC above the circle. Condition rings around it.
+  Monster fill is thematic from name/type. Player fill is the sheet color.
+  Players may drag their own token on their turn only.
+  DM can drag any token. Off-turn DM nudges do not spend movement.
+
+FOG
+  Tools: Move, Day, Night, Inside, Reveal, Hide, Fog on/off.
+  Day turns fog off. Night turns fog on and each player sees out to their
+  character's darkvision (sheet field, race, or "Darkvision 60 ft" in notes).
+  Inside uses a long range so walls/rooms matter more than darkness.
+  Walls block line of sight; you cannot see through a blocked square unless
+  you walk around it. Reveal/Hide still paint extra hidden squares.
+  When fog is on, players do not see unrevealed squares (solid black).
+  DM overlay shows the party's combined vision.
+  Player live payloads omit tokens in unrevealed fog, tokens marked
+  not visible to players, and tokens with Hiding (except the owner's).
+  Tracker still lists combatants.
+
+COVER
+  Map maker paints half cover (trees, +2 AC / Dex saves) and three-quarters
+  cover (crates, +5). The attacker-to-target line uses the same supercover
+  trace as fog walls; origin square is skipped; the target's square counts.
+  Cover does not block walking or sight. Full cover is a wall in the way.
+
+CHECK BAR
+  Same bar as the old Save bar, plus Skill. Pick Save or Skill, DC, table d20.
+  Dex saves add cover if a line from the current turn (or the target's cell)
+  crosses cover. Stealth can "Apply as Hide" (needs no enemy line of sight;
+  DC is highest enemy passive Perception).
+
+HIDE
+  Attempt only when no opposite-side creature has wall line of sight.
+  Stealth vs that DC. Success: Hiding condition; token masked from other
+  players like fog. Attacking while hidden uses advantage. Attacking,
+  being attacked, Dash / Help / Other / Custom, or walking into enemy LOS
+  reveals. Dodge and Disengage keep Hidden.
+
+TRACKER
+  Round, whose turn, initiative, AC, HP (current / max / temp), conditions.
+  DM: type init, Sort (Dex then name on ties), Next turn (skips corpses and
+  dropped monsters), Skip, Begin round 1 during setup, reorder arrows, HP
+  fields, add/remove conditions, Remove from fight.
+  Mid-fight Sort keeps the current creature in the new order.
+  Turn reminders (everyone sees; DM and the owner can toggle theirs):
+    Action, Bonus, Reaction, Move (used / not).
+  Movement line for everyone: Move remaining / speed ft.
+  DM selected combatant: +5 ft, +30 ft, Reset, or type remaining
+  (Dash, teleport, forced move).
+
+PER-TURN MOVEMENT
+  Each combatant has speedFeet (from sheet.speed or monster speed string;
+  first number, default 30) and movementRemaining.
+  Distance = Chebyshev squares × 5 ft (orthogonal OR diagonal adjacent = 5 ft,
+  not 5-10-5).
+  Moving the current-turn token spends that cost. Too far:
+    “Not enough movement (X ft left, need Y ft).” Token snaps back.
+  Remaining resets to speed when THAT combatant’s turn begins (Next turn
+  or sort initiative), not when their turn ends.
+  Pause, resume, and refresh keep the stored remaining.
+  DM and player see the same numbers.
+
+ATTACKS
+  Pick an attack, tap a target with a green range ring, enter the physical
+  d20 (and a second d20 for adv/dis) plus damage.
+  House hit rule: d20 + bonus must be STRICTLY higher than AC. Equal misses.
+  Nat 20 always hits (crit).
+  Nat 1 always misses (fumble) and grants advantageAgainst that target for
+  the fumbler’s next attack vs them. Stored advantage + disadvantage cancel
+  to normal.
+  Range is parsed from the attack. SRD “range 80/320 ft.” uses 80 ft (the
+  normal range), not melee 5 ft.
+  Unconscious / dying / dead cannot take a normal attack.
+  Cover on the line to the target is added to AC.
+
+CHECK BAR
+  Save or Skill, DC, enter d20, Resolve. Shows modifier and success/failure.
+  PCs: ability mod + proficiency / expertise.
+  Monsters: combatant stats_json and skills / senses text.
+  Stealth + Apply as Hide writes the Hiding condition when the roll succeeds.
+
+DEATH / 0 HP
+  Hitting 0 HP applies Unconscious.
+  PCs go dying with death save counters (3 success / 3 fail).
+  Nat 20 on a death save, nat 1 is two fails, as usual for this table.
+  Tracker shows Dying / Stable / Dead. Owner or DM can enter a death-save d20.
+
+HEADER (DM)
+  Finalize Won / Lost (optional loot holder; XP to combatants in the fight)
+  Next encounter (blocked while a fight is active; same join code)
+  Table (pause + return to hub — the fight is not over)
+  Pause / Resume
+  Join code (copy)
+
+PLAYERS IN COMBAT
+  Map + Tracker tabs on phones; both columns on large screens.
+  Sheet drawer. Attack bar + Check bar.
+  Leave is in the header (not a floating button over the bars).
+  Header shows round and whose turn, plus own HP.
+  Not on the map: Join this fight. Setup: submit initiative d20.
+  YOUR TURN is the phone banner on that player’s turn.
+
+
+LIVE COMBAT — ADDING PEOPLE MID-FIGHT
+-------------------------------------
+
+Under the DM tracker, each campaign character:
+
+  + Elara        add to this fight and drop a token
+  Elara on map   already in; the button is disabled
+
+Players who are at the table but not on this map tap Join this fight.
+  Elara on map   already in; button disabled
+
+Use when the template had no player starts, someone arrived late, or spawn
+failed. Errors show at the top of Live instead of failing silently.
+Clicking an already-present character does not duplicate them.
+
+
+SYNC, REFRESH, PAUSE
+--------------------
+
+Local: WebSocket pushes an EncounterSnapshot after changes.
+Hosted: Supabase Realtime, then the client reloads live().
+
+Player snapshots mask other personal codes and omit hidden/fog tokens.
+HTTP refresh and live updates use the same player-facing payload locally.
+
+Encounter instance holds: status (active / paused / completed), round, current
+turn, fog, map id, combatants, tokens. That is why you can pause tonight and
+resume next week with HP, positions, remaining movement, and turn order.
+
+
+ATTACK / MOVEMENT MATH (SHORT)
+------------------------------
+
+  Hit:        used d20 + bonus > AC, except nat 20 hit / nat 1 miss
+  Advantage:  higher of two d20s
+  Disadvantage: lower of two d20s
+  Range:      Chebyshev squares × 5 ft vs attack range in feet
+  Walk cost:  Chebyshev squares × 5 ft vs movementRemaining
+
+
+WHAT THIS APP DELIBERATELY DOES NOT DO
+--------------------------------------
+
+Hex grids, dynamic lighting, token animations, sound, AI, inventory manager,
+full character builder, OCR for handwritten sheets, external monster APIs,
+multiple maps in one fight, 5-10-5 diagonal costing, auto-rolling dice,
+spell slot automation beyond what is typed on the sheet, Dash as an automatic
+rules action (DM adds +30 ft remaining instead).
+
+
+HOSTED SQL CHEAT SHEET (EXISTING PROJECTS)
+------------------------------------------
+
+  schema.sql                      new project, once
+  migrate-map-maker.sql           blocked squares
+  migrate-encounter-play.sql      optional; player starts also pack in JSON
+  migrate-campaign-table.sql      hub scene, won/lost, next encounter
+  migrate-combat-completeness.sql advantage, death saves, turn economy
+  migrate-campaign-mvp.sql        hub_json, combatant stats_json
+  migrate-per-turn-movement.sql   speed_feet, movement_remaining
+  migrate-vision-terrain.sql      player read of fight bestiary rows
+  migrate-cover-hide.sql          cover AC, Hide RPC (apply_hide_result)
+
+Then: notify pgrst, 'reload schema';
+
+Local SQLite adds missing columns on boot. No migrate files needed locally.
+
+
+IF SOMETHING FEELS BROKEN
+-------------------------
+
+Player token never appears
+  Character in this campaign?
+  Template: Place on map AND Save?
+  Start used that same template?
+  During combat: + Name — any error at the top of Live?
+
+Hide did nothing
+  Use Hide (fog turns on) and click the square or the token. Fog must be on
+  for players to lose that cell.
+
+Attack “out of range”
+  Melee is 5 ft. Move adjacent, or pick a ranged attack. Shortbow is 80 ft.
+
+Movement rejected
+  It is that creature’s turn? Remaining enough for Chebyshev × 5 ft?
+  Off-turn DM moves do not spend and are allowed.
+
+XP / loot missing after a win
+  Combat tab XP field; hub Party loot and recap. Second Finalize does not
+  add them again.
+
+Player cannot join hosted table
+  Pages source GitHub Actions (not /docs)? Secrets already set (do not
+  re-add)? GitHub Pages workflow ran? schema.sql? Anonymous auth on?
+  Passcode 6+ chars?

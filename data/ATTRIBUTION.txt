@@ -1,0 +1,4 @@
+SRD 5.1 monster data included in data/srd-monsters.json is derived from the
+Wizards of the Coast Systems Reference Document 5.1, licensed CC BY 4.0.
+
+Structured JSON via 5e-bits/5e-database (MIT).
