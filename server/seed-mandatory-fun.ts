@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { parseHub } from '../src/lib/campaign-hub.ts'
 import { isCellBlocked, TERRAIN, tokenOccupiesBlocked } from '../src/lib/utils.ts'
 import type { NamedEntry, TemplateMonster } from '../src/lib/types.ts'
 
@@ -214,6 +215,40 @@ Prep: add 5–6 level-2 characters, then drop starting squares on each template.
       { id: 'n5', name: 'Vizz the Unblinking', role: 'Boss', notes: 'Lonely middle-manager beholder. Wants friends. Still a monster. Do not use disintegrate.' },
     ],
     loot: [{ id: 'l1', name: 'Pie coupon', qty: 1, notes: 'Stonehill-quality. Mayor already paid.', holder: '' }],
+    stages: [
+      {
+        id: 'st0',
+        name: 'Winkwell square',
+        imageUrl: '',
+        caption: 'Mayor Blink’s square. The chickens will not blink.',
+        afterTemplateId: '',
+        beforeTemplateId: templateIds.frontDesk,
+      },
+      {
+        id: 'st1',
+        name: 'Cubicle crawl',
+        imageUrl: '',
+        caption: 'Paper snow. Glen gurgles. The trust-fall pit waits north.',
+        afterTemplateId: templateIds.frontDesk,
+        beforeTemplateId: templateIds.seminar,
+      },
+      {
+        id: 'st2',
+        name: 'Elevator',
+        imageUrl: '',
+        caption: 'A salt-mine elevator. Vizz is already talking on the intercom.',
+        afterTemplateId: templateIds.seminar,
+        beforeTemplateId: templateIds.review,
+      },
+      {
+        id: 'st3',
+        name: 'Pie coupon',
+        imageUrl: '',
+        caption: 'Back in Winkwell. The mayor has pie. Someone should blink.',
+        afterTemplateId: templateIds.review,
+        beforeTemplateId: '',
+      },
+    ],
   }
 }
 
@@ -229,7 +264,21 @@ export function seedMandatoryFun(
   const exists = db.prepare('SELECT id FROM campaigns WHERE dm_account_id = ? AND name = ?').get(dmId, 'Mandatory Fun') as
     | { id: string }
     | undefined
-  if (exists) return exists.id
+  if (exists) {
+    const row = db.prepare('SELECT hub_json FROM campaigns WHERE id = ?').get(exists.id) as { hub_json?: string } | undefined
+    const hub = parseHub(row?.hub_json ? JSON.parse(row.hub_json) : {})
+    if (hub.stages.length === 0) {
+      const tpls = db.prepare('SELECT id, name FROM encounter_templates WHERE campaign_id = ?').all(exists.id) as { id: string; name: string }[]
+      const frontDesk = tpls.find((t) => /front desk/i.test(t.name))?.id ?? ''
+      const seminar = tpls.find((t) => /trust-fall|seminar/i.test(t.name))?.id ?? ''
+      const review = tpls.find((t) => /performance|review/i.test(t.name))?.id ?? ''
+      db.prepare('UPDATE campaigns SET hub_json = ? WHERE id = ?').run(
+        JSON.stringify({ ...hub, stages: mandatoryFunHub({ frontDesk, seminar, review }).stages }),
+        exists.id,
+      )
+    }
+    return exists.id
+  }
 
   const goblin = db.prepare(`SELECT id FROM bestiary_monsters WHERE dm_account_id = ? AND name = 'Goblin'`).get(dmId) as { id: string } | undefined
   const wolf = db.prepare(`SELECT id FROM bestiary_monsters WHERE dm_account_id = ? AND name = 'Wolf'`).get(dmId) as { id: string } | undefined

@@ -282,6 +282,16 @@ export type SessionBeat = {
   status: SessionBeatStatus
 }
 
+/** A scene shown on the table between fights. afterTemplateId empty = start of night. */
+export type CampaignStage = {
+  id: string
+  name: string
+  imageUrl: string
+  caption: string
+  afterTemplateId: string
+  beforeTemplateId: string
+}
+
 export type CampaignQuest = {
   id: string
   name: string
@@ -313,6 +323,7 @@ export type CampaignHub = {
   quests: CampaignQuest[]
   npcs: CampaignNpc[]
   loot: PartyLoot[]
+  stages: CampaignStage[]
 }
 
 export type EncounterBrief = {

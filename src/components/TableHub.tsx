@@ -4,11 +4,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AmbianceStage } from '@/components/AmbianceStage'
 import { StartFightDialog } from '@/components/StartFightDialog'
-import type { CampaignHub, EncounterInstance, EncounterOutcome, EncounterTemplate, PlayerCharacter } from '@/lib/types'
-import { templateReady } from '@/lib/token-look'
-import { sortTemplates } from '@/lib/campaign-hub'
-import { applyShortRestHp, type StartFightOpts } from '@/lib/turn-flow'
 import { CampaignHubPanel } from '@/components/CampaignHubPanel'
+import { sortTemplates, stagePlacementLabel } from '@/lib/campaign-hub'
+import { templateReady } from '@/lib/token-look'
+import { applyShortRestHp, type StartFightOpts } from '@/lib/turn-flow'
+import type { CampaignHub, CampaignStage, EncounterInstance, EncounterOutcome, EncounterTemplate, PlayerCharacter } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 type DmProps = {
@@ -23,6 +23,8 @@ type DmProps = {
   onResume: (instanceId: string) => void
   busy: boolean
   activeFight?: boolean
+  stages?: CampaignStage[]
+  onSelectStage?: (stageId: string) => void
 }
 
 type Props = {
@@ -109,12 +111,29 @@ export function TableHub({
               : 'This is the campaign table. Your sheet stays open while the party talks, travels, or waits on the next fight.'}
           </p>
           {dm && (
-            <Input
-              className="mt-3"
-              placeholder="Scene caption — a tavern, a road, a council chamber…"
-              value={dm.caption}
-              onChange={(e) => dm.onCaption(e.target.value)}
-            />
+            <>
+              {dm.stages && dm.stages.length > 0 && (
+                <select
+                  className="mt-3 h-10 w-full rounded-md border border-line bg-bg px-2 text-sm"
+                  aria-label="Campaign scene"
+                  value={dm.stages.find((s) => s.imageUrl === imageUrl || (!s.imageUrl && s.caption === caption && !imageUrl))?.id ?? ''}
+                  onChange={(e) => dm.onSelectStage?.(e.target.value)}
+                >
+                  <option value="">Choose a campaign scene…</option>
+                  {dm.stages.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} — {stagePlacementLabel(s, dm.templates)}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <Input
+                className="mt-3"
+                placeholder="Scene caption — a tavern, a road, a council chamber…"
+                value={dm.caption}
+                onChange={(e) => dm.onCaption(e.target.value)}
+              />
+            </>
           )}
         </div>
 

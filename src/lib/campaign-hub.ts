@@ -2,6 +2,7 @@ import type {
   CampaignHub,
   CampaignNpc,
   CampaignQuest,
+  CampaignStage,
   EncounterBrief,
   EncounterTemplate,
   PartyLoot,
@@ -49,6 +50,7 @@ export function emptyHub(): CampaignHub {
     quests: [],
     npcs: [],
     loot: [],
+    stages: [],
   }
 }
 
@@ -112,6 +114,23 @@ function asNpc(raw: unknown, i: number): CampaignNpc | null {
   }
 }
 
+function asStage(raw: unknown, i: number): CampaignStage | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  const name = String(o.name ?? '').trim()
+  const imageUrl = String(o.imageUrl ?? '').trim()
+  const caption = String(o.caption ?? '').trim()
+  if (!name && !imageUrl && !caption && !o.id) return null
+  return {
+    id: String(o.id ?? `stage-${i}`),
+    name: name || 'Scene',
+    imageUrl,
+    caption: String(o.caption ?? ''),
+    afterTemplateId: String(o.afterTemplateId ?? ''),
+    beforeTemplateId: String(o.beforeTemplateId ?? ''),
+  }
+}
+
 function asLoot(raw: unknown, i: number): PartyLoot | null {
   if (!raw || typeof raw !== 'object') return null
   const o = raw as Record<string, unknown>
@@ -138,7 +157,30 @@ export function parseHub(raw: unknown): CampaignHub {
     quests: Array.isArray(o.quests) ? o.quests.map(asQuest).filter((x): x is CampaignQuest => Boolean(x)) : [],
     npcs: Array.isArray(o.npcs) ? o.npcs.map(asNpc).filter((x): x is CampaignNpc => Boolean(x)) : [],
     loot: Array.isArray(o.loot) ? o.loot.map(asLoot).filter((x): x is PartyLoot => Boolean(x)) : [],
+    stages: Array.isArray(o.stages) ? o.stages.map(asStage).filter((x): x is CampaignStage => Boolean(x)) : [],
   }
+}
+
+export function stageAfterTemplate(hub: CampaignHub, afterTemplateId: string | null | undefined): CampaignStage | null {
+  const key = String(afterTemplateId ?? '')
+  const stages = parseHub(hub).stages
+  return stages.find((s) => (s.afterTemplateId || '') === key) ?? null
+}
+
+export function stageHasContent(stage: CampaignStage | null | undefined): stage is CampaignStage {
+  if (!stage) return false
+  return Boolean(stage.imageUrl.trim() || stage.caption.trim())
+}
+
+export function stagePlacementLabel(stage: Pick<CampaignStage, 'afterTemplateId' | 'beforeTemplateId'>, templates: { id: string; name: string }[]) {
+  const afterName = stage.afterTemplateId ? templates.find((t) => t.id === stage.afterTemplateId)?.name : ''
+  const beforeName = stage.beforeTemplateId ? templates.find((t) => t.id === stage.beforeTemplateId)?.name : ''
+  if (!stage.afterTemplateId && beforeName) return `Before ${beforeName}`
+  if (stage.afterTemplateId && !stage.beforeTemplateId) return afterName ? `After ${afterName}` : 'After a fight'
+  if (stage.afterTemplateId && stage.beforeTemplateId) {
+    return `After ${afterName || 'a fight'}, before ${beforeName || 'the next fight'}`
+  }
+  return 'Start of night'
 }
 
 export function markBeatForTemplate(hub: CampaignHub, templateId: string, status: SessionBeatStatus) {

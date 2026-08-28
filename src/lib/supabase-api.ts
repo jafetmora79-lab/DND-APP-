@@ -10,7 +10,7 @@ import { lightingFromStart, makeStartFog, coverBonusAlongLine } from './vision'
 import { hidingBrokenByWatchers, isHiding, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from './stealth'
 import { attackActivityLines, parseActivity, parsePrompt } from './combat-activity'
 import { sessionFromRow } from './session'
-import { applyEncounterRewards, parseHub } from './campaign-hub'
+import { applyEncounterRewards, parseHub, stageAfterTemplate, stageHasContent } from './campaign-hub'
 import { packTemplateBody, templateFromRow, unpackTemplateJson } from './template-json'
 import type { TableApi } from './local-api'
 import {
@@ -230,6 +230,7 @@ async function applyHostedFinishRewards(campaignId: string, instanceId: string, 
   const { error: hubErr } = await db().from('campaigns').update({ hub_json: next.hub }).eq('id', campaignId)
   if (hubErr && /hub_json/.test(hubErr.message)) return
   throwIf(hubErr)
+  await applyHostedHubStage(campaignId, templateId)
   if (next.xp <= 0) return
   const { data: fighters } = await db()
     .from('combatants')
@@ -244,6 +245,25 @@ async function applyHostedFinishRewards(campaignId: string, instanceId: string, 
     sheet.xp = Number(sheet.xp ?? 0) + next.xp
     await db().from('player_characters').update({ sheet_json: sheet }).eq('id', ch.id)
   }
+}
+
+async function applyHostedHubStage(campaignId: string, afterTemplateId: string | null | undefined) {
+  const { data: camp } = await db().from('campaigns').select('hub_json').eq('id', campaignId).maybeSingle()
+  if (!camp) return
+  const stage = stageAfterTemplate(parseHub((camp as { hub_json?: unknown }).hub_json), afterTemplateId)
+  if (!stageHasContent(stage)) return
+  const { data: existing } = await db()
+    .from('live_sessions')
+    .select('id')
+    .eq('campaign_id', campaignId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (!existing) return
+  await updateLiveSession(String(existing.id), {
+    ambiance_image_url: stage.imageUrl.trim() || null,
+    ambiance_caption: stage.caption,
+  })
 }
 
 function mapFromRow(row: Record<string, unknown>): BattleMap {
@@ -1065,14 +1085,15 @@ export const supabaseApi: TableApi = {
     }
     if (!existing) {
       const code = joinCode()
-      const data = await insertLiveSession({
-        join_code: code,
-        campaign_id: campaignId,
-        encounter_instance_id: encounterInstanceId,
-        table_phase: opts?.tablePhase === 'setup' ? 'setup' : encounterInstanceId ? 'combat' : 'table',
-        ...(encounterInstanceId ? { last_outcome: null } : {}),
-      })
-      return { session: { joinCode: String(data.join_code) } }
+    const data = await insertLiveSession({
+      join_code: code,
+      campaign_id: campaignId,
+      encounter_instance_id: encounterInstanceId,
+      table_phase: opts?.tablePhase === 'setup' ? 'setup' : encounterInstanceId ? 'combat' : 'table',
+      ...(encounterInstanceId ? { last_outcome: null } : {}),
+    })
+    if (!encounterInstanceId) await applyHostedHubStage(campaignId, '')
+    return { session: { joinCode: String(data.join_code) } }
     }
     const patch: Record<string, unknown> = {}
     if (opts?.rotateJoinCode) patch.join_code = joinCode()
@@ -1104,6 +1125,7 @@ export const supabaseApi: TableApi = {
       encounter_instance_id: null,
       table_phase: 'table',
     })
+    await applyHostedHubStage(campaignId, '')
     return { session: { joinCode: String(data.join_code) } }
   },
 
@@ -1149,6 +1171,20 @@ export const supabaseApi: TableApi = {
     const { data: pub } = db().storage.from('maps').getPublicUrl(path)
     await updateLiveSession(String(existing.id), { ambiance_image_url: pub.publicUrl })
     return {}
+  },
+
+  async uploadStageImage(campaignId, file) {
+    const path = `${campaignId}/stages/${crypto.randomUUID()}-${file.name}`
+    const { error: upErr } = await db().storage.from('maps').upload(path, file, { upsert: true })
+    if (upErr) {
+      throw new Error(
+        upErr.message.includes('Bucket not found') || upErr.message.includes('not found')
+          ? 'Create a public Storage bucket named "maps" in Supabase, then try the upload again.'
+          : upErr.message,
+      )
+    }
+    const { data: pub } = db().storage.from('maps').getPublicUrl(path)
+    return { imageUrl: pub.publicUrl }
   },
 
   async finishEncounter(campaignId, outcome, opts) {

@@ -331,6 +331,24 @@ export function Live() {
     await load()
   }
 
+  async function onSelectStage(stageId: string) {
+    if (!campaignId || !stageId) return
+    const stage = parseHub(snap?.campaign.hub).stages.find((s) => s.id === stageId)
+    if (!stage) return
+    setBusy(true)
+    try {
+      await api.patchSession(campaignId, {
+        ambianceImageUrl: stage.imageUrl.trim() || null,
+        ambianceCaption: stage.caption,
+      })
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not set the scene')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const fogTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function onFog(fog: FogState) {
@@ -432,6 +450,8 @@ export function Live() {
             onResume: resume,
             busy,
             activeFight: Boolean(instance && instance.status === 'active'),
+            stages: parseHub(snap.campaign.hub).stages,
+            onSelectStage,
           }}
           onShortRest={(characterId, hpCurrent) => {
             const ch = snap.characters.find((c) => c.id === characterId)
