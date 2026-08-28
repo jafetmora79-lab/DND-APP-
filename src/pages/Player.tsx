@@ -13,6 +13,7 @@ import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { decorateTokens, monsterForCombatant } from '@/lib/combat'
+import { tableAmbiance } from '@/lib/campaign-hub'
 import { LanguageToggle, useT } from '@/lib/i18n'
 import { useLive } from '@/lib/realtime'
 import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
@@ -88,12 +89,13 @@ export function Player() {
   )
 
   if (!combat || !snap.instance || !snap.map) {
+    const stage = tableAmbiance(snap.campaign.hub, snap.session)
     return (
       <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
         <header className="flex items-center gap-2 border-b border-line px-3 py-2">
           <div className="min-w-0 flex-1">
             <div className="truncate font-display text-gold">{snap.campaign.name}</div>
-            <div className="truncate text-xs text-muted">{snap.session?.ambianceCaption || t('player.waiting')}</div>
+            <div className="truncate text-xs text-muted">{stage.caption || t('player.waiting')}</div>
           </div>
           {me && (
             <div className="stat-num text-sm">
@@ -115,8 +117,8 @@ export function Player() {
         {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
         <TableHub
           campaignName={snap.campaign.name}
-          imageUrl={snap.session?.ambianceImageUrl ?? null}
-          caption={snap.session?.ambianceCaption ?? ''}
+          imageUrl={stage.imageUrl}
+          caption={stage.caption}
           lastOutcome={snap.session?.lastOutcome ?? null}
           hub={snap.campaign.hub}
           characters={snap.characters}

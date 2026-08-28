@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import {
   applyEncounterRewards,
   emptyHub,
+  hubForPlayer,
+  markBeatActive,
   markBeatForTemplate,
   openingSceneBeat,
   parseBrief,
@@ -11,6 +13,7 @@ import {
   stageAfterTemplate,
   stageHasContent,
   stagePlacementLabel,
+  tableAmbiance,
 } from '../src/lib/campaign-hub.ts'
 import { packMonstersJson, unpackTemplateJson } from '../src/lib/template-json.ts'
 
@@ -155,6 +158,29 @@ check('removing a scene is not resurrected by leftover After/Before slots', () =
   assert.equal(withoutMayor.beats.some((b) => b.id === 'b1'), false)
   assert.equal(withoutMayor.beats.some((b) => /Mayor|Winkwell/.test(b.title)), false)
   assert.equal(withoutMayor.beats[0]?.title, 'Front Desk')
+})
+
+check('active scene fills the table and players do not see upcoming beats', () => {
+  const hub = parseHub({
+    beats: [
+      { id: 'b0', kind: 'social', title: 'Acto I', notes: 'DM only', templateId: '', status: 'active', imageUrl: '/cabin.jpg', caption: 'Dawn at the cabin' },
+      { id: 'b1', kind: 'social', title: 'Acto II', notes: '', templateId: '', status: 'upcoming', imageUrl: '/store.jpg', caption: 'Aisle' },
+      { id: 'b2', kind: 'combat', title: 'Map 01', notes: '', templateId: 't1', status: 'upcoming' },
+    ],
+  })
+  const stage = tableAmbiance(hub, { ambianceImageUrl: null, ambianceCaption: '' })
+  assert.equal(stage.imageUrl, '/cabin.jpg')
+  assert.match(stage.caption, /Dawn/)
+  const player = hubForPlayer(hub)
+  assert.equal(player.beats.length, 1)
+  assert.equal(player.beats[0]?.title, 'Acto I')
+  assert.equal(player.beats[0]?.notes, '')
+  assert.equal(player.sessionNotes, '')
+  assert.equal(player.beats.some((b) => b.title === 'Acto II' || b.title === 'Map 01'), false)
+  const jumped = markBeatActive(hub, 'b1')
+  assert.equal(jumped.beats[0]?.status, 'upcoming')
+  assert.equal(jumped.beats[1]?.status, 'active')
+  assert.equal(tableAmbiance(jumped, { ambianceImageUrl: '/cabin.jpg', ambianceCaption: 'Dawn at the cabin' }).imageUrl, '/store.jpg')
 })
 
 console.log('all hub checks passed')

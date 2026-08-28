@@ -22,7 +22,7 @@ import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
 import { ABILITIES, ABILITY_LABELS, type Ability, type Attack, type EncounterInstance, type EncounterSnapshot, type EncounterTemplate, type FogState, type Monster, type RollMode } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
-import { ambianceFromBeat, emptyBeat, markBeatForTemplate, markOpeningActive, openingSceneBeat, parseHub, sortTemplates } from '@/lib/campaign-hub'
+import { adjacentSceneBeat, ambianceFromBeat, emptyBeat, markBeatActive, markBeatForTemplate, markOpeningActive, openingSceneBeat, parseHub, sortTemplates, tableAmbiance } from '@/lib/campaign-hub'
 import { asCombatantLike, standingEnemies, type StartFightOpts } from '@/lib/turn-flow'
 import { applyLightingFog, coverBonusBetween, fogWithLighting, parseLighting, type Lighting } from '@/lib/vision'
 
@@ -350,7 +350,7 @@ export function Live() {
           title: scene.name,
           caption: scene.caption,
           imageUrl: uploaded.imageUrl,
-          status: 'upcoming',
+          status: 'active',
         })
         const beats = hub.beats.slice()
         if (!scene.insertAfterBeatId) beats.unshift(beat)
@@ -359,7 +359,7 @@ export function Live() {
           if (idx >= 0) beats.splice(idx + 1, 0, beat)
           else beats.push(beat)
         }
-        await api.patchCampaign(campaignId, { hub: { ...hub, beats } })
+        await api.patchCampaign(campaignId, { hub: markBeatActive({ ...hub, beats }, beat.id) })
       }
       await load()
     } catch (e) {
@@ -371,10 +371,20 @@ export function Live() {
 
   function onHubChange(next: ReturnType<typeof parseHub>) {
     if (!campaignId) return
+    const prevScene = tableAmbiance(parseHub(snap?.campaign.hub), snap?.session)
+    const nextScene = tableAmbiance(next, snap?.session)
     setSnap((s) => (s ? { ...s, campaign: { ...s.campaign, hub: next } } : s))
     if (hubTimer.current) clearTimeout(hubTimer.current)
     hubTimer.current = setTimeout(() => {
       api.patchCampaign(campaignId, { hub: next }).catch((e) => setError(e.message))
+      if (prevScene.imageUrl !== nextScene.imageUrl || prevScene.caption !== nextScene.caption) {
+        api
+          .patchSession(campaignId, {
+            ambianceImageUrl: nextScene.imageUrl,
+            ambianceCaption: nextScene.caption,
+          })
+          .catch((e) => setError(e.message))
+      }
     }, 400)
   }
 
@@ -386,22 +396,33 @@ export function Live() {
 
   async function onSelectScene(beatId: string) {
     if (!campaignId || !beatId) return
-    const beat = parseHub(snap?.campaign.hub).beats.find((s) => s.id === beatId)
+    const hub = markBeatActive(parseHub(snap?.campaign.hub), beatId)
+    const beat = hub.beats.find((s) => s.id === beatId)
     if (!beat) return
     const ambiance = ambianceFromBeat(beat)
-    if (!ambiance) return
     setBusy(true)
     try {
-      await api.patchSession(campaignId, {
-        ambianceImageUrl: ambiance.imageUrl,
-        ambianceCaption: ambiance.caption,
-      })
+      await api.patchCampaign(campaignId, { hub })
+      if (ambiance) {
+        await api.patchSession(campaignId, {
+          ambianceImageUrl: ambiance.imageUrl,
+          ambianceCaption: ambiance.caption,
+        })
+      }
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not set the scene')
     } finally {
       setBusy(false)
     }
+  }
+
+  async function onStepScene(direction: -1 | 1) {
+    if (!campaignId) return
+    const current = parseHub(snap?.campaign.hub)
+    const beat = adjacentSceneBeat(current, direction)
+    if (!beat) return
+    await onSelectScene(beat.id)
   }
 
   async function onStartCampaign() {
@@ -453,6 +474,8 @@ export function Live() {
     return <div className="p-8 text-muted">{error || 'Loading the table…'}</div>
   }
 
+  const stage = tableAmbiance(snap.campaign.hub, snap.session)
+
   const joinActions = (
     <>
       <div className="rounded-md border border-gold/40 bg-panel px-3 py-1 font-mono text-sm tracking-[0.2em] text-gold-2">
@@ -492,7 +515,7 @@ export function Live() {
               {snap.campaign.name}
             </Link>
             <span className="hidden text-muted sm:inline">/</span>
-            <span className="hidden truncate sm:inline">At the table</span>
+            <span className="hidden truncate sm:inline">{stage.caption || 'At the table'}</span>
             <div className="ml-auto hidden items-center gap-2 lg:flex">{joinActions}</div>
           </div>
           <div className="flex gap-2 overflow-x-auto px-3 pb-2 lg:hidden">{joinActions}</div>
@@ -500,8 +523,8 @@ export function Live() {
         {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
         <TableHub
           campaignName={snap.campaign.name}
-          imageUrl={snap.session?.ambianceImageUrl ?? null}
-          caption={snap.session?.ambianceCaption ?? ''}
+          imageUrl={stage.imageUrl}
+          caption={stage.caption}
           lastOutcome={snap.session?.lastOutcome ?? null}
           hub={snap.campaign.hub}
           characters={snap.characters}
@@ -515,12 +538,12 @@ export function Live() {
             )
           }
           dm={{
-            caption: snap.session?.ambianceCaption ?? '',
+            caption: snap.session?.ambianceCaption ?? stage.caption,
             onCaption,
             onUpload: onUploadScene,
             onCommitScene,
             onClearImage: onClearScene,
-            hasImage: Boolean(snap.session?.ambianceImageUrl),
+            hasImage: Boolean(stage.imageUrl),
             templates,
             paused,
             onStart: startFrom,
@@ -528,6 +551,7 @@ export function Live() {
             busy,
             activeFight: Boolean(instance && instance.status === 'active'),
             onSelectScene,
+            onStepScene,
             onStartCampaign,
             onHubChange,
             onUploadStage: async (file) => {

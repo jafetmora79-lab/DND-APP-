@@ -11,7 +11,7 @@ import { lightingFromStart, makeStartFog, coverBonusAlongLine } from './vision'
 import { hidingBrokenByWatchers, isHiding, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from './stealth'
 import { attackActivityLines, parseActivity, parsePrompt } from './combat-activity'
 import { sessionFromRow } from './session'
-import { ambianceFromBeat, applyEncounterRewards, openingSceneBeat, parseHub, sceneAfterEncounter } from './campaign-hub'
+import { ambianceFromBeat, applyEncounterRewards, parseHub, sceneAfterEncounter, tableSceneBeat } from './campaign-hub'
 import { packTemplateBody, templateFromRow, unpackTemplateJson } from './template-json'
 import type { TableApi } from './local-api'
 import {
@@ -252,7 +252,7 @@ async function applyHostedHubStage(campaignId: string, afterTemplateId: string |
   const { data: camp } = await db().from('campaigns').select('hub_json').eq('id', campaignId).maybeSingle()
   if (!camp) return
   const hub = parseHub((camp as { hub_json?: unknown }).hub_json)
-  const beat = afterTemplateId ? sceneAfterEncounter(hub, afterTemplateId) : openingSceneBeat(hub)
+  const beat = afterTemplateId ? sceneAfterEncounter(hub, afterTemplateId) : tableSceneBeat(hub)
   const ambiance = ambianceFromBeat(beat)
   if (!ambiance) return
   const { data: existing } = await db()
@@ -1120,7 +1120,12 @@ export const supabaseApi: TableApi = {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-    if (existing) return { session: { joinCode: String(existing.join_code) } }
+    if (existing) {
+      if (!existing.encounter_instance_id && String(existing.table_phase ?? 'table') === 'table') {
+        await applyHostedHubStage(campaignId, '')
+      }
+      return { session: { joinCode: String(existing.join_code) } }
+    }
     const code = joinCode()
     const data = await insertLiveSession({
       join_code: code,

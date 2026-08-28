@@ -78,7 +78,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
 
       <section>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-xs uppercase tracking-wider text-muted">Run order</h3>
+          <h3 className="text-xs uppercase tracking-wider text-muted">{playerView ? 'Now' : 'Run order'}</h3>
           {canEdit && (
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" className="min-h-10 flex-1 sm:flex-none" onClick={() => addBeat('social')}>
@@ -90,31 +90,36 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
             </div>
           )}
         </div>
-        <p className="mt-1 text-xs text-muted">
-          Top to bottom is what Live follows: opening scene, then Start encounter, then the next scene after that fight ends. Add scene / Add encounter appends at the bottom.
-        </p>
+        {!playerView && (
+          <p className="mt-1 text-xs text-muted">
+            Top to bottom is what Live follows: opening scene, then Start encounter, then the next scene after that fight ends. Add scene / Add encounter appends at the bottom. Players only see the active scene, not what comes next.
+          </p>
+        )}
         <ul className="mt-2 space-y-2">
-          {data.beats.map((b, i) => (
+          {(playerView ? data.beats.filter((b) => b.status === 'active') : data.beats).map((b, i) => (
             <li key={b.id} id={`run-beat-${b.id}`} className="rounded-lg border border-line bg-bg px-3 py-2">
               {canEdit ? (
                 <BeatEditor
                   beat={b}
-                  index={i}
+                  index={playerView ? i : data.beats.indexOf(b)}
                   total={data.beats.length}
                   templates={templates}
                   compact={compact}
                   forceOpen={addedId === b.id}
                   onChange={(next) => {
                     const beats = data.beats.slice()
-                    beats[i] = next
+                    const idx = data.beats.findIndex((x) => x.id === b.id)
+                    if (idx < 0) return
+                    beats[idx] = next
                     patch({ ...data, beats })
                   }}
                   onMove={(dir) => {
-                    const j = i + dir
-                    if (j < 0 || j >= data.beats.length) return
+                    const idx = data.beats.findIndex((x) => x.id === b.id)
+                    const j = idx + dir
+                    if (idx < 0 || j < 0 || j >= data.beats.length) return
                     const beats = data.beats.slice()
-                    const swap = beats[i]!
-                    beats[i] = beats[j]!
+                    const swap = beats[idx]!
+                    beats[idx] = beats[j]!
                     beats[j] = swap
                     patch({ ...data, beats })
                   }}
@@ -129,7 +134,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                   <div className="min-w-0">
                     <div className="flex items-center justify-between gap-2 text-sm">
                       <span>
-                        <span className="mr-2 text-[10px] uppercase tracking-wide text-muted">{i + 1}.</span>
+                        {!playerView && <span className="mr-2 text-[10px] uppercase tracking-wide text-muted">{data.beats.indexOf(b) + 1}.</span>}
                         {b.title}
                       </span>
                       <span className="text-[10px] uppercase tracking-wide text-muted">{b.status}</span>
@@ -146,8 +151,11 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
               )}
             </li>
           ))}
-          {data.beats.length === 0 && (
+          {data.beats.length === 0 && !playerView && (
             <li className="text-sm text-muted">No run yet. Add the opening scene, then the first encounter, and keep alternating.</li>
+          )}
+          {playerView && data.beats.every((b) => b.status !== 'active') && (
+            <li className="text-sm text-muted">The DM will show the next scene here.</li>
           )}
         </ul>
       </section>

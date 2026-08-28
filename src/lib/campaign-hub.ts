@@ -289,13 +289,62 @@ export function parseHub(raw: unknown): CampaignHub {
   }
 }
 
-export function openingSceneBeat(hub: CampaignHub): SessionBeat | null {
+export function openingSceneBeat(hub: CampaignHub | null | undefined): SessionBeat | null {
   const beats = parseHub(hub).beats
   for (const beat of beats) {
     if (isCombatBeat(beat)) continue
     return beat
   }
   return beats.find((b) => beatHasScene(b) && !isCombatBeat(b)) ?? null
+}
+
+/** Scene currently on the table: the active scenery beat, or the opening scene if nothing is active. */
+export function tableSceneBeat(hub: CampaignHub | null | undefined): SessionBeat | null {
+  const beats = parseHub(hub).beats
+  const active = beats.find((b) => b.status === 'active')
+  if (active && !isCombatBeat(active)) return active
+  if (active && isCombatBeat(active)) return null
+  return openingSceneBeat(hub)
+}
+
+export function adjacentSceneBeat(hub: CampaignHub | null | undefined, direction: -1 | 1): SessionBeat | null {
+  const scenes = sceneBeats(hub)
+  if (scenes.length === 0) return null
+  const current = tableSceneBeat(hub)
+  const idx = current ? scenes.findIndex((s) => s.id === current.id) : -1
+  const nextIdx = idx < 0 ? (direction > 0 ? 0 : scenes.length - 1) : idx + direction
+  if (nextIdx < 0 || nextIdx >= scenes.length) return null
+  return scenes[nextIdx] ?? null
+}
+
+/** Image and caption the table should show. An active scene's picture wins over a stale tavern session. */
+export function tableAmbiance(
+  hub: CampaignHub | null | undefined,
+  session?: { ambianceImageUrl?: string | null; ambianceCaption?: string | null } | null,
+): { imageUrl: string | null; caption: string } {
+  const fromScene = ambianceFromBeat(tableSceneBeat(hub))
+  if (fromScene?.imageUrl) {
+    return {
+      imageUrl: fromScene.imageUrl,
+      caption: session?.ambianceCaption?.trim() || fromScene.caption,
+    }
+  }
+  return {
+    imageUrl: session?.ambianceImageUrl?.trim() || null,
+    caption: (session?.ambianceCaption ?? '').trim() || fromScene?.caption || '',
+  }
+}
+
+/** Players only receive the beat that is on the table now — never the rest of the run. */
+export function hubForPlayer(hub: CampaignHub | null | undefined): CampaignHub {
+  const parsed = parseHub(hub)
+  return {
+    ...parsed,
+    sessionNotes: '',
+    beats: parsed.beats
+      .filter((b) => b.status === 'active')
+      .map((b) => ({ ...b, notes: '' })),
+  }
 }
 
 export function sceneAfterEncounter(hub: CampaignHub, templateId: string | null | undefined): SessionBeat | null {
@@ -312,7 +361,7 @@ export function sceneAfterEncounter(hub: CampaignHub, templateId: string | null 
   return null
 }
 
-export function sceneBeats(hub: CampaignHub): SessionBeat[] {
+export function sceneBeats(hub: CampaignHub | null | undefined): SessionBeat[] {
   return parseHub(hub).beats.filter((b) => !isCombatBeat(b))
 }
 
@@ -402,17 +451,25 @@ export function markBeatForTemplate(hub: CampaignHub, templateId: string, status
   }
 }
 
-export function markOpeningActive(hub: CampaignHub) {
+export function markBeatActive(hub: CampaignHub, beatId: string) {
   const next = parseHub(hub)
-  const idx = next.beats.findIndex((b) => b.status !== 'done')
+  const idx = next.beats.findIndex((b) => b.id === beatId)
   if (idx < 0) return next
   return {
     ...next,
     beats: next.beats.map((b, i) => {
       if (i === idx) return { ...b, status: 'active' as const }
+      if (b.status === 'active') return { ...b, status: 'upcoming' as const }
       return b
     }),
   }
+}
+
+export function markOpeningActive(hub: CampaignHub) {
+  const next = parseHub(hub)
+  const idx = next.beats.findIndex((b) => b.status !== 'done')
+  if (idx < 0) return next
+  return markBeatActive(next, next.beats[idx]!.id)
 }
 
 function advanceBeatsAfterEncounter(beats: SessionBeat[], templateId: string | null): SessionBeat[] {

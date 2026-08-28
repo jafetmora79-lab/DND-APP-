@@ -9,7 +9,7 @@ import { abilityMod, cellCenter, parseBlockedCells, playerStartOrigin, proficien
 import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, characterSaveBonus, combatantStatsFromMonster, combatantStatsFromSheet, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, hasHiddenAdvantage, isAttackInRange, movementCostFeet, parseAttackBonus, parseCombatantStats, parseDeathState, parseRangeFeet, parseRollMode, parseSpeedFeet, parseTurnEconomy, pickUsedD20, resolveDeathSave, resolveSavingThrow, saveBonusForCombatant, spendMovement, specCopyCell, statsForLiveCombatant, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { appendActivity, parseActivity, parsePrompt } from '../src/lib/combat-activity.ts'
 import { loadSrdMonsters } from './srd.ts'
-import { ambianceFromBeat, applyEncounterRewards, emptyBrief, openingSceneBeat, parseHub, sceneAfterEncounter } from '../src/lib/campaign-hub.ts'
+import { ambianceFromBeat, applyEncounterRewards, emptyBrief, parseHub, sceneAfterEncounter, tableSceneBeat } from '../src/lib/campaign-hub.ts'
 import { unpackTemplateJson } from '../src/lib/template-json.ts'
 import { coverBonusAlongLine, lightingFromStart, makeStartFog } from '../src/lib/vision.ts'
 import { actionRevealsHiding, hidingBrokenByWatchers, isHiding, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from '../src/lib/stealth.ts'
@@ -1198,7 +1198,7 @@ export function applyHubStageToLiveSession(campaignId: string, afterTemplateId: 
   const camp = db.prepare('SELECT hub_json FROM campaigns WHERE id = ?').get(campaignId) as { hub_json?: string } | undefined
   if (!camp) return
   const hub = parseHub(jparse(camp.hub_json as string, {}))
-  const beat = afterTemplateId ? sceneAfterEncounter(hub, afterTemplateId) : openingSceneBeat(hub)
+  const beat = afterTemplateId ? sceneAfterEncounter(hub, afterTemplateId) : tableSceneBeat(hub)
   const ambiance = ambianceFromBeat(beat)
   if (!ambiance) return
   db.prepare('UPDATE live_sessions SET ambiance_image_url = ?, ambiance_caption = ? WHERE campaign_id = ?').run(
