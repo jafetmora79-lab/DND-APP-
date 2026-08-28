@@ -181,6 +181,8 @@ check('active scene fills the table and players do not see upcoming beats', () =
   assert.equal(jumped.beats[0]?.status, 'upcoming')
   assert.equal(jumped.beats[1]?.status, 'active')
   assert.equal(tableAmbiance(jumped, { ambianceImageUrl: '/cabin.jpg', ambianceCaption: 'Dawn at the cabin' }).imageUrl, '/store.jpg')
+  assert.match(tableAmbiance(jumped, { ambianceImageUrl: '/cabin.jpg', ambianceCaption: 'Dawn at the cabin' }).caption, /Aisle/)
+  assert.match(tableAmbiance(jumped, { ambianceImageUrl: '/store.jpg', ambianceCaption: 'Live caption' }).caption, /Live caption/)
 })
 
 console.log('all hub checks passed')

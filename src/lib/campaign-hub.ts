@@ -324,9 +324,10 @@ export function tableAmbiance(
 ): { imageUrl: string | null; caption: string } {
   const fromScene = ambianceFromBeat(tableSceneBeat(hub))
   if (fromScene?.imageUrl) {
+    const sessionMatches = (session?.ambianceImageUrl ?? '').trim() === fromScene.imageUrl
     return {
       imageUrl: fromScene.imageUrl,
-      caption: session?.ambianceCaption?.trim() || fromScene.caption,
+      caption: (sessionMatches ? session?.ambianceCaption?.trim() : '') || fromScene.caption,
     }
   }
   return {
