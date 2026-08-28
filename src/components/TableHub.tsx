@@ -71,6 +71,7 @@ export function TableHub({
   const [startTpl, setStartTpl] = useState<EncounterTemplate | null>(null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [restHp, setRestHp] = useState('')
+  const [mobileTab, setMobileTab] = useState<'play' | 'order' | 'sheet'>(dm ? 'play' : 'sheet')
   const selected = characters.find((c) => c.id === selectedId)
   const parsedHub = parseHub(hub)
   const pointer = currentRunPointer(parsedHub)
@@ -79,13 +80,13 @@ export function TableHub({
   const leftoverFights = remainingCombatBeats(parsedHub)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col lg:flex-row overflow-hidden">
-      <div className="relative min-h-[40vh] flex-1 lg:min-h-0">
-        <AmbianceStage imageUrl={imageUrl} caption={caption} className="h-full min-h-[40vh]" />
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:flex-row">
+      <div className="relative h-[34vh] w-full min-w-0 shrink-0 xl:h-auto xl:min-h-0 xl:flex-1">
+        <AmbianceStage imageUrl={imageUrl} caption={caption} className="h-full min-h-0" />
         {lastOutcome && (
           <div
             className={cn(
-              'absolute left-3 top-3 rounded-full px-3 py-1 text-xs uppercase tracking-wider',
+              'absolute left-2 top-2 z-10 rounded-full px-3 py-1 text-xs uppercase tracking-wider',
               lastOutcome === 'won' ? 'bg-gold/20 text-gold-2' : 'bg-blood/20 text-blood',
             )}
           >
@@ -93,7 +94,7 @@ export function TableHub({
           </div>
         )}
         {dm && (
-          <div className="absolute bottom-3 right-3 flex flex-wrap justify-end gap-2">
+          <div className="absolute right-2 top-2 z-10 flex flex-wrap justify-end gap-2 xl:bottom-3 xl:top-auto">
             <input
               ref={fileRef}
               type="file"
@@ -107,12 +108,12 @@ export function TableHub({
                 else dm.onUpload(file)
               }}
             />
-            <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={dm.busy}>
+            <Button size="sm" variant="outline" className="min-h-10" onClick={() => fileRef.current?.click()} disabled={dm.busy}>
               <ImagePlus className="h-4 w-4" />
               {dm.hasImage ? 'Change scene' : 'Set scene'}
             </Button>
             {dm.hasImage && (
-              <Button size="sm" variant="ghost" disabled={dm.busy} onClick={dm.onClearImage}>
+              <Button size="sm" variant="ghost" className="min-h-10 bg-bg/70" disabled={dm.busy} onClick={dm.onClearImage}>
                 Use tavern scene
               </Button>
             )}
@@ -120,8 +121,21 @@ export function TableHub({
         )}
       </div>
 
-      <aside className="flex w-full shrink-0 flex-col overflow-y-auto border-t border-line bg-panel lg:w-[28rem] lg:border-l lg:border-t-0">
-        <div className="border-b border-line p-3">
+      <aside className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-line bg-panel xl:w-[28rem] xl:flex-none xl:border-l xl:border-t-0">
+        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-2 py-1 xl:hidden">
+          {(dm ? (['play', 'order', 'sheet'] as const) : (['order', 'sheet'] as const)).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              className={cn('min-h-10 rounded px-3 py-1 text-sm capitalize', mobileTab === tab ? 'bg-gold text-bg' : 'text-muted')}
+              onClick={() => setMobileTab(tab)}
+            >
+              {tab === 'play' ? 'Play' : tab === 'order' ? 'Run order' : 'Sheet'}
+            </button>
+          ))}
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className={cn('border-b border-line p-3', mobileTab === 'play' || (!dm && mobileTab === 'sheet') ? 'block' : 'hidden xl:block')}>
           <p className="text-xs uppercase tracking-[0.3em] text-gold">{campaignName}</p>
           <h2 className="font-display text-xl text-gold-2">{dm ? 'The table' : 'Your character'}</h2>
           <p className="mt-1 text-sm text-muted">
@@ -132,7 +146,7 @@ export function TableHub({
           {dm && (
             <>
               {dm.onStartCampaign && parsedHub.beats.length > 0 && (
-                <Button className="mt-3 w-full" size="sm" disabled={dm.busy} onClick={dm.onStartCampaign}>
+                <Button className="mt-3 min-h-10 w-full" size="sm" disabled={dm.busy} onClick={dm.onStartCampaign}>
                   Show opening scene
                 </Button>
               )}
@@ -154,7 +168,7 @@ export function TableHub({
               )}
               {scenes.length > 0 && (
                 <select
-                  className="mt-3 h-10 w-full rounded-md border border-line bg-bg px-2 text-sm"
+                  className="mt-3 h-10 min-h-10 w-full rounded-md border border-line bg-bg px-2 text-sm"
                   aria-label="Campaign scene"
                   value={
                     scenes.find((s) => s.imageUrl === imageUrl || (!s.imageUrl && (s.caption === caption || s.title === caption) && !imageUrl))
@@ -181,18 +195,18 @@ export function TableHub({
         </div>
 
         {dm && (
-          <div className="border-b border-line p-3">
+          <div className={cn('border-b border-line p-3', mobileTab === 'play' ? 'block' : 'hidden xl:block')}>
             {dm.paused.length > 0 && (
               <section className="mb-4">
                 <h3 className="text-xs uppercase tracking-wider text-muted">Paused fights</h3>
                 <ul className="mt-2 space-y-2">
                   {dm.paused.map((i) => (
-                    <li key={i.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2">
+                    <li key={i.id} className="flex flex-col gap-2 rounded-lg border border-line bg-bg px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
                         <div className="truncate">{i.name}</div>
                         <div className="text-xs text-muted">{i.roundNumber === 0 ? 'Initiative' : `Round ${i.roundNumber}`}</div>
                       </div>
-                      <Button size="sm" disabled={dm.busy} onClick={() => dm.onResume(i.id)}>
+                      <Button size="sm" className="min-h-10 shrink-0" disabled={dm.busy} onClick={() => dm.onResume(i.id)}>
                         <Play className="h-4 w-4" /> Resume
                       </Button>
                     </li>
@@ -211,7 +225,7 @@ export function TableHub({
                       <li
                         key={beat.id}
                         className={cn(
-                          'flex items-center justify-between gap-2 rounded-lg border bg-bg px-3 py-2',
+                          'flex flex-col gap-2 rounded-lg border bg-bg px-3 py-2 sm:flex-row sm:items-center sm:justify-between',
                           primary ? 'border-gold/50' : 'border-line',
                         )}
                       >
@@ -231,8 +245,9 @@ export function TableHub({
                         </div>
                         <Button
                           size="sm"
+                          className="min-h-10 shrink-0"
                           variant={primary ? 'ember' : 'outline'}
-                          disabled={dm.busy || !beat.templateId}
+                          disabled={dm.busy || !beat.templateId || !t}
                           onClick={() => {
                             if (t) setStartTpl(t)
                           }}
@@ -243,7 +258,7 @@ export function TableHub({
                     )
                   })
                 : sortTemplates(dm.templates).map((t) => (
-                    <li key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2">
+                    <li key={t.id} className="flex flex-col gap-2 rounded-lg border border-line bg-bg px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 truncate">
                           {templateReady(t) && <Check className="h-4 w-4 shrink-0 text-moss" aria-label="Ready" />}
@@ -253,7 +268,7 @@ export function TableHub({
                           {[t.difficulty, t.objective, t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')}
                         </div>
                       </div>
-                      <Button size="sm" variant="ember" disabled={dm.busy} onClick={() => setStartTpl(t)}>
+                      <Button size="sm" className="min-h-10 shrink-0" variant="ember" disabled={dm.busy} onClick={() => setStartTpl(t)}>
                         Start
                       </Button>
                     </li>
@@ -268,24 +283,8 @@ export function TableHub({
           </div>
         )}
 
-        <div className="flex gap-2 overflow-x-auto border-b border-line px-3 py-2">
-          {characters.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className={cn(
-                'shrink-0 rounded-full border px-3 py-1 text-sm',
-                selectedId === c.id ? 'border-gold bg-gold text-bg' : 'border-line text-ink',
-              )}
-              onClick={() => onSelectCharacter(c.id)}
-            >
-              {c.name}
-            </button>
-          ))}
-          {characters.length === 0 && <p className="text-sm text-muted">No characters in this campaign yet.</p>}
-        </div>
         {hub && (
-          <div className={cn('overflow-y-auto border-b border-line p-3', dm?.onHubChange ? 'max-h-[32rem]' : 'max-h-64')}>
+          <div className={cn('border-b border-line p-3', mobileTab === 'order' ? 'block' : 'hidden xl:block')}>
             <CampaignHubPanel
               hub={hub}
               characters={characters}
@@ -298,7 +297,23 @@ export function TableHub({
             />
           </div>
         )}
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className={cn('p-3', mobileTab === 'sheet' ? 'block' : 'hidden xl:block')}>
+          <div className="mb-2 flex gap-2 overflow-x-auto">
+            {characters.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={cn(
+                  'min-h-10 shrink-0 rounded-full border px-3 py-1 text-sm',
+                  selectedId === c.id ? 'border-gold bg-gold text-bg' : 'border-line text-ink',
+                )}
+                onClick={() => onSelectCharacter(c.id)}
+              >
+                {c.name}
+              </button>
+            ))}
+            {characters.length === 0 && <p className="text-sm text-muted">No characters in this campaign yet.</p>}
+          </div>
           {selected && onShortRest && (
             <div className="mb-3 rounded-md border border-line bg-bg p-2">
               <div className="text-xs uppercase tracking-wider text-muted">Short rest — {selected.name}</div>
@@ -307,7 +322,7 @@ export function TableHub({
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Input
-                  className="h-8 w-20"
+                  className="h-10 w-20"
                   inputMode="numeric"
                   placeholder="HP"
                   value={restHp}
@@ -316,6 +331,7 @@ export function TableHub({
                 />
                 <Button
                   size="sm"
+                  className="min-h-10"
                   disabled={dm?.busy}
                   onClick={() => {
                     const n = Number(restHp)
@@ -330,6 +346,7 @@ export function TableHub({
             </div>
           )}
           {sheet}
+        </div>
         </div>
       </aside>
       {startTpl && dm && (
@@ -384,8 +401,8 @@ function SetSceneDialog({
   const [saveToCampaign, setSaveToCampaign] = useState(true)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-bg/70 p-4 sm:items-center" role="dialog" aria-labelledby="set-scene-title">
-      <div className="w-full max-w-md rounded-xl border border-line bg-panel p-4 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-bg/70 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center" role="dialog" aria-labelledby="set-scene-title">
+      <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-xl border border-line bg-panel p-4 shadow-xl">
         <h2 id="set-scene-title" className="font-display text-xl text-gold-2">
           Set scene
         </h2>

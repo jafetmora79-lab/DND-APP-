@@ -138,6 +138,23 @@ check('mixed beats plus leftover end-of-night stage', () => {
   assert.equal(openingSceneBeat(hub)?.title, 'Mayor')
   assert.equal(sceneAfterEncounter(hub, 'e3')?.title, 'Pie')
   assert.match(sceneAfterEncounter(hub, 'e3')?.caption ?? '', /Pie time/)
+  assert.deepEqual(hub.stages, [])
+})
+
+check('removing a scene is not resurrected by leftover After/Before slots', () => {
+  const hub = parseHub({
+    beats: [
+      { id: 'b1', kind: 'social', title: 'Mayor', notes: '', templateId: '', status: 'upcoming', caption: 'Town square' },
+      { id: 'b2', kind: 'combat', title: 'Front Desk', notes: '', templateId: 'e1', status: 'upcoming' },
+    ],
+    stages: [
+      { id: 'st0', name: 'Winkwell square', imageUrl: '', caption: 'Town square', afterTemplateId: '', beforeTemplateId: 'e1' },
+    ],
+  })
+  const withoutMayor = parseHub({ ...hub, beats: hub.beats.filter((b) => b.id !== 'b1') })
+  assert.equal(withoutMayor.beats.some((b) => b.id === 'b1'), false)
+  assert.equal(withoutMayor.beats.some((b) => /Mayor|Winkwell/.test(b.title)), false)
+  assert.equal(withoutMayor.beats[0]?.title, 'Front Desk')
 })
 
 console.log('all hub checks passed')

@@ -621,7 +621,7 @@ export function Live() {
           <button
             key={tab}
             type="button"
-            className={cn('rounded px-3 py-1 text-sm capitalize', hudTab === tab ? 'bg-gold text-bg' : 'text-muted')}
+            className={cn('min-h-10 rounded px-3 py-1 text-sm capitalize', hudTab === tab ? 'bg-gold text-bg' : 'text-muted')}
             onClick={() => setHudTab(tab)}
           >
             {tab}

@@ -25,7 +25,7 @@ export function AmbianceStage({ imageUrl, caption, className }: Props) {
       />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg/80 via-transparent to-bg/25" />
       {caption ? (
-        <figcaption className="absolute bottom-0 left-0 right-0 p-4 font-display text-lg text-gold-2 md:text-2xl">
+        <figcaption className="pointer-events-none absolute bottom-0 left-0 right-0 p-4 pr-4 pt-8 font-display text-lg text-gold-2 md:text-2xl">
           {caption}
         </figcaption>
       ) : null}
