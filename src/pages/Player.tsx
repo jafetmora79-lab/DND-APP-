@@ -77,6 +77,23 @@ export function Player() {
     return <div className="p-6 text-muted">{error || t('player.connecting')}</div>
   }
 
+  if (!snap.session) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-bg p-6 text-center">
+        <h1 className="font-display text-2xl text-gold-2">{t('player.ended')}</h1>
+        <p className="max-w-sm text-sm text-muted">{t('player.endedHint')}</p>
+        <Button
+          onClick={() => {
+            logout()
+            nav('/')
+          }}
+        >
+          {t('player.leave')}
+        </Button>
+      </div>
+    )
+  }
+
   const sheet = viewing ? (
     <CharacterSheet
       character={viewing}

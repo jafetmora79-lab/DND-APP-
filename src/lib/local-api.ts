@@ -76,7 +76,7 @@ export const localApi = {
   templates: (campaignId: string) => req<{ templates: EncounterTemplate[] }>(`/api/campaigns/${campaignId}/templates`),
   saveTemplate: (campaignId: string, body: Partial<EncounterTemplate> & { id?: string }) =>
     body.id
-      ? req(`/api/templates/${body.id}`, { method: 'PATCH', body: JSON.stringify(body) })
+      ? req<{ template?: EncounterTemplate }>(`/api/templates/${body.id}`, { method: 'PATCH', body: JSON.stringify(body) })
       : req<{ template: EncounterTemplate }>(`/api/campaigns/${campaignId}/templates`, { method: 'POST', body: JSON.stringify(body) }),
   deleteTemplate: (id: string) => req(`/api/templates/${id}`, { method: 'DELETE' }),
   instances: (campaignId: string) => req<{ instances: EncounterInstance[] }>(`/api/campaigns/${campaignId}/instances`),
@@ -111,6 +111,7 @@ export const localApi = {
   finishEncounter: (campaignId: string, outcome: 'won' | 'lost', opts?: { lootHolder?: string }) =>
     req(`/api/campaigns/${campaignId}/finish-encounter`, { method: 'POST', body: JSON.stringify({ outcome, lootHolder: opts?.lootHolder }) }),
   returnToTable: (campaignId: string) => req(`/api/campaigns/${campaignId}/return-to-table`, { method: 'POST' }),
+  endSession: (campaignId: string) => req(`/api/campaigns/${campaignId}/end-session`, { method: 'POST' }),
   beginRound: (campaignId: string) => req(`/api/campaigns/${campaignId}/begin-round`, { method: 'POST' }),
   peekJoin: (code: string) => req<{ campaignName: string; joinCode: string }>(`/api/join/${code}`),
   join: (code: string, personalCode: string) =>

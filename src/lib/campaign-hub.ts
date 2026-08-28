@@ -374,6 +374,38 @@ export function remainingCombatBeats(hub: CampaignHub): SessionBeat[] {
   return parseHub(hub).beats.filter((b) => isCombatBeat(b) && b.status !== 'done')
 }
 
+/** Put a saved encounter into the run if it is not already there, so Live can start it. */
+export function ensureCombatBeatForTemplate(
+  hub: CampaignHub,
+  template: { id: string; name: string },
+): CampaignHub {
+  const next = parseHub(hub)
+  const id = String(template.id ?? '')
+  if (!id) return next
+  const title = template.name.trim() || 'Encounter'
+  const idx = next.beats.findIndex((b) => b.templateId === id)
+  if (idx >= 0) {
+    const beat = next.beats[idx]!
+    if (beat.title && beat.title !== 'Encounter') return next
+    const beats = next.beats.slice()
+    beats[idx] = { ...beat, title, kind: 'combat' }
+    return { ...next, beats }
+  }
+  return {
+    ...next,
+    beats: [
+      ...next.beats,
+      emptyBeat({
+        id: `combat-${id}`.slice(0, 48),
+        kind: 'combat',
+        title,
+        templateId: id,
+        status: 'upcoming',
+      }),
+    ],
+  }
+}
+
 export function currentRunPointer(hub: CampaignHub): { now: SessionBeat | null; next: SessionBeat | null } {
   const beats = parseHub(hub).beats
   if (beats.length === 0) return { now: null, next: null }

@@ -74,8 +74,11 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
         imageUrl: current.imageUrl,
         blocked: current.blocked,
       })
+      setMsg('Map saved.')
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not save map')
+      const text = e instanceof Error ? e.message : 'Could not save map'
+      setMsg(text)
+      throw e instanceof Error ? e : new Error(text)
     }
   }
 
@@ -103,7 +106,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
   return (
     <div className="mt-6 grid gap-4 lg:grid-cols-[20rem_1fr]">
       <div className="rounded-xl border border-line bg-panel p-4">
-        <button type="button" className="text-xs uppercase tracking-[0.3em] text-gold" onClick={() => flush().then(onClose)}>
+        <button type="button" className="text-xs uppercase tracking-[0.3em] text-gold" onClick={() => flush().then(onClose).catch(() => undefined)}>
           All maps
         </button>
         <h2 className="font-display text-xl text-gold-2">Map maker</h2>
@@ -220,11 +223,18 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
               </Button>
             ) : null}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => {
+                flush().catch(() => undefined)
+              }}
+            >
+              Save map
+            </Button>
             <Button
               variant="outline"
               onClick={() => {
-                flush().then(onClose)
+                flush().then(onClose).catch(() => undefined)
               }}
             >
               Done

@@ -769,7 +769,8 @@ app.patch('/api/templates/:id', requireDm, (req, res) => {
     JSON.stringify(saved.characters),
     t.id,
   )
-  res.json({ ok: true })
+  const row = db.prepare('SELECT * FROM encounter_templates WHERE id = ?').get(t.id) as Record<string, unknown>
+  res.json({ template: templateFromRow(row) })
 })
 
 app.delete('/api/templates/:id', requireDm, (req, res) => {
@@ -1027,6 +1028,18 @@ app.post('/api/campaigns/:id/finish-encounter', requireDm, (req, res) => {
     outcome,
     existing.id,
   )
+  pushCampaign(campaignId)
+  res.json({ ok: true })
+})
+
+app.post('/api/campaigns/:id/end-session', requireDm, (req, res) => {
+  const campaignId = param(req, 'id')
+  if (!campaignOwned(campaignId, userOf(req).id)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  db.prepare(`UPDATE encounter_instances SET status = 'paused' WHERE campaign_id = ? AND status = 'active'`).run(campaignId)
+  db.prepare('DELETE FROM live_sessions WHERE campaign_id = ?').run(campaignId)
   pushCampaign(campaignId)
   res.json({ ok: true })
 })

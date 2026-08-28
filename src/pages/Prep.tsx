@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Check, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
@@ -22,11 +22,11 @@ import {
   type TemplateMonster,
 } from '@/lib/types'
 import { cn, DEFAULT_SCRATCH_CELL, mapFeet, nearestWalkableCell, playerStartOrigin, spreadCells, tokenOccupiesBlocked, tokenSizeSquares } from '@/lib/utils'
-import { monsterTokenLook, playerTokenLook, templateReady } from '@/lib/token-look'
+import { monsterTokenLook, playerTokenLook, templateReady, templateReadyGap } from '@/lib/token-look'
 import { copyText } from '@/lib/copy'
 import { LanguageToggle, useT } from '@/lib/i18n'
 import { CampaignHubPanel } from '@/components/CampaignHubPanel'
-import { emptyHub, parseHub, sortTemplates } from '@/lib/campaign-hub'
+import { emptyHub, ensureCombatBeatForTemplate, parseHub, sortTemplates } from '@/lib/campaign-hub'
 
 const tabs = ['Maps', 'Encounters', 'Campaign', 'Characters', 'Bestiary'] as const
 
@@ -158,6 +158,7 @@ function placeCharacterOnTemplate(
 
 export function Prep() {
   const { campaignId } = useParams()
+  const nav = useNavigate()
   const { t } = useT()
   const [tab, setTab] = useState<(typeof tabs)[number]>('Maps')
   const [maps, setMaps] = useState<BattleMap[]>([])
@@ -255,26 +256,43 @@ export function Prep() {
       return
     }
     try {
-      const r = await api.saveTemplate(campaignId, tpl)
-      const savedId = tpl.id ?? (r as { template?: EncounterTemplate }).template?.id
-      const [m, b, t, c] = await Promise.all([api.maps(campaignId), api.bestiary(), api.templates(campaignId), api.characters(campaignId)])
+      const r = await api.saveTemplate(campaignId, {
+        ...tpl,
+        monsters: tpl.monsters ?? [],
+        characters: tpl.characters ?? [],
+      })
+      const savedId = r.template?.id ?? tpl.id
+      const [m, b, tpls, c, camps] = await Promise.all([
+        api.maps(campaignId),
+        api.bestiary(),
+        api.templates(campaignId),
+        api.characters(campaignId),
+        api.campaigns(),
+      ])
       setMaps(m.maps)
       setMonsters(b.monsters)
-      setTemplates(t.templates)
+      setTemplates(tpls.templates)
       setCharacters(c.characters)
-      if (savedId) {
-        const fresh = t.templates.find((x) => x.id === savedId)
-        setTpl(
-          fresh
-            ? {
-                ...fresh,
-                monsters: fresh.monsters ?? [],
-                characters: fresh.characters ?? [],
-              }
-            : { ...tpl, id: savedId },
-        )
+      const mine = camps.campaigns.find((x) => x.id === campaignId)
+      let nextHub = parseHub(mine?.hub ?? hub)
+      const fresh = savedId ? tpls.templates.find((x) => x.id === savedId) : undefined
+      const saved = fresh ?? r.template
+      if (saved?.id) {
+        nextHub = ensureCombatBeatForTemplate(nextHub, saved)
+        await api.patchCampaign(campaignId, { hub: { ...nextHub, stages: [] } })
+        setTpl({
+          ...saved,
+          monsters: saved.monsters ?? [],
+          characters: saved.characters ?? [],
+        })
       }
-      setMsg('Encounter saved. Player starting squares stay on this template and spawn when you start the fight.')
+      setHub(nextHub)
+      const gap = templateReadyGap(saved ?? tpl)
+      setMsg(
+        gap
+          ? `Encounter saved as a draft. ${gap} before Live can start it.`
+          : 'Encounter saved and added to the run order. Start campaign to put it on the table.',
+      )
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Could not save the encounter.')
     }
@@ -299,8 +317,32 @@ export function Prep() {
         </div>
         <div className="flex items-center gap-2">
           <LanguageToggle />
-          <Button asChild>
-            <Link to={`/dm/${campaignId}/live`}>{t('prep.openLive')}</Link>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              if (!campaignId) return
+              try {
+                await api.endSession(campaignId)
+                setMsg('Campaign ended. Tonight’s join code no longer works. Start campaign when you want the table open again.')
+              } catch (e) {
+                setMsg(e instanceof Error ? e.message : 'Could not end the campaign.')
+              }
+            }}
+          >
+            {t('prep.endLive')}
+          </Button>
+          <Button
+            onClick={async () => {
+              if (!campaignId) return
+              try {
+                await api.ensureSession(campaignId)
+                nav(`/dm/${campaignId}/live`)
+              } catch (e) {
+                setMsg(e instanceof Error ? e.message : 'Could not start the campaign.')
+              }
+            }}
+          >
+            {t('prep.openLive')}
           </Button>
         </div>
       </div>
@@ -758,7 +800,19 @@ export function Prep() {
               </div>
               <p className="text-xs text-muted">Each copy gets its own circle. Drag them apart so four goblins are four tokens, not one stack.</p>
               <div className="flex gap-2">
-                <Button onClick={saveTemplate}>{tpl.id ? 'Save changes' : 'Save template'}</Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={saveTemplate}>{tpl.id ? 'Save changes' : 'Save template'}</Button>
+                  {tpl.id ? (
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        setTpl({ name: '', mapId: tpl.mapId ?? '', monsters: [], characters: [], objective: '', notes: '', difficulty: '', xpAward: 0, lootNotes: '' })
+                      }
+                    >
+                      New encounter
+                    </Button>
+                  ) : null}
+                </div>
                 {tpl.id && (
                   <Button
                     variant="ghost"
@@ -876,9 +930,13 @@ export function Prep() {
                 <li key={t.id} className="rounded-xl border border-line bg-panel p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-display text-lg text-gold">{t.name}</div>
-                    {templateReady(t) && (
+                    {templateReady(t) ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-moss/20 px-2 py-0.5 text-xs uppercase tracking-wider text-moss">
                         <Check className="h-3.5 w-3.5" /> Ready
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-panel-2 px-2 py-0.5 text-xs uppercase tracking-wider text-muted">
+                        Draft · {templateReadyGap(t)}
                       </span>
                     )}
                   </div>

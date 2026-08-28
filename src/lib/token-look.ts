@@ -81,3 +81,9 @@ export function playerTokenLook(color: string): TokenLook {
 export function templateReady(t: { mapId?: string; monsters?: unknown[] }) {
   return Boolean(t.mapId && (t.monsters?.length ?? 0) > 0)
 }
+
+export function templateReadyGap(t: { mapId?: string; monsters?: unknown[] }) {
+  if (!t.mapId) return 'Pick a map'
+  if (!(t.monsters?.length ?? 0)) return 'Add at least one monster'
+  return null
+}

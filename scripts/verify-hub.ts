@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import {
   applyEncounterRewards,
   emptyHub,
+  ensureCombatBeatForTemplate,
   hubForPlayer,
   markBeatActive,
   markBeatForTemplate,
@@ -183,6 +184,18 @@ check('active scene fills the table and players do not see upcoming beats', () =
   assert.equal(tableAmbiance(jumped, { ambianceImageUrl: '/cabin.jpg', ambianceCaption: 'Dawn at the cabin' }).imageUrl, '/store.jpg')
   assert.match(tableAmbiance(jumped, { ambianceImageUrl: '/cabin.jpg', ambianceCaption: 'Dawn at the cabin' }).caption, /Aisle/)
   assert.match(tableAmbiance(jumped, { ambianceImageUrl: '/store.jpg', ambianceCaption: 'Live caption' }).caption, /Live caption/)
+})
+
+check('saving an encounter adds it to the run order once', () => {
+  const hub = parseHub({
+    beats: [{ id: 'b0', kind: 'social', title: 'Tavern', notes: '', templateId: '', status: 'upcoming', imageUrl: '/inn.jpg', caption: 'Fire' }],
+  })
+  const once = ensureCombatBeatForTemplate(hub, { id: 't-map1', name: 'Map 01' })
+  assert.equal(once.beats.length, 2)
+  assert.equal(once.beats[1]?.templateId, 't-map1')
+  assert.equal(once.beats[1]?.kind, 'combat')
+  const twice = ensureCombatBeatForTemplate(once, { id: 't-map1', name: 'Map 01' })
+  assert.equal(twice.beats.filter((b) => b.templateId === 't-map1').length, 1)
 })
 
 console.log('all hub checks passed')

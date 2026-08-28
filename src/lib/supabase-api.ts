@@ -947,8 +947,8 @@ export const supabaseApi: TableApi = {
     }
     if (body.id) {
       for (let i = 0; i < 4; i++) {
-        const { error } = await db().from('encounter_templates').update(row()).eq('id', body.id)
-        if (!error) return {}
+        const { data, error } = await db().from('encounter_templates').update(row()).eq('id', body.id).select().single()
+        if (!error) return mapSaved(data as Record<string, unknown>)
         if (rememberMissingCharactersCol(error.message)) continue
         throwIf(error)
       }
@@ -1238,6 +1238,13 @@ export const supabaseApi: TableApi = {
     throwIf(loadErr)
     if (!existing) throw new Error('No live session')
     await updateLiveSession(String(existing.id), { encounter_instance_id: null, table_phase: 'table' })
+    return {}
+  },
+
+  async endSession(campaignId) {
+    await db().from('encounter_instances').update({ status: 'paused' }).eq('campaign_id', campaignId).eq('status', 'active')
+    const { error } = await db().from('live_sessions').delete().eq('campaign_id', campaignId)
+    throwIf(error)
     return {}
   },
 

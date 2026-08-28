@@ -82,6 +82,8 @@ export function TableHub({
   const tableScene = tableSceneBeat(parsedHub)
   const prevScene = adjacentSceneBeat(parsedHub, -1)
   const nextScene = adjacentSceneBeat(parsedHub, 1)
+  const runTemplateIds = new Set(parsedHub.beats.map((b) => b.templateId).filter(Boolean))
+  const extraTemplates = dm ? sortTemplates(dm.templates).filter((t) => !runTemplateIds.has(t.id)) : []
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:flex-row">
@@ -275,7 +277,7 @@ export function TableHub({
                           size="sm"
                           className="min-h-10 shrink-0"
                           variant={primary ? 'ember' : 'outline'}
-                          disabled={dm.busy || !beat.templateId || !t}
+                          disabled={dm.busy || !beat.templateId || !t || !ready}
                           onClick={() => {
                             if (t) setStartTpl(t)
                           }}
@@ -297,19 +299,45 @@ export function TableHub({
                           {[t.difficulty, t.objective, t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')}
                         </div>
                       </div>
-                      <Button size="sm" className="min-h-10 shrink-0" variant="ember" disabled={dm.busy} onClick={() => setStartTpl(t)}>
+                      <Button size="sm" className="min-h-10 shrink-0" variant="ember" disabled={dm.busy || !templateReady(t)} onClick={() => setStartTpl(t)}>
                         Start
                       </Button>
                     </li>
                   ))
                   : null}
-              {leftoverFights.length === 0 && dm.templates.length === 0 && (
+              {leftoverFights.length === 0 && extraTemplates.length === 0 && dm.templates.length === 0 && (
                 <li className="text-sm text-muted">Build an encounter in prep, add it to the run order, then start it from this table.</li>
               )}
-              {leftoverFights.length === 0 && dm.templates.length > 0 && parsedHub.beats.length > 0 && nextCombat === null && (
+              {leftoverFights.length === 0 && extraTemplates.length === 0 && dm.templates.length > 0 && parsedHub.beats.length > 0 && nextCombat === null && (
                 <li className="text-sm text-muted">Every encounter in the run is done. Start another from prep if the night runs long.</li>
               )}
             </ul>
+            {extraTemplates.length > 0 && parsedHub.beats.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-xs uppercase tracking-wider text-muted">Saved encounters</h3>
+                <p className="mt-1 text-xs text-muted">These are saved in Prep but not in tonight’s run yet. Start one here or add it in Run order.</p>
+                <ul className="mt-2 space-y-2">
+                  {extraTemplates.map((t) => (
+                    <li key={t.id} className="flex flex-col gap-2 rounded-lg border border-line bg-bg px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 truncate">
+                          {templateReady(t) && <Check className="h-4 w-4 shrink-0 text-moss" aria-label="Ready" />}
+                          <span className="truncate">{t.name}</span>
+                        </div>
+                        <div className="truncate text-xs text-muted">
+                          {templateReady(t)
+                            ? [t.difficulty, t.objective, t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')
+                            : 'Draft — finish the map and monsters in Prep'}
+                        </div>
+                      </div>
+                      <Button size="sm" className="min-h-10 shrink-0" variant="outline" disabled={dm.busy || !templateReady(t)} onClick={() => setStartTpl(t)}>
+                        Start
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 
