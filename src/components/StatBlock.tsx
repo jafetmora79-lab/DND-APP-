@@ -34,14 +34,14 @@ export function StatBlock({ monster, className }: { monster: Monster; className?
     ['CHA', monster.cha],
   ] as const
   return (
-    <article className={cn('parchment space-y-3 rounded-lg border border-line p-4', className)}>
+    <article className={cn('space-y-3 rounded-lg border border-line bg-panel/50 p-4 shadow-sm', className)}>
       <header>
         <h3 className="font-display text-xl text-gold-2">{monster.name}</h3>
         <p className="text-sm italic text-muted">
           {monster.size} {monster.creatureType}, {monster.alignment}
         </p>
       </header>
-      <div className="h-px bg-ember/70" />
+      <div className="h-px border-gold/30" />
       <Line label="Armor Class" value={`${monster.acValue}${monster.acNote ? ` (${monster.acNote})` : ''}`} />
       <Line label="Hit Points" value={`${monster.hpMax}${monster.hitDiceFormula ? ` (${monster.hitDiceFormula})` : ''}`} />
       <Line label="Speed" value={monster.speed} />
@@ -65,7 +65,7 @@ export function StatBlock({ monster, className }: { monster: Monster; className?
       <Line label="Languages" value={monster.languages} />
       <Line label="Challenge" value={`${monster.challengeRating} (${monster.xp.toLocaleString()} XP)`} />
       <Line label="Proficiency Bonus" value={signed(monster.proficiencyBonus)} />
-      <div className="h-px bg-ember/70" />
+      <div className="h-px border-gold/30" />
       <Entries title="Traits" items={monster.traits} />
       <Entries title="Actions" items={monster.actions} />
       <Entries title="Bonus Actions" items={monster.bonusActions} />

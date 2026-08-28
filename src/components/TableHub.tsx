@@ -125,12 +125,12 @@ export function TableHub({
       </div>
 
       <aside className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-line bg-panel xl:w-[28rem] xl:flex-none xl:border-l xl:border-t-0">
-        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-2 py-1 xl:hidden">
+        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-panel-2/30 px-2 py-1 xl:hidden">
           {(dm ? (['play', 'order', 'sheet'] as const) : (['order', 'sheet'] as const)).map((tab) => (
             <button
               key={tab}
               type="button"
-              className={cn('min-h-10 rounded px-3 py-1 text-sm capitalize', mobileTab === tab ? 'bg-gold text-bg' : 'text-muted')}
+              className={cn('min-h-10 rounded px-3 py-1 text-sm capitalize transition-all', mobileTab === tab ? 'bg-gold text-bg' : 'text-muted hover:text-ink')}
               onClick={() => setMobileTab(tab)}
             >
               {tab === 'play' ? 'Play' : tab === 'order' ? (playerView ? 'Campaign' : 'Run order') : 'Sheet'}
@@ -139,7 +139,7 @@ export function TableHub({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className={cn('border-b border-line p-3', mobileTab === 'play' || (!dm && mobileTab === 'sheet') ? 'block' : 'hidden xl:block')}>
-          <p className="text-xs uppercase tracking-[0.3em] text-gold">{campaignName}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold">{campaignName}</p>
           <h2 className="font-display text-xl text-gold-2">{dm ? 'The table' : 'Your character'}</h2>
           <p className="mt-1 text-sm text-muted">
             {dm
@@ -178,7 +178,7 @@ export function TableHub({
                 </div>
               )}
               {(pointer.now || pointer.next) && (
-                <div className="mt-3 rounded-md border border-line bg-bg px-3 py-2 text-sm">
+                <div className="mt-3 rounded-lg border border-line bg-panel/50 px-3 py-2 text-sm">
                   {pointer.now && (
                     <div>
                       <span className="text-[10px] uppercase tracking-wider text-muted">Now</span>
@@ -195,7 +195,7 @@ export function TableHub({
               )}
               {scenes.length > 0 && (
                 <select
-                  className="mt-3 h-10 min-h-10 w-full rounded-md border border-line bg-bg px-2 text-sm"
+                  className="mt-3 h-10 min-h-10 w-full rounded-lg border border-line bg-panel/50 px-2 text-sm"
                   aria-label="Campaign scene"
                   value={
                     scenes.find((s) => s.imageUrl === imageUrl || (!s.imageUrl && (s.caption === caption || s.title === caption) && !imageUrl))
@@ -228,12 +228,12 @@ export function TableHub({
                 <h3 className="text-xs uppercase tracking-wider text-muted">Paused fights</h3>
                 <ul className="mt-2 space-y-2">
                   {dm.paused.map((i) => (
-                    <li key={i.id} className="flex flex-col gap-2 rounded-lg border border-line bg-bg px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                    <li key={i.id} className="flex flex-col gap-2 rounded-lg border border-line bg-panel/50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
                         <div className="truncate">{i.name}</div>
                         <div className="text-xs text-muted">{i.roundNumber === 0 ? 'Initiative' : `Round ${i.roundNumber}`}</div>
                       </div>
-                      <Button size="sm" className="min-h-10 shrink-0" disabled={dm.busy} onClick={() => dm.onResume(i.id)}>
+                      <Button size="sm" className="h-8 min-h-10 shrink-0 px-3 text-xs" disabled={dm.busy} onClick={() => dm.onResume(i.id)}>
                         <Play className="h-4 w-4" /> Resume
                       </Button>
                     </li>
@@ -258,7 +258,7 @@ export function TableHub({
                   <li
                     key={row.key}
                     className={cn(
-                      'flex flex-col gap-2 rounded-lg border bg-bg px-3 py-2 sm:flex-row sm:items-center sm:justify-between',
+                      'flex flex-col gap-2 rounded-lg border bg-panel/50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between',
                       row.primary ? 'border-gold/50' : 'border-line',
                     )}
                   >
@@ -274,7 +274,7 @@ export function TableHub({
                     </div>
                     <Button
                       size="sm"
-                      className="min-h-10 shrink-0"
+                      className="h-8 min-h-10 shrink-0 px-3 text-xs"
                       variant={row.primary ? 'ember' : 'outline'}
                       disabled={dm.busy || !row.templateId || !t || !ready}
                       onClick={() => {
@@ -328,14 +328,14 @@ export function TableHub({
             {characters.length === 0 && <p className="text-sm text-muted">No characters in this campaign yet.</p>}
           </div>
           {selected && onShortRest && (
-            <div className="mb-3 rounded-md border border-line bg-bg p-2">
-              <div className="text-xs uppercase tracking-wider text-muted">Short rest — {selected.name}</div>
+            <div className="mb-3 rounded-lg border border-line bg-panel/50 p-3">
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted">Short rest — {selected.name}</div>
               <p className="mt-1 text-xs text-muted">
                 Type the HP recovered from hit dice ({selected.sheet.hitDice || 'none on sheet'}). The app does not roll.
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Input
-                  className="h-10 w-20"
+                  className="h-8 w-20"
                   inputMode="numeric"
                   placeholder="HP"
                   value={restHp}
@@ -344,8 +344,8 @@ export function TableHub({
                 />
                 <Button
                   size="sm"
-                  className="min-h-10"
-                  disabled={dm?.busy}
+                  className="h-8 px-3 text-xs"
+                  disabled={dm?.busy || !restHp}
                   onClick={() => {
                     const n = Number(restHp)
                     if (!Number.isFinite(n) || n < 0) return

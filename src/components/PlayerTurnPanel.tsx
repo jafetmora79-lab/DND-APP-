@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ActionEconomyBar } from '@/components/ActionEconomyBar'
+import { TurnIndicator } from '@/components/TurnIndicator'
 import { api } from '@/lib/api'
 import { attackOutcome, canTakeAttacks, characterSaveBonus, effectiveRollMode, hasHiddenAdvantage, parseAttackBonus, pickUsedD20 } from '@/lib/combat'
 import { OTHER_ACTION_LABELS } from '@/lib/combat-activity'
@@ -23,10 +25,6 @@ const DECLARE_KINDS = [
   { kind: 'hide', label: 'Hide' },
   { kind: 'other', label: 'Other' },
 ] as const
-
-function chip(used: boolean) {
-  return used ? 'USED' : 'READY'
-}
 
 type Props = {
   instanceId: string
@@ -301,39 +299,13 @@ export function PlayerTurnPanel({
   return (
     <div className="border-t border-line bg-panel px-3 py-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        {myTurn ? (
-          <div className="rounded-md border border-gold bg-gold/15 px-3 py-2">
-            <div className="font-display text-2xl tracking-wide text-gold">YOUR TURN</div>
-            <div className="text-sm text-ink">{combatant?.name ?? character.name}</div>
-          </div>
-        ) : setup ? (
-          <div>
-            <div className="font-display text-lg tracking-wide text-gold">Initiative</div>
-            <div className="text-sm text-muted">Enter the d20 you rolled. Dex is added for you.</div>
-          </div>
-        ) : (
-          <div>
-            <div className="font-display text-lg tracking-wide text-muted">WAITING</div>
-            <div className="text-sm text-muted">{whose ? `${whose.name}'s turn` : 'Waiting for a turn'}</div>
-          </div>
-        )}
-        {combatant && (
-          <div className="text-right text-xs text-muted">
-            <div>
-              Movement: <span className="stat-num text-ink">{combatant.movementRemaining}</span> ft remaining
-            </div>
-            <div className="mt-0.5 flex justify-end gap-2">
-              <span>Action {chip(Boolean(econ?.action))}</span>
-              <span>Bonus {chip(Boolean(econ?.bonus))}</span>
-              <span>Reaction {chip(Boolean(econ?.reaction))}</span>
-            </div>
-          </div>
-        )}
+        <TurnIndicator current={whose} myTurn={myTurn} combatantName={combatant?.name ?? character.name} setup={setup} />
+        {combatant && <ActionEconomyBar combatant={combatant} />}
       </div>
 
       {setup && combatant && (
-        <div className="mt-2 rounded-md border border-gold/40 bg-bg px-3 py-2">
-          <div className="text-xs uppercase tracking-wider text-gold">Your initiative</div>
+        <div className="mt-2 rounded-lg border border-gold/40 bg-panel/50 px-3 py-3">
+          <div className="text-xs uppercase tracking-wider text-gold font-semibold">Your initiative</div>
           <p className="mt-1 text-sm text-muted">
             Current total {combatant.initiative}. Enter the d20 from the table; Dex {character.sheet.initiativeBonus ?? ''} is added.
           </p>
@@ -355,6 +327,7 @@ export function PlayerTurnPanel({
                   .catch((e) => setMsg(e instanceof Error ? e.message : 'Could not set initiative'))
                   .finally(() => setBusy(false))
               }}
+              className="h-8 px-3 text-xs"
             >
               Submit
             </Button>
@@ -363,14 +336,14 @@ export function PlayerTurnPanel({
       )}
 
       {minePrompt && prompt?.kind === 'save' && (
-        <div className="mt-2 rounded-md border border-gold/50 bg-bg px-3 py-2">
-          <div className="text-xs uppercase tracking-wider text-gold">Saving throw</div>
+        <div className="mt-2 rounded-lg border border-gold/50 bg-panel/50 px-3 py-3">
+          <div className="text-xs uppercase tracking-wider text-gold font-semibold">Saving throw</div>
           <p className="mt-1 text-sm">
             {ABILITY_LABELS[(prompt.ability ?? 'dex') as Ability]} DC {prompt.dc ?? 13} · mod {saveMod >= 0 ? `+${saveMod}` : saveMod}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Input className="h-8 w-16" inputMode="numeric" placeholder="d20" value={saveD20} onChange={(e) => setSaveD20(e.target.value)} aria-label="Save d20" />
-            <Button size="sm" disabled={busy} onClick={() => void answerSave()}>
+            <Button size="sm" disabled={busy} onClick={() => void answerSave()} className="h-8 px-3 text-xs">
               Submit save
             </Button>
           </div>
@@ -378,14 +351,14 @@ export function PlayerTurnPanel({
       )}
 
       {minePrompt && prompt?.kind === 'reaction' && (
-        <div className="mt-2 rounded-md border border-gold/50 bg-bg px-3 py-2">
-          <div className="text-xs uppercase tracking-wider text-gold">Reaction requested</div>
+        <div className="mt-2 rounded-lg border border-gold/50 bg-panel/50 px-3 py-3">
+          <div className="text-xs uppercase tracking-wider text-gold font-semibold">Reaction requested</div>
           <Input className="mt-2 h-8" placeholder="Optional note or attack name" value={reactionNote} onChange={(e) => setReactionNote(e.target.value)} />
           <div className="mt-2 flex flex-wrap gap-2">
-            <Button size="sm" disabled={busy} onClick={() => void answerReaction(true)}>
+            <Button size="sm" disabled={busy} onClick={() => void answerReaction(true)} className="h-8 px-3 text-xs">
               Use reaction
             </Button>
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => void answerReaction(false)}>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => void answerReaction(false)} className="h-8 px-3 text-xs">
               Decline
             </Button>
           </div>
@@ -395,20 +368,20 @@ export function PlayerTurnPanel({
       {myTurn && combatant && !setup && (
         <>
           <div className="mt-2 flex flex-wrap gap-1">
-            <Button size="sm" variant={menu === 'action' || menu === 'attack' || menu === 'hide' || (menu === 'other' && slot === 'action') || menu === 'help' ? 'default' : 'outline'} disabled={Boolean(econ?.action)} onClick={() => openSlot('action')}>
+            <Button size="sm" variant={menu === 'action' || menu === 'attack' || menu === 'hide' || (menu === 'other' && slot === 'action') || menu === 'help' ? 'default' : 'outline'} disabled={Boolean(econ?.action)} onClick={() => openSlot('action')} className="h-8 px-3 text-xs">
               Action
             </Button>
-            <Button size="sm" variant={menu === 'bonus' || (menu === 'other' && slot === 'bonus') ? 'default' : 'outline'} disabled={Boolean(econ?.bonus)} onClick={() => openSlot('bonus')}>
+            <Button size="sm" variant={menu === 'bonus' || (menu === 'other' && slot === 'bonus') ? 'default' : 'outline'} disabled={Boolean(econ?.bonus)} onClick={() => openSlot('bonus')} className="h-8 px-3 text-xs">
               Bonus action
             </Button>
-            <Button size="sm" variant={menu === 'reaction' || (menu === 'other' && slot === 'reaction') ? 'default' : 'outline'} disabled={Boolean(econ?.reaction)} onClick={() => openSlot('reaction')}>
+            <Button size="sm" variant={menu === 'reaction' || (menu === 'other' && slot === 'reaction') ? 'default' : 'outline'} disabled={Boolean(econ?.reaction)} onClick={() => openSlot('reaction')} className="h-8 px-3 text-xs">
               Reaction
             </Button>
-            <Button size="sm" variant="ghost" disabled={busy} onClick={() => void endTurn()}>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => void endTurn()} className="h-8 px-3 text-xs">
               End turn
             </Button>
             {menu && (
-              <Button size="sm" variant="ghost" onClick={resetMenus}>
+              <Button size="sm" variant="ghost" onClick={resetMenus} className="h-8 px-3 text-xs">
                 Cancel
               </Button>
             )}
@@ -423,6 +396,7 @@ export function PlayerTurnPanel({
                   variant="outline"
                   disabled={busy || (k.kind === 'attack' && !canAct)}
                   onClick={() => onKind(k.kind)}
+                  className="h-8 px-3 text-xs"
                 >
                   {k.label}
                 </Button>
@@ -445,6 +419,7 @@ export function PlayerTurnPanel({
                     }
                     void declare('other', { other: label })
                   }}
+                  className="h-8 px-3 text-xs"
                 >
                   {label}
                 </Button>
@@ -455,37 +430,63 @@ export function PlayerTurnPanel({
           {menu === 'custom' && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Input className="h-8 min-w-[12rem] flex-1" placeholder="What do you do?" value={custom} onChange={(e) => setCustom(e.target.value)} />
-              <Button size="sm" disabled={busy || !custom.trim()} onClick={() => void declare('custom', { custom })}>
+              <Button size="sm" disabled={busy || !custom.trim()} onClick={() => void declare('custom', { custom })} className="h-8 px-3 text-xs">
                 Declare action
               </Button>
             </div>
           )}
 
           {menu === 'hide' && (
-            <div className="mt-2 rounded-md border border-gold/40 bg-bg px-3 py-2">
-              <div className="text-xs uppercase tracking-wider text-gold">Hide (Stealth)</div>
-              <p className="mt-1 text-sm text-muted">
-                {hideGate && !hideGate.ok
-                  ? hideGate.error
-                  : `No enemy can see you. DC ${hideDc} is the highest passive Perception among enemies. Enter the d20 from the table.`}
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Input className="h-8 w-16" inputMode="numeric" placeholder="d20" value={d20} onChange={(e) => setD20(e.target.value)} aria-label="Hide Stealth d20" />
-                <Button
-                  size="sm"
-                  disabled={busy || Boolean(hideGate && !hideGate.ok)}
-                  onClick={() => {
-                    const roll = Number(d20)
-                    if (!Number.isInteger(roll) || roll < 1 || roll > 20) {
-                      setMsg('Enter the d20 you rolled for Stealth (1–20).')
-                      return
-                    }
-                    void declare('hide', { d20: roll })
-                  }}
-                >
-                  Resolve Hide
-                </Button>
-              </div>
+            <div className="mt-2 rounded-lg border border-gold/40 bg-panel/50 px-3 py-3">
+              <div className="text-xs uppercase tracking-wider text-gold font-semibold">Hide (Stealth)</div>
+              {hideGate && !hideGate.ok ? (
+                <div className="mt-2">
+                  <p className="text-sm text-blood">{hideGate.error}</p>
+                  {hideGate.seenBy && hideGate.seenBy.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs text-muted">Enemies who can see you:</p>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {hideGate.seenBy.map((c) => (
+                          <span key={c.id} className="rounded-md px-2 py-1 text-xs bg-blood/20 text-blood">
+                            {c.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  <p className="text-sm text-muted">
+                    No enemy can see you. Break line of sight before hiding.
+                  </p>
+                  <div className="rounded-md border border-line bg-bg px-3 py-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted">Stealth DC</span>
+                      <span className="text-sm font-semibold text-gold-2">{hideDc}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted">Highest passive Perception among enemies</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input className="h-8 w-16" inputMode="numeric" placeholder="d20" value={d20} onChange={(e) => setD20(e.target.value)} aria-label="Hide Stealth d20" />
+                    <Button
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => {
+                        const roll = Number(d20)
+                        if (!Number.isInteger(roll) || roll < 1 || roll > 20) {
+                          setMsg('Enter the d20 you rolled for Stealth (1–20).')
+                          return
+                        }
+                        void declare('hide', { d20: roll })
+                      }}
+                      className="h-8 px-3 text-xs"
+                    >
+                      Resolve Hide
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -494,12 +495,12 @@ export function PlayerTurnPanel({
               <p className="text-xs text-muted">Tap an ally on the map or pick from the list.</p>
               <div className="mt-1 flex flex-wrap gap-1">
                 {others.map((c) => (
-                  <Button key={c.id} size="sm" variant={selectedId === c.id ? 'default' : 'outline'} onClick={() => onSelectedId(c.id)}>
+                  <Button key={c.id} size="sm" variant={selectedId === c.id ? 'default' : 'outline'} onClick={() => onSelectedId(c.id)} className="h-8 px-3 text-xs">
                     {c.name}
                   </Button>
                 ))}
               </div>
-              <Button className="mt-2" size="sm" disabled={busy || !selectedId} onClick={() => void declare('help', { targetId: selectedId ?? undefined })}>
+              <Button className="mt-2 w-full h-8 px-3 text-xs" size="sm" disabled={busy || !selectedId} onClick={() => void declare('help', { targetId: selectedId ?? undefined })}>
                 Help {target?.name ?? '…'}
               </Button>
             </div>
@@ -509,7 +510,7 @@ export function PlayerTurnPanel({
             <div className="mt-2 flex flex-wrap gap-1">
               {namedAttacks.length === 0 && <p className="text-xs text-muted">No named attacks on your sheet.</p>}
               {namedAttacks.map(({ atk, i }) => (
-                <Button key={`${atk.name}-${i}`} size="sm" variant="outline" disabled={!canAct} onClick={() => startAttack(atk, i)}>
+                <Button key={`${atk.name}-${i}`} size="sm" variant="outline" disabled={!canAct} onClick={() => startAttack(atk, i)} className="h-8 px-3 text-xs">
                   {atk.name} {atk.bonus || ''}
                 </Button>
               ))}
@@ -519,16 +520,49 @@ export function PlayerTurnPanel({
           {menu === 'attack' && pending && step === 'target' && (
             <div className="mt-2">
               <p className="text-sm text-muted">
-                {pending.attack.name} — tap a creature on the map or pick a target. Range is the DM’s call.
+                {pending.attack.name} — tap a creature on the map or pick a target. Range is the DM's call.
               </p>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {others.map((c) => (
-                  <Button key={c.id} size="sm" variant={selectedId === c.id ? 'default' : 'outline'} onClick={() => onSelectedId(c.id)}>
-                    {c.name} AC {c.ac}
-                  </Button>
-                ))}
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {others.map((c) => {
+                  const isTarget = selectedId === c.id
+                  const hasAdv = Boolean(combatant && hasHiddenAdvantage(combatant, c.id))
+                  const targetCover = map && combatant
+                    ? coverBonusBetween(
+                        map,
+                        tokens.find((t) => t.refId === combatant.id),
+                        tokens.find((t) => t.refId === c.id),
+                      )
+                    : 0
+                  const previewAc = c.ac + targetCover
+
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => onSelectedId(c.id)}
+                      className={cn(
+                        'rounded-lg border p-2.5 text-left transition-all',
+                        isTarget
+                          ? 'border-gold bg-gold/10 shadow-sm'
+                          : 'border-line bg-panel/50 hover:border-gold/50'
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">{c.name}</span>
+                        <div className="flex items-center gap-2">
+                          {hasAdv && <span className="text-[10px] uppercase text-gold">Adv</span>}
+                          <span className="text-xs text-muted">AC {previewAc}</span>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-3 text-xs text-muted">
+                        <span>HP: {c.hpCurrent}/{c.hpMax}</span>
+                        {targetCover > 0 && <span className="text-gold">+{targetCover} cover</span>}
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
-              <Button className="mt-2" size="sm" disabled={!selectedId} onClick={() => {
+              <Button className="mt-2 w-full h-8 px-3 text-xs" size="sm" disabled={!selectedId} onClick={() => {
                 const adv = Boolean(selectedId && combatant && hasHiddenAdvantage(combatant, selectedId))
                 setRollMode(adv ? 'advantage' : 'normal')
                 setStep('roll')
@@ -545,7 +579,7 @@ export function PlayerTurnPanel({
               </p>
               <div className="mt-1 flex flex-wrap gap-1">
                 {(['normal', 'advantage', 'disadvantage'] as const).map((m) => (
-                  <Button key={m} size="sm" variant={rollMode === m ? 'default' : 'outline'} onClick={() => setRollMode(m)}>
+                  <Button key={m} size="sm" variant={rollMode === m ? 'default' : 'outline'} onClick={() => setRollMode(m)} className="h-8 px-3 text-xs">
                     {m === 'normal' ? 'Normal' : m === 'advantage' ? 'Advantage' : 'Disadvantage'}
                   </Button>
                 ))}
@@ -557,7 +591,7 @@ export function PlayerTurnPanel({
                   <Input className="h-8 w-16" inputMode="numeric" placeholder="d20 b" value={d20b} onChange={(e) => setD20b(e.target.value)} aria-label="second d20" />
                 )}
                 {step === 'roll' && (
-                  <Button size="sm" disabled={busy} onClick={continueFromRoll}>
+                  <Button size="sm" disabled={busy} onClick={continueFromRoll} className="h-8 px-3 text-xs">
                     Continue
                   </Button>
                 )}
@@ -581,6 +615,7 @@ export function PlayerTurnPanel({
                       }
                       void submitAttack(dmg)
                     }}
+                    className="h-8 px-3 text-xs"
                   >
                     Resolve hit
                   </Button>

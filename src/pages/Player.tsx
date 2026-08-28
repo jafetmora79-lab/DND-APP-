@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Bell, BellOff, BookOpen, HeartPulse, Swords, User, X } from 'lucide-react'
+import { Bell, BellOff, HeartPulse, Swords, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CharacterSheet } from '@/components/CharacterSheet'
 import { EncounterOutcomeOverlay } from '@/components/EncounterOutcome'
 import { InitiativePopup } from '@/components/InitiativePopup'
 import { MapBoard } from '@/components/map/MapBoard'
+import { PartyOverview } from '@/components/PartyOverview'
 import { PlayerTurnPanel, type MapPickMode } from '@/components/PlayerTurnPanel'
 import { StatBlock } from '@/components/StatBlock'
 import { TableHub } from '@/components/TableHub'
@@ -216,9 +217,9 @@ export function Player() {
     const stage = tableAmbiance(snap.campaign.hub, snap.session)
     return (
       <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
-        <header className="flex items-center gap-2 border-b border-line px-3 py-2">
+        <header className="flex items-center gap-3 border-b border-line bg-panel-2/30 px-4 py-3">
           <div className="min-w-0 flex-1">
-            <div className="truncate font-display text-gold">{snap.campaign.name}</div>
+            <div className="truncate font-display text-sm text-gold-2">{snap.campaign.name}</div>
             <div className="truncate text-xs text-muted">{stage.caption || t('player.waiting')}</div>
           </div>
           {me && (
@@ -243,6 +244,18 @@ export function Player() {
           <Button
             size="sm"
             variant="outline"
+            className="h-8 px-3 text-xs"
+            onClick={() => {
+              haptic('tap')
+              setDrawer(true)
+            }}
+          >
+            <Users className="h-4 w-4" /> Party
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-3 text-xs"
             onClick={() => {
               logout()
               nav('/')
@@ -284,38 +297,25 @@ export function Player() {
             }
           }}
           className="fixed bottom-5 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full border border-gold/60 bg-gold text-bg shadow-[0_8px_24px_rgba(200,150,70,0.35)] transition active:scale-95"
-          aria-label="Open my character sheet"
+          aria-label="Open party overview"
         >
-          <User className="h-6 w-6" />
+          <Users className="h-6 w-6" />
         </button>
 
         {drawer && (
-          <div className="fixed inset-0 z-40 flex items-end bg-black/60 md:items-stretch md:justify-end">
-            <div className="flex h-[88dvh] w-full flex-col rounded-t-2xl border border-line bg-panel p-4 md:h-full md:max-w-lg md:rounded-none">
-              <div className="flex items-center justify-between">
-                <h2 className="font-display text-lg text-gold">Character sheets</h2>
-                <button type="button" onClick={() => setDrawer(false)} aria-label="Close">
-                  <X />
-                </button>
-              </div>
-              <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
-                {snap.characters.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className={cn('shrink-0 rounded-full border px-3 py-1 text-sm', sheetId === c.id ? 'border-gold bg-gold text-bg' : 'border-line')}
-                    onClick={() => {
-                      haptic('tap')
-                      setSheetId(c.id)
-                    }}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-              </div>
-              <div className="min-h-0 flex-1 overflow-hidden pt-2">{sheet}</div>
-            </div>
-          </div>
+          <PartyOverview
+            characters={snap.characters}
+            selectedId={sheetId}
+            onSelectCharacter={(id) => {
+              haptic('tap')
+              setSheetId(id)
+            }}
+            onClose={() => setDrawer(false)}
+            canEditId={user?.role === 'player' ? user.characterId : null}
+            onChange={(characterId, patch) => {
+              void api.patchCharacter(characterId, patch)
+            }}
+          />
         )}
       </div>
     )
@@ -332,9 +332,9 @@ export function Player() {
         </div>
       )}
 
-      <header className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+      <header className="flex shrink-0 items-center gap-3 border-b border-line bg-panel-2/30 px-4 py-3">
         <div className="min-w-0 flex-1">
-          <div className="truncate font-display text-gold">{snap.campaign.name}</div>
+          <div className="truncate font-display text-sm text-gold-2">{snap.campaign.name}</div>
           <div className="truncate text-xs text-muted">
             {isFightSetup(snap.session, snap.instance)
               ? t('player.initHint')
@@ -366,16 +366,17 @@ export function Player() {
           </button>
         )}
         {setup && (
-          <Button size="sm" variant="outline" onClick={() => { haptic('tap'); setInitOpen(true) }}>
+          <Button size="sm" variant="outline" className="h-8 px-3 text-xs" onClick={() => { haptic('tap'); setInitOpen(true) }}>
             {t('init.title')}
           </Button>
         )}
-        <Button size="sm" variant="outline" onClick={() => { haptic('tap'); setDrawer(true) }}>
-          <BookOpen className="h-4 w-4" /> <span className="hidden sm:inline">{t('player.sheets')}</span>
+        <Button size="sm" variant="outline" className="h-8 px-3 text-xs" onClick={() => { haptic('tap'); setDrawer(true) }}>
+          <Users className="h-4 w-4" /> Party
         </Button>
         <Button
           size="sm"
           variant="outline"
+          className="h-8 px-3 text-xs"
           onClick={() => {
             logout()
             nav('/')
@@ -387,11 +388,11 @@ export function Player() {
       </header>
       {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
 
-      <div className="flex shrink-0 gap-1 border-b border-line px-2 py-1 lg:hidden">
-        <button type="button" className={cn('rounded px-3 py-1 text-sm', tab === 'map' ? 'bg-gold text-bg' : 'text-muted')} onClick={() => { haptic('tap'); setTab('map') }}>
+      <div className="flex shrink-0 gap-1 border-b border-line bg-panel-2/30 px-2 py-1 lg:hidden">
+        <button type="button" className={cn('rounded px-3 py-1 text-sm transition-all', tab === 'map' ? 'bg-gold text-bg' : 'text-muted hover:text-ink')} onClick={() => { haptic('tap'); setTab('map') }}>
           {t('player.map')}
         </button>
-        <button type="button" className={cn('rounded px-3 py-1 text-sm', tab === 'tracker' ? 'bg-gold text-bg' : 'text-muted')} onClick={() => { haptic('tap'); setTab('tracker') }}>
+        <button type="button" className={cn('rounded px-3 py-1 text-sm transition-all', tab === 'tracker' ? 'bg-gold text-bg' : 'text-muted hover:text-ink')} onClick={() => { haptic('tap'); setTab('tracker') }}>
           {t('player.tracker')}
         </button>
       </div>
@@ -547,39 +548,26 @@ export function Player() {
             setDrawer(true)
           }}
           className="fixed bottom-5 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full border border-gold/60 bg-gold text-bg shadow-[0_8px_24px_rgba(200,150,70,0.35)] transition active:scale-95"
-          aria-label="Open my character sheet"
+          aria-label="Open party overview"
         >
-          <User className="h-6 w-6" />
+          <Users className="h-6 w-6" />
         </button>
       )}
 
       {drawer && (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/60 md:items-stretch md:justify-end">
-          <div className="flex h-[88dvh] w-full flex-col rounded-t-2xl border border-line bg-panel p-4 md:h-full md:max-w-lg md:rounded-none">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-lg text-gold">Character sheets</h2>
-              <button type="button" onClick={() => setDrawer(false)} aria-label="Close">
-                <X />
-              </button>
-            </div>
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
-              {snap.characters.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={cn('shrink-0 rounded-full border px-3 py-1 text-sm', sheetId === c.id ? 'border-gold bg-gold text-bg' : 'border-line')}
-                  onClick={() => {
-                    haptic('tap')
-                    setSheetId(c.id)
-                  }}
-                >
-                  {c.name}
-                </button>
-              ))}
-            </div>
-            <div className="min-h-0 flex-1 overflow-hidden pt-2">{sheet}</div>
-          </div>
-        </div>
+        <PartyOverview
+          characters={snap.characters}
+          selectedId={sheetId}
+          onSelectCharacter={(id) => {
+            haptic('tap')
+            setSheetId(id)
+          }}
+          onClose={() => setDrawer(false)}
+          canEditId={user?.role === 'player' ? user.characterId : null}
+          onChange={(characterId, patch) => {
+            void api.patchCharacter(characterId, patch)
+          }}
+        />
       )}
 
       {deathOpen && myCombatant && (

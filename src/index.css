@@ -150,10 +150,15 @@ select {
   border: 1px solid var(--color-line);
   border-radius: 0.75rem;
   background: var(--color-panel);
-  padding: 0.75rem;
+  padding: 0.5rem 0.55rem;
   box-shadow:
     0 1px 3px 0 rgba(0, 0, 0, 0.2),
     0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.dnd-panel:hover {
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .dnd-panel-label {
@@ -321,4 +326,47 @@ select {
 
 .animate-turn-bounce {
   animation: turn-bounce 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes pulse-gold {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(245, 158, 11, 0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-pulse-gold {
+  animation: pulse-gold 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
 }
