@@ -2,6 +2,7 @@ import { customAlphabet } from 'nanoid'
 import { publicAsset, tableEmail } from './config'
 import { emptySheet, type AuthUser, type BattleMap, type Combatant, type EncounterInstance, type FogState, type MapToken, type Monster, type NamedEntry, type PlayerCharacter } from './types'
 import { parseCharacterPdf } from './parse-pdf'
+import { safeStorageFileName, storageObjectPath } from './storage-key'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
 import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter, abilityMod } from './utils'
@@ -541,7 +542,7 @@ async function seedBestiary(dmId: string) {
 }
 
 async function uploadCharacterPdf(campaignId: string, characterId: string, file: File) {
-  const safeName = file.name.replace(/[^\w.-]+/g, '_') || 'character.pdf'
+  const safeName = safeStorageFileName(file.name.endsWith('.pdf') ? file.name : `${file.name}.pdf`)
   const relative = `${campaignId}/${characterId}/${safeName}`
   const attempts = [
     { bucket: 'pdfs', path: relative },
@@ -751,7 +752,7 @@ export const supabaseApi: TableApi = {
     const file = form.get('image') as File | null
     const name = String(form.get('name') || file?.name || 'Untitled map')
     if (!file) throw new Error('Map image required')
-    const path = `${campaignId}/${crypto.randomUUID()}-${file.name}`
+    const path = storageObjectPath(campaignId, file.name)
     const { error: upErr } = await db().storage.from('maps').upload(path, file, { upsert: true })
     if (upErr) {
       throw new Error(
@@ -784,7 +785,7 @@ export const supabaseApi: TableApi = {
     const { data: row, error: loadErr } = await db().from('maps').select('*').eq('id', id).single()
     throwIf(loadErr)
     const campaignId = String(row.campaign_id)
-    const path = `${campaignId}/${crypto.randomUUID()}-${file.name}`
+    const path = storageObjectPath(campaignId, file.name)
     const { error: upErr } = await db().storage.from('maps').upload(path, file, { upsert: true })
     if (upErr) {
       throw new Error(
@@ -1159,7 +1160,7 @@ export const supabaseApi: TableApi = {
       .maybeSingle()
     throwIf(loadErr)
     if (!existing) throw new Error('No live session')
-    const path = `${campaignId}/ambiance/${crypto.randomUUID()}-${file.name}`
+    const path = storageObjectPath(`${campaignId}/ambiance`, file.name)
     const { error: upErr } = await db().storage.from('maps').upload(path, file, { upsert: true })
     if (upErr) {
       throw new Error(
@@ -1174,7 +1175,7 @@ export const supabaseApi: TableApi = {
   },
 
   async uploadStageImage(campaignId, file) {
-    const path = `${campaignId}/stages/${crypto.randomUUID()}-${file.name}`
+    const path = storageObjectPath(`${campaignId}/stages`, file.name)
     const { error: upErr } = await db().storage.from('maps').upload(path, file, { upsert: true })
     if (upErr) {
       throw new Error(

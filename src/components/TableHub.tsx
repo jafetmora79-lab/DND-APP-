@@ -11,10 +11,20 @@ import { applyShortRestHp, type StartFightOpts } from '@/lib/turn-flow'
 import type { CampaignHub, CampaignStage, EncounterInstance, EncounterOutcome, EncounterTemplate, PlayerCharacter } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
+type SceneCommit = {
+  file: File
+  name: string
+  caption: string
+  afterTemplateId: string
+  beforeTemplateId: string
+  saveToCampaign: boolean
+}
+
 type DmProps = {
   caption: string
   onCaption: (value: string) => void
   onUpload: (file: File) => void
+  onCommitScene?: (scene: SceneCommit) => void
   onClearImage: () => void
   hasImage: boolean
   templates: EncounterTemplate[]
@@ -25,6 +35,8 @@ type DmProps = {
   activeFight?: boolean
   stages?: CampaignStage[]
   onSelectStage?: (stageId: string) => void
+  onHubChange?: (hub: CampaignHub) => void
+  onUploadStage?: (file: File) => Promise<string>
 }
 
 type Props = {
@@ -58,6 +70,7 @@ export function TableHub({
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [startTpl, setStartTpl] = useState<EncounterTemplate | null>(null)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [restHp, setRestHp] = useState('')
   const selected = characters.find((c) => c.id === selectedId)
 
@@ -85,7 +98,9 @@ export function TableHub({
               onChange={(e) => {
                 const file = e.target.files?.[0]
                 e.target.value = ''
-                if (file) dm.onUpload(file)
+                if (!file) return
+                if (dm.onCommitScene) setPendingFile(file)
+                else dm.onUpload(file)
               }}
             />
             <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={dm.busy}>
@@ -199,8 +214,17 @@ export function TableHub({
           {characters.length === 0 && <p className="text-sm text-muted">No characters in this campaign yet.</p>}
         </div>
         {hub && (
-          <div className="max-h-64 overflow-y-auto border-b border-line p-3">
-            <CampaignHubPanel hub={hub} characters={characters} templates={dm?.templates} canEdit={false} compact playerView={playerView} />
+          <div className={cn('overflow-y-auto border-b border-line p-3', dm?.onHubChange ? 'max-h-[32rem]' : 'max-h-64')}>
+            <CampaignHubPanel
+              hub={hub}
+              characters={characters}
+              templates={dm?.templates}
+              canEdit={Boolean(dm?.onHubChange)}
+              compact
+              playerView={playerView}
+              onChange={dm?.onHubChange}
+              onUploadImage={dm?.onUploadStage}
+            />
           </div>
         )}
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -250,6 +274,122 @@ export function TableHub({
           }}
         />
       )}
+      {pendingFile && dm?.onCommitScene && (
+        <SetSceneDialog
+          file={pendingFile}
+          templates={dm.templates}
+          defaultCaption={dm.caption}
+          busy={dm.busy}
+          onCancel={() => setPendingFile(null)}
+          onConfirm={(scene) => {
+            dm.onCommitScene?.(scene)
+            setPendingFile(null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function SetSceneDialog({
+  file,
+  templates,
+  defaultCaption,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  file: File
+  templates: EncounterTemplate[]
+  defaultCaption: string
+  busy: boolean
+  onCancel: () => void
+  onConfirm: (scene: SceneCommit) => void
+}) {
+  const stem = file.name.replace(/\.[^.]+$/, '')
+  const ordered = sortTemplates(templates)
+  const [name, setName] = useState(stem)
+  const [caption, setCaption] = useState(defaultCaption || stem)
+  const [afterTemplateId, setAfterTemplateId] = useState('')
+  const [beforeTemplateId, setBeforeTemplateId] = useState(ordered[0]?.id ?? '')
+  const [saveToCampaign, setSaveToCampaign] = useState(true)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-bg/70 p-4 sm:items-center" role="dialog" aria-labelledby="set-scene-title">
+      <div className="w-full max-w-md rounded-xl border border-line bg-panel p-4 shadow-xl">
+        <h2 id="set-scene-title" className="font-display text-xl text-gold-2">
+          Set scene
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          Show it on the table now. Save it to the campaign to pick which encounters it sits between, before the night starts.
+        </p>
+        <p className="mt-2 truncate text-xs text-muted">{file.name}</p>
+        <div className="mt-3 grid gap-2">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Scene name" />
+          <Input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Caption on the table" />
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={saveToCampaign} onChange={(e) => setSaveToCampaign(e.target.checked)} />
+            Save to campaign (between encounters)
+          </label>
+          {saveToCampaign && (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label className="grid gap-1 text-xs text-muted">
+                After
+                <select
+                  className="h-10 rounded-md border border-line bg-bg px-2 text-sm text-ink"
+                  value={afterTemplateId}
+                  onChange={(e) => setAfterTemplateId(e.target.value)}
+                >
+                  <option value="">Start of night</option>
+                  {ordered.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-xs text-muted">
+                Before
+                <select
+                  className="h-10 rounded-md border border-line bg-bg px-2 text-sm text-ink"
+                  value={beforeTemplateId}
+                  onChange={(e) => setBeforeTemplateId(e.target.value)}
+                >
+                  <option value="">End of night</option>
+                  {ordered.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+          {saveToCampaign && (
+            <p className="text-xs text-muted">{stagePlacementLabel({ afterTemplateId, beforeTemplateId }, ordered)}</p>
+          )}
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              onConfirm({
+                file,
+                name: name.trim() || stem,
+                caption,
+                afterTemplateId,
+                beforeTemplateId,
+                saveToCampaign,
+              })
+            }
+          >
+            {busy ? 'Saving…' : saveToCampaign ? 'Save & show' : 'Show on table'}
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }
