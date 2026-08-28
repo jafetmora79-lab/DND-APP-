@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { AmbianceStage } from '@/components/AmbianceStage'
 import { StartFightDialog } from '@/components/StartFightDialog'
 import { CampaignHubPanel } from '@/components/CampaignHubPanel'
-import { adjacentSceneBeat, currentRunPointer, isCombatBeat, nextUpcomingCombat, parseHub, remainingCombatBeats, sceneBeats, sortTemplates, tableSceneBeat } from '@/lib/campaign-hub'
+import { adjacentBeat, currentRunPointer, isCombatBeat, parseHub, remainingStartEncounters, sceneBeats, tableSceneBeat } from '@/lib/campaign-hub'
 import { templateReady } from '@/lib/token-look'
 import { applyShortRestHp, type StartFightOpts } from '@/lib/turn-flow'
 import type { CampaignHub, EncounterInstance, EncounterOutcome, EncounterTemplate, PlayerCharacter } from '@/lib/types'
@@ -77,13 +77,10 @@ export function TableHub({
   const parsedHub = parseHub(hub)
   const pointer = currentRunPointer(parsedHub)
   const scenes = sceneBeats(parsedHub)
-  const nextCombat = nextUpcomingCombat(parsedHub)
-  const leftoverFights = remainingCombatBeats(parsedHub)
+  const startEncounters = dm ? remainingStartEncounters(parsedHub, dm.templates) : []
   const tableScene = tableSceneBeat(parsedHub)
-  const prevScene = adjacentSceneBeat(parsedHub, -1)
-  const nextScene = adjacentSceneBeat(parsedHub, 1)
-  const runTemplateIds = new Set(parsedHub.beats.map((b) => b.templateId).filter(Boolean))
-  const extraTemplates = dm ? sortTemplates(dm.templates).filter((t) => !runTemplateIds.has(t.id)) : []
+  const prevBeat = adjacentBeat(parsedHub, -1)
+  const nextBeat = adjacentBeat(parsedHub, 1)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:flex-row">
@@ -156,26 +153,26 @@ export function TableHub({
                   Show opening scene
                 </Button>
               )}
-              {dm.onStepScene && scenes.length > 1 && (
+              {dm.onStepScene && parsedHub.beats.length > 1 && (
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <Button
                     size="sm"
                     variant="outline"
                     className="min-h-10"
-                    disabled={dm.busy || !prevScene}
+                    disabled={dm.busy || !prevBeat}
                     onClick={() => dm.onStepScene?.(-1)}
                   >
                     <ChevronLeft className="h-4 w-4" />
-                    Previous scene
+                    Previous
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     className="min-h-10"
-                    disabled={dm.busy || !nextScene}
+                    disabled={dm.busy || !nextBeat}
                     onClick={() => dm.onStepScene?.(1)}
                   >
-                    Next scene
+                    Next
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
@@ -246,98 +243,56 @@ export function TableHub({
             )}
             <h3 className="text-xs uppercase tracking-wider text-muted">Start encounter</h3>
             <ul className="mt-2 space-y-2">
-              {leftoverFights.length > 0
-                ? leftoverFights.map((beat, i) => {
-                    const t = dm.templates.find((x) => x.id === beat.templateId)
-                    const ready = t ? templateReady(t) : false
-                    const primary = i === 0
-                    return (
-                      <li
-                        key={beat.id}
-                        className={cn(
-                          'flex flex-col gap-2 rounded-lg border bg-bg px-3 py-2 sm:flex-row sm:items-center sm:justify-between',
-                          primary ? 'border-gold/50' : 'border-line',
-                        )}
-                      >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 truncate">
-                            {ready && <Check className="h-4 w-4 shrink-0 text-moss" aria-label="Ready" />}
-                            <span className="truncate">{beat.title || t?.name || 'Encounter'}</span>
-                          </div>
-                          <div className="truncate text-xs text-muted">
-                            {primary ? 'Next in the run' : 'Later'}
-                            {t
-                              ? ` · ${[t.difficulty, t.objective, t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')}`
-                              : beat.templateId
-                                ? ' · Template missing — pick it in Prep'
-                                : ''}
-                          </div>
-                        </div>
-                        <Button
-                          size="sm"
-                          className="min-h-10 shrink-0"
-                          variant={primary ? 'ember' : 'outline'}
-                          disabled={dm.busy || !beat.templateId || !t || !ready}
-                          onClick={() => {
-                            if (t) setStartTpl(t)
-                          }}
-                        >
-                          Start
-                        </Button>
-                      </li>
-                    )
-                  })
-                : parsedHub.beats.length === 0
-                  ? sortTemplates(dm.templates).map((t) => (
-                    <li key={t.id} className="flex flex-col gap-2 rounded-lg border border-line bg-bg px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 truncate">
-                          {templateReady(t) && <Check className="h-4 w-4 shrink-0 text-moss" aria-label="Ready" />}
-                          <span className="truncate">{t.name}</span>
-                        </div>
-                        <div className="truncate text-xs text-muted">
-                          {[t.difficulty, t.objective, t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')}
-                        </div>
+              {startEncounters.map((row) => {
+                const t = row.template
+                const ready = t ? templateReady(t) : false
+                const detail = t
+                  ? templateReady(t)
+                    ? [t.difficulty, t.objective, t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')
+                    : 'Draft — finish the map and monsters in Prep'
+                  : row.templateId
+                    ? 'Template missing — pick it in Prep'
+                    : 'No map linked — pick the encounter in Prep'
+                const when = row.primary ? 'Next in the run' : row.fromRun ? 'Later in the run' : 'Saved in Prep'
+                return (
+                  <li
+                    key={row.key}
+                    className={cn(
+                      'flex flex-col gap-2 rounded-lg border bg-bg px-3 py-2 sm:flex-row sm:items-center sm:justify-between',
+                      row.primary ? 'border-gold/50' : 'border-line',
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 truncate">
+                        {ready && <Check className="h-4 w-4 shrink-0 text-moss" aria-label="Ready" />}
+                        <span className="truncate">{row.title}</span>
                       </div>
-                      <Button size="sm" className="min-h-10 shrink-0" variant="ember" disabled={dm.busy || !templateReady(t)} onClick={() => setStartTpl(t)}>
-                        Start
-                      </Button>
-                    </li>
-                  ))
-                  : null}
-              {leftoverFights.length === 0 && extraTemplates.length === 0 && dm.templates.length === 0 && (
+                      <div className="truncate text-xs text-muted">
+                        {when}
+                        {detail ? ` · ${detail}` : ''}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="min-h-10 shrink-0"
+                      variant={row.primary ? 'ember' : 'outline'}
+                      disabled={dm.busy || !row.templateId || !t || !ready}
+                      onClick={() => {
+                        if (t) setStartTpl(t)
+                      }}
+                    >
+                      Start
+                    </Button>
+                  </li>
+                )
+              })}
+              {startEncounters.length === 0 && dm.templates.length === 0 && (
                 <li className="text-sm text-muted">Build an encounter in prep, add it to the run order, then start it from this table.</li>
               )}
-              {leftoverFights.length === 0 && extraTemplates.length === 0 && dm.templates.length > 0 && parsedHub.beats.length > 0 && nextCombat === null && (
+              {startEncounters.length === 0 && dm.templates.length > 0 && (
                 <li className="text-sm text-muted">Every encounter in the run is done. Start another from prep if the night runs long.</li>
               )}
             </ul>
-            {extraTemplates.length > 0 && parsedHub.beats.length > 0 && (
-              <div className="mt-4">
-                <h3 className="text-xs uppercase tracking-wider text-muted">Saved encounters</h3>
-                <p className="mt-1 text-xs text-muted">These are saved in Prep but not in tonight’s run yet. Start one here or add it in Run order.</p>
-                <ul className="mt-2 space-y-2">
-                  {extraTemplates.map((t) => (
-                    <li key={t.id} className="flex flex-col gap-2 rounded-lg border border-line bg-bg px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 truncate">
-                          {templateReady(t) && <Check className="h-4 w-4 shrink-0 text-moss" aria-label="Ready" />}
-                          <span className="truncate">{t.name}</span>
-                        </div>
-                        <div className="truncate text-xs text-muted">
-                          {templateReady(t)
-                            ? [t.difficulty, t.objective, t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')
-                            : 'Draft — finish the map and monsters in Prep'}
-                        </div>
-                      </div>
-                      <Button size="sm" className="min-h-10 shrink-0" variant="outline" disabled={dm.busy || !templateReady(t)} onClick={() => setStartTpl(t)}>
-                        Start
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
         )}
 

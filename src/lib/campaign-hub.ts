@@ -317,6 +317,19 @@ export function adjacentSceneBeat(hub: CampaignHub | null | undefined, direction
   return scenes[nextIdx] ?? null
 }
 
+/** Walk scenery and fights together so Next does not skip an encounter. */
+export function adjacentBeat(hub: CampaignHub | null | undefined, direction: -1 | 1): SessionBeat | null {
+  const parsed = parseHub(hub)
+  const beats = parsed.beats
+  if (beats.length === 0) return null
+  const pointer = currentRunPointer(parsed)
+  const currentId = pointer.now?.id
+  const idx = currentId ? beats.findIndex((b) => b.id === currentId) : -1
+  const nextIdx = idx < 0 ? (direction > 0 ? 0 : beats.length - 1) : idx + direction
+  if (nextIdx < 0 || nextIdx >= beats.length) return null
+  return beats[nextIdx] ?? null
+}
+
 /** Image and caption the table should show. An active scene's picture wins over a stale tavern session. */
 export function tableAmbiance(
   hub: CampaignHub | null | undefined,
@@ -372,6 +385,59 @@ export function nextUpcomingCombat(hub: CampaignHub): SessionBeat | null {
 
 export function remainingCombatBeats(hub: CampaignHub): SessionBeat[] {
   return parseHub(hub).beats.filter((b) => isCombatBeat(b) && b.status !== 'done')
+}
+
+export type StartEncounterChoice<T extends { id: string; name: string } = EncounterTemplate> = {
+  key: string
+  title: string
+  templateId: string
+  template: T | null
+  primary: boolean
+  fromRun: boolean
+}
+
+/** Leftover run fights first, then every saved template that is not already listed and not done. */
+export function remainingStartEncounters<T extends { id: string; name: string }>(
+  hub: CampaignHub | null | undefined,
+  templates: T[],
+): StartEncounterChoice<T>[] {
+  const parsed = parseHub(hub)
+  const leftover = remainingCombatBeats(parsed)
+  const listedIds = new Set<string>()
+  const rows: StartEncounterChoice<T>[] = []
+
+  for (const beat of leftover) {
+    const templateId = String(beat.templateId ?? '')
+    if (templateId) listedIds.add(templateId)
+    const template = templateId ? templates.find((t) => t.id === templateId) ?? null : null
+    rows.push({
+      key: beat.id,
+      title: beat.title || template?.name || 'Encounter',
+      templateId,
+      template,
+      primary: rows.length === 0,
+      fromRun: true,
+    })
+  }
+
+  const doneIds = new Set(
+    parsed.beats.filter((b) => isCombatBeat(b) && b.status === 'done' && b.templateId).map((b) => b.templateId),
+  )
+
+  for (const template of sortTemplates(templates)) {
+    if (listedIds.has(template.id) || doneIds.has(template.id)) continue
+    listedIds.add(template.id)
+    rows.push({
+      key: `saved-${template.id}`,
+      title: template.name,
+      templateId: template.id,
+      template,
+      primary: rows.length === 0,
+      fromRun: false,
+    })
+  }
+
+  return rows
 }
 
 /** Put a saved encounter into the run if it is not already there, so Live can start it. */
