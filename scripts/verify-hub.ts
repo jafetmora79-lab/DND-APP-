@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import {
+  adjacentBeat,
   applyEncounterRewards,
   emptyHub,
   ensureCombatBeatForTemplate,
@@ -9,6 +10,7 @@ import {
   openingSceneBeat,
   parseBrief,
   parseHub,
+  remainingStartEncounters,
   sceneAfterEncounter,
   sortTemplates,
   stageAfterTemplate,
@@ -196,6 +198,53 @@ check('saving an encounter adds it to the run order once', () => {
   assert.equal(once.beats[1]?.kind, 'combat')
   const twice = ensureCombatBeatForTemplate(once, { id: 't-map1', name: 'Map 01' })
   assert.equal(twice.beats.filter((b) => b.templateId === 't-map1').length, 1)
+})
+
+check('Next in the run lands on the encounter between scenes', () => {
+  const hub = parseHub({
+    beats: [
+      { id: 'b0', kind: 'social', title: 'Tavern', notes: '', templateId: '', status: 'active', imageUrl: '/inn.jpg', caption: 'Fire' },
+      { id: 'b1', kind: 'combat', title: 'Ambush', notes: '', templateId: 't1', status: 'upcoming' },
+      { id: 'b2', kind: 'travel', title: 'Road', notes: '', templateId: '', status: 'upcoming', imageUrl: '/road.jpg', caption: 'Dust' },
+    ],
+  })
+  const next = adjacentBeat(hub, 1)
+  assert.equal(next?.id, 'b1')
+  assert.equal(next?.kind, 'combat')
+  const afterFight = adjacentBeat(markBeatActive(hub, 'b1'), 1)
+  assert.equal(afterFight?.id, 'b2')
+  assert.equal(adjacentBeat(hub, -1), null)
+  const fromRoad = markBeatActive(hub, 'b2')
+  assert.equal(adjacentBeat(fromRoad, -1)?.id, 'b1')
+})
+
+check('Start encounter lists leftover fights and every remaining template', () => {
+  const hub = parseHub({
+    beats: [
+      { id: 'b0', kind: 'social', title: 'Tavern', notes: '', templateId: '', status: 'active' },
+      { id: 'b1', kind: 'combat', title: 'Ambush', notes: '', templateId: 't1', status: 'upcoming' },
+      { id: 'b2', kind: 'combat', title: 'Boss', notes: '', templateId: 't2', status: 'done' },
+    ],
+  })
+  const templates = [
+    { id: 't1', name: 'Ambush' },
+    { id: 't2', name: 'Boss' },
+    { id: 't3', name: 'Side fight' },
+    { id: 't0', name: 'Draft cave' },
+  ]
+  const rows = remainingStartEncounters(hub, templates)
+  assert.deepEqual(rows.map((r) => r.templateId), ['t1', 't0', 't3'])
+  assert.equal(rows[0]?.primary, true)
+  assert.equal(rows[0]?.fromRun, true)
+  assert.equal(rows[1]?.fromRun, false)
+  assert.equal(rows.some((r) => r.templateId === 't2'), false)
+
+  const scenesOnly = parseHub({
+    beats: [{ id: 's0', kind: 'social', title: 'Acto I', notes: '', templateId: '', status: 'active' }],
+  })
+  const fromPrep = remainingStartEncounters(scenesOnly, templates)
+  assert.deepEqual(fromPrep.map((r) => r.templateId), ['t1', 't2', 't0', 't3'])
+  assert.equal(fromPrep[0]?.primary, true)
 })
 
 console.log('all hub checks passed')

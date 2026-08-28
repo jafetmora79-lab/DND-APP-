@@ -22,7 +22,7 @@ import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
 import { ABILITIES, ABILITY_LABELS, type Ability, type Attack, type EncounterInstance, type EncounterSnapshot, type EncounterTemplate, type FogState, type Monster, type RollMode } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
-import { adjacentSceneBeat, ambianceFromBeat, emptyBeat, markBeatActive, markBeatForTemplate, markOpeningActive, openingSceneBeat, parseHub, sortTemplates, tableAmbiance } from '@/lib/campaign-hub'
+import { adjacentBeat, ambianceFromBeat, emptyBeat, ensureCombatBeatForTemplate, markBeatActive, markBeatForTemplate, markOpeningActive, openingSceneBeat, parseHub, sortTemplates, tableAmbiance } from '@/lib/campaign-hub'
 import { asCombatantLike, standingEnemies, type StartFightOpts } from '@/lib/turn-flow'
 import { applyLightingFog, coverBonusBetween, fogWithLighting, parseLighting, type Lighting } from '@/lib/vision'
 
@@ -179,9 +179,13 @@ export function Live() {
       const r = await api.startInstance(campaignId, templateId, opts)
       await api.openSession(campaignId, r.instanceId, { tablePhase: 'setup' })
       const hub = parseHub(snap?.campaign.hub)
-      if (hub.beats.some((b) => b.templateId === templateId)) {
-        await api.patchCampaign(campaignId, { hub: markBeatForTemplate(hub, templateId, 'active') })
-      }
+      const named = templates.find((x) => x.id === templateId)
+      const nextHub = markBeatForTemplate(
+        ensureCombatBeatForTemplate(hub, { id: templateId, name: named?.name ?? 'Encounter' }),
+        templateId,
+        'active',
+      )
+      await api.patchCampaign(campaignId, { hub: nextHub })
       setPickerOpen(false)
       setPickerTpl(null)
       setFinalizeOpen(false)
@@ -416,7 +420,7 @@ export function Live() {
   async function onStepScene(direction: -1 | 1) {
     if (!campaignId) return
     const current = parseHub(snap?.campaign.hub)
-    const beat = adjacentSceneBeat(current, direction)
+    const beat = adjacentBeat(current, direction)
     if (!beat) return
     await onSelectScene(beat.id)
   }
