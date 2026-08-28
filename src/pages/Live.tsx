@@ -62,11 +62,7 @@ export function Live() {
 
   const load = useCallback(async () => {
     if (!campaignId) return
-    let live = await api.live(campaignId)
-    if (!live.session) {
-      await api.ensureSession(campaignId)
-      live = await api.live(campaignId)
-    }
+    const live = await api.live(campaignId)
     const [t, i, b] = await Promise.all([api.templates(campaignId), api.instances(campaignId), api.bestiary()])
     setSnap(live)
     setTemplates(t.templates)
@@ -427,10 +423,11 @@ export function Live() {
 
   async function onStartCampaign() {
     if (!campaignId) return
-    const hub = markOpeningActive(parseHub(snap?.campaign.hub))
-    const ambiance = ambianceFromBeat(openingSceneBeat(hub))
     setBusy(true)
     try {
+      await api.ensureSession(campaignId)
+      const hub = markOpeningActive(parseHub(snap?.campaign.hub))
+      const ambiance = ambianceFromBeat(openingSceneBeat(hub))
       await api.patchCampaign(campaignId, { hub })
       if (ambiance) {
         await api.patchSession(campaignId, {
@@ -441,6 +438,20 @@ export function Live() {
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not start the campaign')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onEndCampaign() {
+    if (!campaignId) return
+    if (!window.confirm('End tonight’s table? Players will be sent away and the join code will stop working. Start campaign when you want it open again.')) return
+    setBusy(true)
+    try {
+      await api.endSession(campaignId)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not end the campaign')
     } finally {
       setBusy(false)
     }
@@ -476,6 +487,36 @@ export function Live() {
 
   const stage = tableAmbiance(snap.campaign.hub, snap.session)
 
+  if (!snap.session) {
+    return (
+      <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
+        <header className="flex items-center gap-2 border-b border-line px-3 py-2">
+          <Link to={`/dm/${campaignId}`} className="min-w-0 truncate font-display text-gold">
+            {snap.campaign.name}
+          </Link>
+          <span className="hidden text-muted sm:inline">/</span>
+          <span className="hidden truncate sm:inline">Table closed</span>
+          <LanguageToggle />
+        </header>
+        {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+          <h1 className="font-display text-3xl text-gold-2">Tonight’s table is closed</h1>
+          <p className="max-w-md text-sm text-muted">
+            Start the campaign when you want players to join. End campaign closes the table and tonight’s join code so it is not hosted forever.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button disabled={busy} onClick={() => void onStartCampaign()}>
+              Start campaign
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to={`/dm/${campaignId}`}>Back to prep</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const joinActions = (
     <>
       <div className="rounded-md border border-gold/40 bg-panel px-3 py-1 font-mono text-sm tracking-[0.2em] text-gold-2">
@@ -502,6 +543,9 @@ export function Live() {
         onClick={() => api.openSession(campaignId!, instance?.id ?? null, { rotateJoinCode: true }).then(load)}
       >
         New join code
+      </Button>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={() => void onEndCampaign()}>
+        End campaign
       </Button>
     </>
   )
@@ -595,6 +639,9 @@ export function Live() {
           <Play className="h-4 w-4" /> Resume
         </Button>
       )}
+      <Button size="sm" variant="ghost" disabled={busy} onClick={() => void onEndCampaign()}>
+        End campaign
+      </Button>
     </>
   )
 

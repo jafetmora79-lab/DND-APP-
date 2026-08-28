@@ -40,6 +40,7 @@ const en = {
   'prep.title': 'Prep library',
   'prep.allCampaigns': 'All campaigns',
   'prep.openLive': 'Start campaign',
+  'prep.endLive': 'End campaign',
   'prep.tab.campaign': 'Run order',
   'prep.tab.maps': 'Maps',
   'prep.tab.bestiary': 'Bestiary',
@@ -52,6 +53,8 @@ const en = {
   'prep.createCharacter': 'Create character',
   'prep.characterHint':
     'Create a character to mint a personal code. Players use that code plus tonight’s join code from any device, any week.',
+  'player.ended': 'The DM ended tonight’s table.',
+  'player.endedHint': 'Tonight’s join code no longer works. Wait for the DM to start the campaign again.',
   'player.leave': 'Leave',
   'player.sheets': 'Sheets',
   'player.map': 'Map',
@@ -264,6 +267,7 @@ const es: Record<keyof typeof en, string> = {
   'prep.title': 'Biblioteca de preparación',
   'prep.allCampaigns': 'Todas las campañas',
   'prep.openLive': 'Iniciar campaña',
+  'prep.endLive': 'Terminar campaña',
   'prep.tab.campaign': 'Secuencia',
   'prep.tab.maps': 'Mapas',
   'prep.tab.bestiary': 'Bestiario',
@@ -276,6 +280,8 @@ const es: Record<keyof typeof en, string> = {
   'prep.createCharacter': 'Crear personaje',
   'prep.characterHint':
     'Crea un personaje para generar un código personal. Los jugadores usan ese código más el de la mesa de esta noche, desde cualquier dispositivo, cualquier semana.',
+  'player.ended': 'El DM cerró la mesa de esta noche.',
+  'player.endedHint': 'El código de la mesa ya no funciona. Espera a que el DM inicie la campaña de nuevo.',
   'player.leave': 'Salir',
   'player.sheets': 'Hojas',
   'player.map': 'Mapa',
