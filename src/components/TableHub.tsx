@@ -5,18 +5,17 @@ import { Input } from '@/components/ui/input'
 import { AmbianceStage } from '@/components/AmbianceStage'
 import { StartFightDialog } from '@/components/StartFightDialog'
 import { CampaignHubPanel } from '@/components/CampaignHubPanel'
-import { sortTemplates, stagePlacementLabel } from '@/lib/campaign-hub'
+import { currentRunPointer, isCombatBeat, nextUpcomingCombat, parseHub, remainingCombatBeats, sceneBeats, sortTemplates } from '@/lib/campaign-hub'
 import { templateReady } from '@/lib/token-look'
 import { applyShortRestHp, type StartFightOpts } from '@/lib/turn-flow'
-import type { CampaignHub, CampaignStage, EncounterInstance, EncounterOutcome, EncounterTemplate, PlayerCharacter } from '@/lib/types'
+import type { CampaignHub, EncounterInstance, EncounterOutcome, EncounterTemplate, PlayerCharacter } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 type SceneCommit = {
   file: File
   name: string
   caption: string
-  afterTemplateId: string
-  beforeTemplateId: string
+  insertAfterBeatId: string
   saveToCampaign: boolean
 }
 
@@ -33,10 +32,10 @@ type DmProps = {
   onResume: (instanceId: string) => void
   busy: boolean
   activeFight?: boolean
-  stages?: CampaignStage[]
-  onSelectStage?: (stageId: string) => void
+  onSelectScene?: (beatId: string) => void
   onHubChange?: (hub: CampaignHub) => void
   onUploadStage?: (file: File) => Promise<string>
+  onStartCampaign?: () => void
 }
 
 type Props = {
@@ -73,6 +72,11 @@ export function TableHub({
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [restHp, setRestHp] = useState('')
   const selected = characters.find((c) => c.id === selectedId)
+  const parsedHub = parseHub(hub)
+  const pointer = currentRunPointer(parsedHub)
+  const scenes = sceneBeats(parsedHub)
+  const nextCombat = nextUpcomingCombat(parsedHub)
+  const leftoverFights = remainingCombatBeats(parsedHub)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col lg:flex-row overflow-hidden">
@@ -122,22 +126,46 @@ export function TableHub({
           <h2 className="font-display text-xl text-gold-2">{dm ? 'The table' : 'Your character'}</h2>
           <p className="mt-1 text-sm text-muted">
             {dm
-              ? 'Talk, travel, and plan here. Start a fight when you are ready — the join code stays the same. Table during combat pauses the fight; Finalize ends it.'
+              ? 'The campaign is live. Narrate this scene, then start the next encounter when you need a fight. Finalize that fight and the next scene in your run order comes up.'
               : 'This is the campaign table. Your sheet stays open while the party talks, travels, or waits on the next fight.'}
           </p>
           {dm && (
             <>
-              {dm.stages && dm.stages.length > 0 && (
+              {dm.onStartCampaign && parsedHub.beats.length > 0 && (
+                <Button className="mt-3 w-full" size="sm" disabled={dm.busy} onClick={dm.onStartCampaign}>
+                  Show opening scene
+                </Button>
+              )}
+              {(pointer.now || pointer.next) && (
+                <div className="mt-3 rounded-md border border-line bg-bg px-3 py-2 text-sm">
+                  {pointer.now && (
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-muted">Now</span>
+                      <div className="font-medium">{pointer.now.title}</div>
+                    </div>
+                  )}
+                  {pointer.next && (
+                    <div className={pointer.now ? 'mt-2' : ''}>
+                      <span className="text-[10px] uppercase tracking-wider text-muted">Next</span>
+                      <div>{isCombatBeat(pointer.next) ? `Encounter — ${pointer.next.title}` : pointer.next.title}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {scenes.length > 0 && (
                 <select
                   className="mt-3 h-10 w-full rounded-md border border-line bg-bg px-2 text-sm"
                   aria-label="Campaign scene"
-                  value={dm.stages.find((s) => s.imageUrl === imageUrl || (!s.imageUrl && s.caption === caption && !imageUrl))?.id ?? ''}
-                  onChange={(e) => dm.onSelectStage?.(e.target.value)}
+                  value={
+                    scenes.find((s) => s.imageUrl === imageUrl || (!s.imageUrl && (s.caption === caption || s.title === caption) && !imageUrl))
+                      ?.id ?? ''
+                  }
+                  onChange={(e) => dm.onSelectScene?.(e.target.value)}
                 >
-                  <option value="">Choose a campaign scene…</option>
-                  {dm.stages.map((s) => (
+                  <option value="">Jump to a scene…</option>
+                  {scenes.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} — {stagePlacementLabel(s, dm.templates)}
+                      {s.title}
                     </option>
                   ))}
                 </select>
@@ -172,26 +200,69 @@ export function TableHub({
                 </ul>
               </section>
             )}
-            <h3 className="text-xs uppercase tracking-wider text-muted">Next encounter</h3>
+            <h3 className="text-xs uppercase tracking-wider text-muted">Start encounter</h3>
             <ul className="mt-2 space-y-2">
-              {sortTemplates(dm.templates).map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 truncate">
-                      {templateReady(t) && <Check className="h-4 w-4 shrink-0 text-moss" aria-label="Ready" />}
-                      <span className="truncate">{t.name}</span>
-                    </div>
-                    <div className="truncate text-xs text-muted">
-                      {[t.difficulty, t.objective, t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')}
-                    </div>
-                  </div>
-                  <Button size="sm" variant="ember" disabled={dm.busy} onClick={() => setStartTpl(t)}>
-                    Start
-                  </Button>
-                </li>
-              ))}
-              {dm.templates.length === 0 && (
-                <li className="text-sm text-muted">Build an encounter template in prep, then start it from this table.</li>
+              {leftoverFights.length > 0
+                ? leftoverFights.map((beat, i) => {
+                    const t = dm.templates.find((x) => x.id === beat.templateId)
+                    const ready = t ? templateReady(t) : false
+                    const primary = i === 0
+                    return (
+                      <li
+                        key={beat.id}
+                        className={cn(
+                          'flex items-center justify-between gap-2 rounded-lg border bg-bg px-3 py-2',
+                          primary ? 'border-gold/50' : 'border-line',
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 truncate">
+                            {ready && <Check className="h-4 w-4 shrink-0 text-moss" aria-label="Ready" />}
+                            <span className="truncate">{beat.title || t?.name || 'Encounter'}</span>
+                          </div>
+                          <div className="truncate text-xs text-muted">
+                            {primary ? 'Next in the run' : 'Later'}
+                            {t
+                              ? ` · ${[t.difficulty, t.objective, t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')}`
+                              : beat.templateId
+                                ? ' · Template missing — pick it in Prep'
+                                : ''}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={primary ? 'ember' : 'outline'}
+                          disabled={dm.busy || !beat.templateId}
+                          onClick={() => {
+                            if (t) setStartTpl(t)
+                          }}
+                        >
+                          Start
+                        </Button>
+                      </li>
+                    )
+                  })
+                : sortTemplates(dm.templates).map((t) => (
+                    <li key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 truncate">
+                          {templateReady(t) && <Check className="h-4 w-4 shrink-0 text-moss" aria-label="Ready" />}
+                          <span className="truncate">{t.name}</span>
+                        </div>
+                        <div className="truncate text-xs text-muted">
+                          {[t.difficulty, t.objective, t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')}
+                        </div>
+                      </div>
+                      <Button size="sm" variant="ember" disabled={dm.busy} onClick={() => setStartTpl(t)}>
+                        Start
+                      </Button>
+                    </li>
+                  ))}
+              {leftoverFights.length === 0 && dm.templates.length === 0 && (
+                <li className="text-sm text-muted">Build an encounter in prep, add it to the run order, then start it from this table.</li>
+              )}
+              {leftoverFights.length === 0 && dm.templates.length > 0 && parsedHub.beats.length > 0 && nextCombat === null && (
+                <li className="text-sm text-muted">Every encounter in the run is done. Start another from prep if the night runs long.</li>
               )}
             </ul>
           </div>
@@ -277,7 +348,7 @@ export function TableHub({
       {pendingFile && dm?.onCommitScene && (
         <SetSceneDialog
           file={pendingFile}
-          templates={dm.templates}
+          beats={parsedHub.beats}
           defaultCaption={dm.caption}
           busy={dm.busy}
           onCancel={() => setPendingFile(null)}
@@ -293,25 +364,23 @@ export function TableHub({
 
 function SetSceneDialog({
   file,
-  templates,
+  beats,
   defaultCaption,
   busy,
   onCancel,
   onConfirm,
 }: {
   file: File
-  templates: EncounterTemplate[]
+  beats: { id: string; title: string }[]
   defaultCaption: string
   busy: boolean
   onCancel: () => void
   onConfirm: (scene: SceneCommit) => void
 }) {
   const stem = file.name.replace(/\.[^.]+$/, '')
-  const ordered = sortTemplates(templates)
   const [name, setName] = useState(stem)
   const [caption, setCaption] = useState(defaultCaption || stem)
-  const [afterTemplateId, setAfterTemplateId] = useState('')
-  const [beforeTemplateId, setBeforeTemplateId] = useState(ordered[0]?.id ?? '')
+  const [insertAfterBeatId, setInsertAfterBeatId] = useState(beats.at(-1)?.id ?? '')
   const [saveToCampaign, setSaveToCampaign] = useState(true)
 
   return (
@@ -321,7 +390,7 @@ function SetSceneDialog({
           Set scene
         </h2>
         <p className="mt-1 text-sm text-muted">
-          Show it on the table now. Save it to the campaign to pick which encounters it sits between, before the night starts.
+          Show it on the table now. Save it into the run order so Live can return to it after the next fight.
         </p>
         <p className="mt-2 truncate text-xs text-muted">{file.name}</p>
         <div className="mt-3 grid gap-2">
@@ -329,44 +398,24 @@ function SetSceneDialog({
           <Input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Caption on the table" />
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={saveToCampaign} onChange={(e) => setSaveToCampaign(e.target.checked)} />
-            Save to campaign (between encounters)
+            Add to campaign run order
           </label>
           {saveToCampaign && (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <label className="grid gap-1 text-xs text-muted">
-                After
-                <select
-                  className="h-10 rounded-md border border-line bg-bg px-2 text-sm text-ink"
-                  value={afterTemplateId}
-                  onChange={(e) => setAfterTemplateId(e.target.value)}
-                >
-                  <option value="">Start of night</option>
-                  {ordered.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs text-muted">
-                Before
-                <select
-                  className="h-10 rounded-md border border-line bg-bg px-2 text-sm text-ink"
-                  value={beforeTemplateId}
-                  onChange={(e) => setBeforeTemplateId(e.target.value)}
-                >
-                  <option value="">End of night</option>
-                  {ordered.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          )}
-          {saveToCampaign && (
-            <p className="text-xs text-muted">{stagePlacementLabel({ afterTemplateId, beforeTemplateId }, ordered)}</p>
+            <label className="grid gap-1 text-xs text-muted">
+              Place in the run
+              <select
+                className="h-10 rounded-md border border-line bg-bg px-2 text-sm text-ink"
+                value={insertAfterBeatId}
+                onChange={(e) => setInsertAfterBeatId(e.target.value)}
+              >
+                <option value="">Start of campaign</option>
+                {beats.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    After {b.title}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
         </div>
         <div className="mt-4 flex justify-end gap-2">
@@ -380,8 +429,7 @@ function SetSceneDialog({
                 file,
                 name: name.trim() || stem,
                 caption,
-                afterTemplateId,
-                beforeTemplateId,
+                insertAfterBeatId,
                 saveToCampaign,
               })
             }

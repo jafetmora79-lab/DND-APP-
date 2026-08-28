@@ -1,5 +1,17 @@
 import assert from 'node:assert/strict'
-import { applyEncounterRewards, emptyHub, markBeatForTemplate, parseBrief, parseHub, sortTemplates, stageAfterTemplate, stageHasContent, stagePlacementLabel } from '../src/lib/campaign-hub.ts'
+import {
+  applyEncounterRewards,
+  emptyHub,
+  markBeatForTemplate,
+  openingSceneBeat,
+  parseBrief,
+  parseHub,
+  sceneAfterEncounter,
+  sortTemplates,
+  stageAfterTemplate,
+  stageHasContent,
+  stagePlacementLabel,
+} from '../src/lib/campaign-hub.ts'
 import { packMonstersJson, unpackTemplateJson } from '../src/lib/template-json.ts'
 
 function check(name: string, fn: () => void) {
@@ -31,12 +43,15 @@ check('legacy monster array still unpacks', () => {
   assert.equal(out.brief.xpAward, 0)
 })
 
-check('rewards on win', () => {
+check('rewards on win mark the fight done and the next scene active', () => {
   const hub = parseHub({
     ...emptyHub(),
     recap: 'Hired in Neverwinter.',
-    beats: [{ id: 'b1', kind: 'combat', title: 'Ambush', notes: '', templateId: 't1', status: 'active' }],
-    stages: [{ id: 's0', name: 'Tavern', imageUrl: '/t.jpg', caption: 'Fire', afterTemplateId: 't1', beforeTemplateId: '' }],
+    beats: [
+      { id: 'b0', kind: 'social', title: 'Tavern', notes: '', templateId: '', status: 'upcoming', imageUrl: '/inn.jpg', caption: 'Warm fire' },
+      { id: 'b1', kind: 'combat', title: 'Ambush', notes: '', templateId: 't1', status: 'active' },
+      { id: 'b2', kind: 'travel', title: 'Road', notes: '', templateId: '', status: 'upcoming', imageUrl: '/road.jpg', caption: 'Dust' },
+    ],
   })
   const next = applyEncounterRewards({
     hub,
@@ -47,11 +62,12 @@ check('rewards on win', () => {
     lootHolder: 'Elara',
   })
   assert.equal(next.xp, 150)
-  assert.equal(next.hub.beats[0].status, 'done')
+  assert.equal(next.hub.beats[1]!.status, 'done')
+  assert.equal(next.hub.beats[2]!.status, 'active')
   assert.equal(next.hub.loot[0].name, 'Potion of healing')
   assert.equal(next.hub.loot[0].holder, 'Elara')
   assert.match(next.hub.recap, /victory/)
-  assert.equal(next.hub.stages[0]?.name, 'Tavern')
+  assert.equal(sceneAfterEncounter(next.hub, 't1')?.title, 'Road')
 })
 
 check('loss awards no XP', () => {
@@ -85,24 +101,43 @@ check('legacy hubs get an empty stages list', () => {
   assert.deepEqual(hub.stages, [])
 })
 
-check('stage after a finished fight and start-of-night slot', () => {
+check('legacy After/Before stages fold into a linear run', () => {
   const hub = parseHub({
     stages: [
       { id: 's0', name: 'Tavern', imageUrl: '/tavern.jpg', caption: 'Warm fire', afterTemplateId: '', beforeTemplateId: 't1' },
       { id: 's1', name: 'Road', imageUrl: '/road.jpg', caption: 'Dust', afterTemplateId: 't1', beforeTemplateId: 't2' },
     ],
   })
+  assert.equal(openingSceneBeat(hub)?.title, 'Tavern')
+  assert.equal(sceneAfterEncounter(hub, 't1')?.title, 'Road')
+  assert.equal(sceneAfterEncounter(hub, 't2'), null)
   assert.equal(stageAfterTemplate(hub, '')?.name, 'Tavern')
   assert.equal(stageAfterTemplate(hub, 't1')?.name, 'Road')
-  assert.equal(stageAfterTemplate(hub, 't2'), null)
-  assert.equal(stageHasContent(hub.stages[0]!), true)
+  assert.equal(stageHasContent(hub.beats[0] ? { id: 'x', name: hub.beats[0].title, imageUrl: hub.beats[0].imageUrl, caption: hub.beats[0].caption, afterTemplateId: '', beforeTemplateId: '' } : null), true)
   assert.equal(
-    stagePlacementLabel(hub.stages[1]!, [
-      { id: 't1', name: 'Ambush' },
-      { id: 't2', name: 'Cave' },
-    ]),
+    stagePlacementLabel(
+      { afterTemplateId: 't1', beforeTemplateId: 't2' },
+      [
+        { id: 't1', name: 'Ambush' },
+        { id: 't2', name: 'Cave' },
+      ],
+    ),
     'After Ambush, before Cave',
   )
+})
+
+check('mixed beats plus leftover end-of-night stage', () => {
+  const hub = parseHub({
+    beats: [
+      { id: 'b1', kind: 'social', title: 'Mayor', notes: '', templateId: '', status: 'upcoming' },
+      { id: 'b2', kind: 'combat', title: 'Front Desk', notes: '', templateId: 'e1', status: 'upcoming' },
+      { id: 'b3', kind: 'combat', title: 'Boss', notes: '', templateId: 'e3', status: 'upcoming' },
+    ],
+    stages: [{ id: 'st3', name: 'Pie', imageUrl: '', caption: 'Pie time', afterTemplateId: 'e3', beforeTemplateId: '' }],
+  })
+  assert.equal(openingSceneBeat(hub)?.title, 'Mayor')
+  assert.equal(sceneAfterEncounter(hub, 'e3')?.title, 'Pie')
+  assert.match(sceneAfterEncounter(hub, 'e3')?.caption ?? '', /Pie time/)
 })
 
 console.log('all hub checks passed')

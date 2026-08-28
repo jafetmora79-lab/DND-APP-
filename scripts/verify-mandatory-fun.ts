@@ -52,7 +52,7 @@ check('all three encounter spawns sit on walkable floor', () => {
   assertWalkableSpawns(BOARDROOM, [REVIEW_SPAWNS[1]!])
 })
 
-check('hub has 3 combat beats, 2 maps in the runbook, and the nice NPCs', () => {
+check('hub run order is scene, fight, scene, fight, scene, fight, pie', () => {
   const hub = parseHub(mandatoryFunHub({ frontDesk: 'e1', seminar: 'e2', review: 'e3' }))
   assert.equal(hub.sessionTitle, 'Mandatory Fun')
   const combat = hub.beats.filter((b) => b.kind === 'combat')
@@ -60,17 +60,16 @@ check('hub has 3 combat beats, 2 maps in the runbook, and the nice NPCs', () => 
   assert.equal(combat[0]?.templateId, 'e1')
   assert.equal(combat[1]?.templateId, 'e2')
   assert.equal(combat[2]?.templateId, 'e3')
+  assert.equal(hub.beats[0]?.title, 'Mayor Blink in Winkwell')
+  assert.match(hub.beats[0]?.caption ?? '', /chickens/)
+  assert.equal(hub.beats.at(-1)?.title, 'Pie coupon')
   assert.ok(hub.npcs.some((n) => n.name === 'Glen'))
   assert.ok(hub.npcs.some((n) => n.name === 'Pip'))
   assert.ok(hub.npcs.some((n) => n.name === 'Brenda'))
   assert.ok(hub.npcs.some((n) => n.name === 'Mayor Blink Harrow'))
   assert.ok(hub.npcs.some((n) => /Vizz/.test(n.name)))
   assert.match(hub.recap, /two maps|second map|Corner Office/i)
-  assert.equal(hub.stages.length, 4)
-  assert.equal(hub.stages[0]?.afterTemplateId, '')
-  assert.equal(hub.stages[1]?.afterTemplateId, 'e1')
-  assert.equal(hub.stages[2]?.afterTemplateId, 'e2')
-  assert.equal(hub.stages[3]?.afterTemplateId, 'e3')
+  assert.equal(hub.stages.length, 0)
 })
 
 check('packed templates unpack with briefs and monster positions', () => {

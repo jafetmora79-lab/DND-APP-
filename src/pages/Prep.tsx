@@ -28,7 +28,7 @@ import { LanguageToggle, useT } from '@/lib/i18n'
 import { CampaignHubPanel } from '@/components/CampaignHubPanel'
 import { emptyHub, parseHub, sortTemplates } from '@/lib/campaign-hub'
 
-const tabs = ['Campaign', 'Maps', 'Bestiary', 'Encounters', 'Characters'] as const
+const tabs = ['Maps', 'Encounters', 'Campaign', 'Characters', 'Bestiary'] as const
 
 function blankMonster(): Partial<Monster> {
   return {
@@ -295,6 +295,7 @@ export function Prep() {
             {t('prep.allCampaigns')}
           </Link>
           <h1 className="font-display text-3xl text-gold-2">{t('prep.title')}</h1>
+          <p className="mt-1 text-sm text-muted">{t('prep.setupHint')}</p>
         </div>
         <div className="flex items-center gap-2">
           <LanguageToggle />
@@ -323,10 +324,8 @@ export function Prep() {
 
       {tab === 'Campaign' && (
         <div className="mt-6 rounded-xl border border-line bg-panel p-4">
-          <h2 className="font-display text-xl text-gold">Campaign hub</h2>
-          <p className="mt-1 text-sm text-muted">
-            Session timeline, stage scenes between fights (set these before Live), quests, NPCs, and party loot. Use Up/Down to order scenes. After/Before pick which encounters each image sits between.
-          </p>
+          <h2 className="font-display text-xl text-gold">{t('prep.hubTitle')}</h2>
+          <p className="mt-1 text-sm text-muted">{t('prep.hubBlurb')}</p>
           <div className="mt-4">
             <CampaignHubPanel
               hub={hub}

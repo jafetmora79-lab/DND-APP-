@@ -22,7 +22,7 @@ import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
 import { ABILITIES, ABILITY_LABELS, type Ability, type Attack, type EncounterInstance, type EncounterSnapshot, type EncounterTemplate, type FogState, type Monster, type RollMode } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
-import { markBeatForTemplate, parseHub, sortTemplates } from '@/lib/campaign-hub'
+import { ambianceFromBeat, emptyBeat, markBeatForTemplate, markOpeningActive, openingSceneBeat, parseHub, sortTemplates } from '@/lib/campaign-hub'
 import { asCombatantLike, standingEnemies, type StartFightOpts } from '@/lib/turn-flow'
 import { applyLightingFog, coverBonusBetween, fogWithLighting, parseLighting, type Lighting } from '@/lib/vision'
 
@@ -330,8 +330,7 @@ export function Live() {
     file: File
     name: string
     caption: string
-    afterTemplateId: string
-    beforeTemplateId: string
+    insertAfterBeatId: string
     saveToCampaign: boolean
   }) {
     if (!campaignId) return
@@ -345,22 +344,22 @@ export function Live() {
       })
       if (scene.saveToCampaign) {
         const hub = parseHub(snap?.campaign.hub)
-        await api.patchCampaign(campaignId, {
-          hub: {
-            ...hub,
-            stages: [
-              ...hub.stages,
-              {
-                id: crypto.randomUUID().slice(0, 8),
-                name: scene.name,
-                imageUrl: uploaded.imageUrl,
-                caption: scene.caption,
-                afterTemplateId: scene.afterTemplateId,
-                beforeTemplateId: scene.beforeTemplateId,
-              },
-            ],
-          },
+        const beat = emptyBeat({
+          id: crypto.randomUUID().slice(0, 8),
+          kind: 'social',
+          title: scene.name,
+          caption: scene.caption,
+          imageUrl: uploaded.imageUrl,
+          status: 'upcoming',
         })
+        const beats = hub.beats.slice()
+        if (!scene.insertAfterBeatId) beats.unshift(beat)
+        else {
+          const idx = beats.findIndex((b) => b.id === scene.insertAfterBeatId)
+          if (idx >= 0) beats.splice(idx + 1, 0, beat)
+          else beats.push(beat)
+        }
+        await api.patchCampaign(campaignId, { hub: { ...hub, beats } })
       }
       await load()
     } catch (e) {
@@ -385,19 +384,42 @@ export function Live() {
     await load()
   }
 
-  async function onSelectStage(stageId: string) {
-    if (!campaignId || !stageId) return
-    const stage = parseHub(snap?.campaign.hub).stages.find((s) => s.id === stageId)
-    if (!stage) return
+  async function onSelectScene(beatId: string) {
+    if (!campaignId || !beatId) return
+    const beat = parseHub(snap?.campaign.hub).beats.find((s) => s.id === beatId)
+    if (!beat) return
+    const ambiance = ambianceFromBeat(beat)
+    if (!ambiance) return
     setBusy(true)
     try {
       await api.patchSession(campaignId, {
-        ambianceImageUrl: stage.imageUrl.trim() || null,
-        ambianceCaption: stage.caption,
+        ambianceImageUrl: ambiance.imageUrl,
+        ambianceCaption: ambiance.caption,
       })
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not set the scene')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onStartCampaign() {
+    if (!campaignId) return
+    const hub = markOpeningActive(parseHub(snap?.campaign.hub))
+    const ambiance = ambianceFromBeat(openingSceneBeat(hub))
+    setBusy(true)
+    try {
+      await api.patchCampaign(campaignId, { hub })
+      if (ambiance) {
+        await api.patchSession(campaignId, {
+          ambianceImageUrl: ambiance.imageUrl,
+          ambianceCaption: ambiance.caption,
+        })
+      }
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not start the campaign')
     } finally {
       setBusy(false)
     }
@@ -505,8 +527,8 @@ export function Live() {
             onResume: resume,
             busy,
             activeFight: Boolean(instance && instance.status === 'active'),
-            stages: parseHub(snap.campaign.hub).stages,
-            onSelectStage,
+            onSelectScene,
+            onStartCampaign,
             onHubChange,
             onUploadStage: async (file) => {
               const r = await api.uploadStageImage(campaignId!, file)

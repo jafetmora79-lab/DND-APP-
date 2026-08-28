@@ -183,24 +183,88 @@ export function mandatoryFunHub(templateIds: { frontDesk: string; seminar: strin
 Cause: Vizz the Unblinking, a lonely middle-manager beholder fired from a lich’s dungeon, is running a mandatory team-building retreat in the old salt mine. His “quiet hours” cone is freezing eyelids in town. He wants friends. He still has eyestalks.
 
 2-hour clock (six PCs = slow combat — keep fights 1 and 2 to 2–3 rounds):
-• Hub — Mayor. Then Live → 1. Front Desk. Lighting: Inside.
-• Fight 1, lobby. Brenda hid under the desk; after the scuffle she badges you through and warns about the pit.
+• Start campaign — Mayor Blink on the opening scene. Lighting: Inside.
+• Start encounter 1 (Front Desk). Finalize → cubicle crawl scene.
 • Same map, cubicles. Glen the water cooler (west, the wet square) will not fight. Paper is difficult terrain. Desks are half cover. Holes are the trust-fall.
-• Fight 2, north rooms. Free Pip (east cubicle, KPI). Path to the north elevator.
-• Elevator small talk. Then Live → 3. Performance Review on the second map.
-• Boss. Vizz talks every round. He surrenders at ~20 HP or if the party finishes 3 KPIs: posters down, Pip free, honest performance review spoken aloud. Death ray is out of order.
+• Start encounter 2 (Trust-Fall Seminar). Free Pip (east cubicle, KPI). Finalize → elevator scene.
+• Elevator small talk. Start encounter 3 (Performance Review) on the second map.
+• Boss. Vizz talks every round. He surrenders at ~20 HP or if the party finishes 3 KPIs: posters down, Pip free, honest performance review spoken aloud. Death ray is out of order. Finalize → pie in Winkwell.
 
-Prep: add 5–6 level-2 characters, then drop starting squares on each template. One fight per template — Finalize, hub, next.`,
+Prep: maps → encounters → Run order. Add 5–6 level-2 characters, then drop starting squares on each template. One fight per template.`,
     sessionTitle: 'Mandatory Fun',
     sessionNotes:
       '2-hour one-shot. Six level-2 PCs. Lighting: Inside. Fights 1–2: 2–3 rounds. Add PCs in Prep, then starting squares. Vizz surrenders at 20 HP or 3 KPIs.',
     beats: [
-      { id: 'b1', kind: 'social', title: 'Mayor Blink in Winkwell', notes: '25 gp + pie coupon. Salt mine. Do this at the hub, not on a map.', templateId: '', status: 'upcoming' },
-      { id: 'b2', kind: 'combat', title: 'Front Desk', notes: 'Lobby on Salt-Mine Offices. Brenda helps after.', templateId: templateIds.frontDesk, status: 'upcoming' },
-      { id: 'b3', kind: 'travel', title: 'Cubicle crawl', notes: 'Same map. Glen hints: north, don’t fall in the trust-fall, Vizz hates honest feedback.', templateId: '', status: 'upcoming' },
-      { id: 'b4', kind: 'combat', title: 'Trust-Fall Seminar', notes: 'North end of the offices. Free Pip. Elevator is the open rooms at the top.', templateId: templateIds.seminar, status: 'upcoming' },
-      { id: 'b5', kind: 'travel', title: 'Elevator to the corner office', notes: 'Switch to map The Corner Office. Vizz is already talking on the intercom.', templateId: '', status: 'upcoming' },
-      { id: 'b6', kind: 'combat', title: 'Performance Review', notes: 'Boss. Large token. Two HR goblins take notes and flinch.', templateId: templateIds.review, status: 'upcoming' },
+      {
+        id: 'b1',
+        kind: 'social',
+        title: 'Mayor Blink in Winkwell',
+        notes: '25 gp + pie coupon. Salt mine. Do this on the opening scene, not on a map.',
+        templateId: '',
+        status: 'upcoming',
+        imageUrl: '',
+        caption: 'Mayor Blink’s square. The chickens will not blink.',
+      },
+      {
+        id: 'b2',
+        kind: 'combat',
+        title: 'Front Desk',
+        notes: 'Lobby on Salt-Mine Offices. Brenda helps after.',
+        templateId: templateIds.frontDesk,
+        status: 'upcoming',
+        imageUrl: '',
+        caption: '',
+      },
+      {
+        id: 'b3',
+        kind: 'travel',
+        title: 'Cubicle crawl',
+        notes: 'Same map. Glen hints: north, don’t fall in the trust-fall, Vizz hates honest feedback.',
+        templateId: '',
+        status: 'upcoming',
+        imageUrl: '',
+        caption: 'Paper snow. Glen gurgles. The trust-fall pit waits north.',
+      },
+      {
+        id: 'b4',
+        kind: 'combat',
+        title: 'Trust-Fall Seminar',
+        notes: 'North end of the offices. Free Pip. Elevator is the open rooms at the top.',
+        templateId: templateIds.seminar,
+        status: 'upcoming',
+        imageUrl: '',
+        caption: '',
+      },
+      {
+        id: 'b5',
+        kind: 'travel',
+        title: 'Elevator to the corner office',
+        notes: 'Switch to map The Corner Office. Vizz is already talking on the intercom.',
+        templateId: '',
+        status: 'upcoming',
+        imageUrl: '',
+        caption: 'A salt-mine elevator. Vizz is already talking on the intercom.',
+      },
+      {
+        id: 'b6',
+        kind: 'combat',
+        title: 'Performance Review',
+        notes: 'Boss. Large token. Two HR goblins take notes and flinch.',
+        templateId: templateIds.review,
+        status: 'upcoming',
+        imageUrl: '',
+        caption: '',
+      },
+      {
+        id: 'b7',
+        kind: 'social',
+        title: 'Pie coupon',
+        notes: 'Back in Winkwell if they survive the review.',
+        templateId: '',
+        status: 'upcoming',
+        imageUrl: '',
+        caption: 'Back in Winkwell. The mayor has pie. Someone should blink.',
+      },
     ],
     quests: [
       { id: 'q1', name: 'Shut down the retreat', status: 'open', notes: 'End Vizz’s all-hands without the town freezing forever.', npcIds: ['n1'] },
@@ -215,40 +279,7 @@ Prep: add 5–6 level-2 characters, then drop starting squares on each template.
       { id: 'n5', name: 'Vizz the Unblinking', role: 'Boss', notes: 'Lonely middle-manager beholder. Wants friends. Still a monster. Do not use disintegrate.' },
     ],
     loot: [{ id: 'l1', name: 'Pie coupon', qty: 1, notes: 'Stonehill-quality. Mayor already paid.', holder: '' }],
-    stages: [
-      {
-        id: 'st0',
-        name: 'Winkwell square',
-        imageUrl: '',
-        caption: 'Mayor Blink’s square. The chickens will not blink.',
-        afterTemplateId: '',
-        beforeTemplateId: templateIds.frontDesk,
-      },
-      {
-        id: 'st1',
-        name: 'Cubicle crawl',
-        imageUrl: '',
-        caption: 'Paper snow. Glen gurgles. The trust-fall pit waits north.',
-        afterTemplateId: templateIds.frontDesk,
-        beforeTemplateId: templateIds.seminar,
-      },
-      {
-        id: 'st2',
-        name: 'Elevator',
-        imageUrl: '',
-        caption: 'A salt-mine elevator. Vizz is already talking on the intercom.',
-        afterTemplateId: templateIds.seminar,
-        beforeTemplateId: templateIds.review,
-      },
-      {
-        id: 'st3',
-        name: 'Pie coupon',
-        imageUrl: '',
-        caption: 'Back in Winkwell. The mayor has pie. Someone should blink.',
-        afterTemplateId: templateIds.review,
-        beforeTemplateId: '',
-      },
-    ],
+    stages: [],
   }
 }
 
@@ -266,16 +297,23 @@ export function seedMandatoryFun(
     | undefined
   if (exists) {
     const row = db.prepare('SELECT hub_json FROM campaigns WHERE id = ?').get(exists.id) as { hub_json?: string } | undefined
-    const hub = parseHub(row?.hub_json ? JSON.parse(row.hub_json) : {})
-    if (hub.stages.length === 0) {
-      const tpls = db.prepare('SELECT id, name FROM encounter_templates WHERE campaign_id = ?').all(exists.id) as { id: string; name: string }[]
-      const frontDesk = tpls.find((t) => /front desk/i.test(t.name))?.id ?? ''
-      const seminar = tpls.find((t) => /trust-fall|seminar/i.test(t.name))?.id ?? ''
-      const review = tpls.find((t) => /performance|review/i.test(t.name))?.id ?? ''
-      db.prepare('UPDATE campaigns SET hub_json = ? WHERE id = ?').run(
-        JSON.stringify({ ...hub, stages: mandatoryFunHub({ frontDesk, seminar, review }).stages }),
-        exists.id,
-      )
+    const raw = row?.hub_json ? JSON.parse(row.hub_json) : {}
+    const hub = parseHub(raw)
+    const tpls = db.prepare('SELECT id, name FROM encounter_templates WHERE campaign_id = ?').all(exists.id) as { id: string; name: string }[]
+    const frontDesk = tpls.find((t) => /front desk/i.test(t.name))?.id ?? ''
+    const seminar = tpls.find((t) => /trust-fall|seminar/i.test(t.name))?.id ?? ''
+    const review = tpls.find((t) => /performance|review/i.test(t.name))?.id ?? ''
+    const fresh = parseHub(mandatoryFunHub({ frontDesk, seminar, review }))
+    const hasScenes = hub.beats.some((b) => b.caption.trim() || b.imageUrl)
+    const hasPie = hub.beats.some((b) => /pie coupon/i.test(b.title))
+    if (!hasScenes || !hasPie) {
+      const statusByTemplate = new Map(hub.beats.filter((b) => b.templateId).map((b) => [b.templateId, b.status]))
+      const statusById = new Map(hub.beats.map((b) => [b.id, b.status]))
+      const beats = fresh.beats.map((b) => ({
+        ...b,
+        status: (b.templateId && statusByTemplate.get(b.templateId)) || statusById.get(b.id) || b.status,
+      }))
+      db.prepare('UPDATE campaigns SET hub_json = ? WHERE id = ?').run(JSON.stringify({ ...hub, beats, stages: [] }), exists.id)
     }
     return exists.id
   }

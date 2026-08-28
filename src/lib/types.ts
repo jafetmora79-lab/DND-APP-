@@ -280,9 +280,12 @@ export type SessionBeat = {
   notes: string
   templateId: string
   status: SessionBeatStatus
+  /** Scene shown on the live table. Combat beats usually leave these empty. */
+  imageUrl: string
+  caption: string
 }
 
-/** A scene shown on the table between fights. afterTemplateId empty = start of night. */
+/** Legacy between-fight slots. New campaigns store scenery on SessionBeat; parseHub folds these into the run order. */
 export type CampaignStage = {
   id: string
   name: string

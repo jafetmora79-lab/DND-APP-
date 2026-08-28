@@ -54,6 +54,19 @@ export function emptyHub(): CampaignHub {
   }
 }
 
+export function emptyBeat(partial?: Partial<SessionBeat>): SessionBeat {
+  return {
+    id: partial?.id ?? '',
+    kind: partial?.kind ?? 'social',
+    title: partial?.title ?? '',
+    notes: partial?.notes ?? '',
+    templateId: partial?.templateId ?? '',
+    status: partial?.status ?? 'upcoming',
+    imageUrl: partial?.imageUrl ?? '',
+    caption: partial?.caption ?? '',
+  }
+}
+
 function asKind(raw: unknown): SessionBeatKind {
   const v = String(raw ?? '')
   if (v === 'combat' || v === 'social' || v === 'travel' || v === 'other') return v
@@ -77,13 +90,17 @@ function asBeat(raw: unknown, i: number): SessionBeat | null {
   const o = raw as Record<string, unknown>
   const title = String(o.title ?? '').trim()
   if (!title && !o.id) return null
+  const templateId = String(o.templateId ?? '')
+  const kind = asKind(o.kind || (templateId ? 'combat' : 'social'))
   return {
     id: String(o.id ?? `beat-${i}`),
-    kind: asKind(o.kind),
-    title: title || 'Beat',
+    kind,
+    title: title || (kind === 'combat' ? 'Encounter' : 'Scene'),
     notes: String(o.notes ?? ''),
-    templateId: String(o.templateId ?? ''),
+    templateId,
     status: asBeatStatus(o.status),
+    imageUrl: String(o.imageUrl ?? '').trim(),
+    caption: String(o.caption ?? ''),
   }
 }
 
@@ -145,26 +162,204 @@ function asLoot(raw: unknown, i: number): PartyLoot | null {
   }
 }
 
+export function isCombatBeat(beat: SessionBeat): boolean {
+  return beat.kind === 'combat' || Boolean(beat.templateId)
+}
+
+export function beatHasScene(beat: SessionBeat | null | undefined): beat is SessionBeat {
+  if (!beat) return false
+  return Boolean(beat.imageUrl.trim() || beat.caption.trim() || (!isCombatBeat(beat) && beat.title.trim()))
+}
+
+function sceneFromStage(stage: CampaignStage): SessionBeat {
+  return emptyBeat({
+    id: stage.id.startsWith('beat-') ? stage.id : `beat-${stage.id}`,
+    kind: 'social',
+    title: stage.name || 'Scene',
+    notes: '',
+    templateId: '',
+    status: 'upcoming',
+    imageUrl: stage.imageUrl,
+    caption: stage.caption,
+  })
+}
+
+function combatStub(templateId: string): SessionBeat {
+  return emptyBeat({
+    id: `combat-${templateId}`,
+    kind: 'combat',
+    title: 'Encounter',
+    templateId,
+    status: 'upcoming',
+  })
+}
+
+/** Merge legacy After/Before stage slots into the linear run order (beats). Idempotent once a beat has scene text. */
+export function foldStagesIntoBeats(beats: SessionBeat[], stages: CampaignStage[]): SessionBeat[] {
+  if (stages.length === 0) return beats
+  if (beats.some((b) => b.imageUrl || b.caption.trim())) return beats
+
+  if (beats.length === 0) {
+    const out: SessionBeat[] = []
+    const seen = new Set<string>()
+    for (const stage of stages) {
+      out.push(sceneFromStage(stage))
+      const tid = stage.beforeTemplateId
+      if (tid && !seen.has(tid)) {
+        seen.add(tid)
+        out.push(combatStub(tid))
+      }
+    }
+    return out
+  }
+
+  const result = beats.map((b) => ({ ...b }))
+  const used = new Set<string>()
+
+  function alreadyHas(stage: CampaignStage) {
+    return result.some((b) => b.id === stage.id || b.id === `beat-${stage.id}`)
+  }
+
+  function attachOrInsert(stage: CampaignStage, atIndex: number, mergePrev: boolean) {
+    if (alreadyHas(stage)) {
+      used.add(stage.id)
+      return
+    }
+    if (mergePrev && atIndex > 0) {
+      const prev = result[atIndex - 1]!
+      if (!isCombatBeat(prev) && !prev.imageUrl && !prev.caption.trim()) {
+        result[atIndex - 1] = {
+          ...prev,
+          imageUrl: stage.imageUrl,
+          caption: stage.caption || prev.caption,
+          title: prev.title || stage.name,
+        }
+        used.add(stage.id)
+        return
+      }
+    }
+    result.splice(atIndex, 0, sceneFromStage(stage))
+    used.add(stage.id)
+  }
+
+  for (const stage of stages) {
+    const beforeId = stage.beforeTemplateId || ''
+    const afterId = stage.afterTemplateId || ''
+    if (beforeId) {
+      const combatIdx = result.findIndex((b) => b.templateId === beforeId)
+      if (combatIdx >= 0) {
+        attachOrInsert(stage, combatIdx, true)
+        continue
+      }
+    }
+    if (afterId && !beforeId) {
+      const combatIdx = result.findIndex((b) => b.templateId === afterId)
+      if (combatIdx >= 0) {
+        attachOrInsert(stage, combatIdx + 1, false)
+        continue
+      }
+    }
+    if (!afterId && !beforeId) {
+      attachOrInsert(stage, 0, false)
+    }
+  }
+
+  for (const stage of stages) {
+    if (!used.has(stage.id) && !alreadyHas(stage)) result.push(sceneFromStage(stage))
+  }
+  return result
+}
+
 export function parseHub(raw: unknown): CampaignHub {
   const base = emptyHub()
   if (!raw || typeof raw !== 'object') return base
   const o = raw as Record<string, unknown>
+  const stages = Array.isArray(o.stages) ? o.stages.map(asStage).filter((x): x is CampaignStage => Boolean(x)) : []
+  const beats = Array.isArray(o.beats) ? o.beats.map(asBeat).filter((x): x is SessionBeat => Boolean(x)) : []
   return {
     recap: String(o.recap ?? ''),
     sessionTitle: String(o.sessionTitle ?? ''),
     sessionNotes: String(o.sessionNotes ?? ''),
-    beats: Array.isArray(o.beats) ? o.beats.map(asBeat).filter((x): x is SessionBeat => Boolean(x)) : [],
+    beats: foldStagesIntoBeats(beats, stages),
     quests: Array.isArray(o.quests) ? o.quests.map(asQuest).filter((x): x is CampaignQuest => Boolean(x)) : [],
     npcs: Array.isArray(o.npcs) ? o.npcs.map(asNpc).filter((x): x is CampaignNpc => Boolean(x)) : [],
     loot: Array.isArray(o.loot) ? o.loot.map(asLoot).filter((x): x is PartyLoot => Boolean(x)) : [],
-    stages: Array.isArray(o.stages) ? o.stages.map(asStage).filter((x): x is CampaignStage => Boolean(x)) : [],
+    stages,
+  }
+}
+
+export function openingSceneBeat(hub: CampaignHub): SessionBeat | null {
+  const beats = parseHub(hub).beats
+  for (const beat of beats) {
+    if (isCombatBeat(beat)) continue
+    return beat
+  }
+  return beats.find((b) => beatHasScene(b) && !isCombatBeat(b)) ?? null
+}
+
+export function sceneAfterEncounter(hub: CampaignHub, templateId: string | null | undefined): SessionBeat | null {
+  const key = String(templateId ?? '')
+  if (!key) return openingSceneBeat(hub)
+  const beats = parseHub(hub).beats
+  const idx = beats.findIndex((b) => b.templateId === key)
+  if (idx < 0) return null
+  for (let i = idx + 1; i < beats.length; i++) {
+    const beat = beats[i]!
+    if (isCombatBeat(beat)) return null
+    return beat
+  }
+  return null
+}
+
+export function sceneBeats(hub: CampaignHub): SessionBeat[] {
+  return parseHub(hub).beats.filter((b) => !isCombatBeat(b))
+}
+
+export function nextUpcomingCombat(hub: CampaignHub): SessionBeat | null {
+  return parseHub(hub).beats.find((b) => isCombatBeat(b) && b.status !== 'done') ?? null
+}
+
+export function remainingCombatBeats(hub: CampaignHub): SessionBeat[] {
+  return parseHub(hub).beats.filter((b) => isCombatBeat(b) && b.status !== 'done')
+}
+
+export function currentRunPointer(hub: CampaignHub): { now: SessionBeat | null; next: SessionBeat | null } {
+  const beats = parseHub(hub).beats
+  if (beats.length === 0) return { now: null, next: null }
+  const activeIdx = beats.findIndex((b) => b.status === 'active')
+  if (activeIdx >= 0) {
+    return { now: beats[activeIdx] ?? null, next: beats[activeIdx + 1] ?? null }
+  }
+  const upcomingIdx = beats.findIndex((b) => b.status === 'upcoming')
+  const i = upcomingIdx >= 0 ? upcomingIdx : 0
+  return { now: beats[i] ?? null, next: beats[i + 1] ?? null }
+}
+
+export function ambianceFromBeat(beat: SessionBeat | null | undefined): { imageUrl: string | null; caption: string } | null {
+  if (!beat) return null
+  const caption = beat.caption.trim() || (!isCombatBeat(beat) ? beat.title : '')
+  const imageUrl = beat.imageUrl.trim() || null
+  if (!imageUrl && !caption) return null
+  return { imageUrl, caption }
+}
+
+export function beatToStage(beat: SessionBeat, afterTemplateId = '', beforeTemplateId = ''): CampaignStage {
+  return {
+    id: beat.id,
+    name: beat.title,
+    imageUrl: beat.imageUrl,
+    caption: beat.caption,
+    afterTemplateId,
+    beforeTemplateId,
   }
 }
 
 export function stageAfterTemplate(hub: CampaignHub, afterTemplateId: string | null | undefined): CampaignStage | null {
   const key = String(afterTemplateId ?? '')
-  const stages = parseHub(hub).stages
-  return stages.find((s) => (s.afterTemplateId || '') === key) ?? null
+  const beat = key ? sceneAfterEncounter(hub, key) : openingSceneBeat(hub)
+  if (!beat) return null
+  if (!beat.imageUrl.trim() && !beat.caption.trim()) return null
+  return beatToStage(beat, key)
 }
 
 export function stageHasContent(stage: CampaignStage | null | undefined): stage is CampaignStage {
@@ -172,7 +367,10 @@ export function stageHasContent(stage: CampaignStage | null | undefined): stage 
   return Boolean(stage.imageUrl.trim() || stage.caption.trim())
 }
 
-export function stagePlacementLabel(stage: Pick<CampaignStage, 'afterTemplateId' | 'beforeTemplateId'>, templates: { id: string; name: string }[]) {
+export function stagePlacementLabel(
+  stage: Pick<CampaignStage, 'afterTemplateId' | 'beforeTemplateId'>,
+  templates: { id: string; name: string }[],
+) {
   const afterName = stage.afterTemplateId ? templates.find((t) => t.id === stage.afterTemplateId)?.name : ''
   const beforeName = stage.beforeTemplateId ? templates.find((t) => t.id === stage.beforeTemplateId)?.name : ''
   if (!stage.afterTemplateId && beforeName) return `Before ${beforeName}`
@@ -185,10 +383,52 @@ export function stagePlacementLabel(stage: Pick<CampaignStage, 'afterTemplateId'
 
 export function markBeatForTemplate(hub: CampaignHub, templateId: string, status: SessionBeatStatus) {
   const next = parseHub(hub)
+  if (status !== 'active') {
+    return {
+      ...next,
+      beats: next.beats.map((b) => (b.templateId === templateId ? { ...b, status } : b)),
+    }
+  }
+  const idx = next.beats.findIndex((b) => b.templateId === templateId)
   return {
     ...next,
-    beats: next.beats.map((b) => (b.templateId === templateId ? { ...b, status } : b)),
+    beats: next.beats.map((b, i) => {
+      if (idx >= 0 && i < idx) return { ...b, status: 'done' as const }
+      if (b.templateId === templateId) return { ...b, status: 'active' as const }
+      if (b.status === 'active') return { ...b, status: 'upcoming' as const }
+      return b
+    }),
   }
+}
+
+export function markOpeningActive(hub: CampaignHub) {
+  const next = parseHub(hub)
+  const idx = next.beats.findIndex((b) => b.status !== 'done')
+  if (idx < 0) return next
+  return {
+    ...next,
+    beats: next.beats.map((b, i) => {
+      if (i === idx) return { ...b, status: 'active' as const }
+      return b
+    }),
+  }
+}
+
+function advanceBeatsAfterEncounter(beats: SessionBeat[], templateId: string | null): SessionBeat[] {
+  if (!templateId) return beats
+  const idx = beats.findIndex((b) => b.templateId === templateId)
+  if (idx < 0) return beats
+  let nextScene = -1
+  for (let i = idx + 1; i < beats.length; i++) {
+    if (isCombatBeat(beats[i]!)) break
+    nextScene = i
+    break
+  }
+  return beats.map((b, i) => {
+    if (i <= idx) return { ...b, status: 'done' as const }
+    if (i === nextScene) return { ...b, status: 'active' as const }
+    return b
+  })
 }
 
 export function sortTemplates<T extends { sortOrder?: number; name: string }>(list: T[]) {
@@ -216,10 +456,7 @@ export function applyEncounterRewards(opts: {
       holder: String(opts.lootHolder ?? '').trim(),
     })
   }
-  const beats = hub.beats.map((b) => {
-    if (opts.templateId && b.templateId === opts.templateId) return { ...b, status: 'done' as const }
-    return b
-  })
+  const beats = advanceBeatsAfterEncounter(hub.beats, opts.templateId)
   const line = `${opts.encounterName}: ${opts.outcome === 'won' ? 'victory' : 'defeat'}${xp ? ` · ${xp} XP` : ''}${lootLine ? ` · ${lootLine}` : ''}`
   const recap = hub.recap.trim() ? `${hub.recap.trim()}\n${line}` : line
   return { hub: { ...hub, beats, loot, recap }, xp }
