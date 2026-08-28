@@ -24,7 +24,7 @@ const en = {
   'landing.signedIn': 'Signed in as {name}. Start to open your campaigns.',
   'landing.hostedPass': 'Hosted tables need a passcode of at least 6 characters.',
   'landing.share': 'Share tonight’s join code with the phones at the table.',
-  'landing.sample': 'Sample table: Hearthkeeper / torch. Players join HEARTH with ELARA7K2 or BROK4M9X.',
+  'landing.sample': 'Sample table: Hearthkeeper / hearth. Players join HEARTH with ELARA7K2 or BROK4M9X.',
   'landing.pagesHint':
     'This published copy was built without Supabase keys. Secrets are one-time. Switch Pages source to GitHub Actions, then re-run the GitHub Pages workflow.',
   'campaigns.title': 'Campaigns',
@@ -248,7 +248,7 @@ const es: Record<keyof typeof en, string> = {
   'landing.signedIn': 'Sesión iniciada como {name}. Entra para abrir tus campañas.',
   'landing.hostedPass': 'Las mesas alojadas necesitan una clave de al menos 6 caracteres.',
   'landing.share': 'Comparte el código de esta noche con los teléfonos de la mesa.',
-  'landing.sample': 'Mesa de ejemplo: Hearthkeeper / torch. Los jugadores entran a HEARTH con ELARA7K2 o BROK4M9X.',
+  'landing.sample': 'Mesa de ejemplo: Hearthkeeper / hearth. Los jugadores entran a HEARTH con ELARA7K2 o BROK4M9X.',
   'landing.pagesHint':
     'Esta copia publicada se compiló sin claves de Supabase. Los secretos son de un solo uso. Cambia el origen de Pages a GitHub Actions y vuelve a ejecutar el flujo de GitHub Pages.',
   'campaigns.title': 'Campañas',

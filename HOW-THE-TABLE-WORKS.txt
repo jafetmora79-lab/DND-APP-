@@ -22,7 +22,7 @@ LOCAL (npm run dev)
   - SQLite database in data/table.sqlite
   - WebSocket live updates
   - Open http://127.0.0.1:4731
-  - Sample DM: table name Hearthkeeper, passcode torch
+  - Sample DM: table name Hearthkeeper, passcode hearth
   - Sample players: join code HEARTH, personal codes ELARA7K2 and BROK4M9X
 
 HOSTED (GitHub Pages + Supabase)
@@ -316,7 +316,7 @@ Local SQLite adds missing columns automatically on boot.
 10. SAMPLE NIGHT, STEP BY STEP
 ------------------------------
 
-  1. DM: Start → Hearthkeeper / torch (or your own table).
+  1. DM: Start → Hearthkeeper / hearth (or your own table).
   2. Open the campaign. Prep → Characters: confirm names, colors, codes.
      Copy personal codes to the players.
   3. Prep → Maps: make or open the battle map. Paint walls, cover, and other terrain.

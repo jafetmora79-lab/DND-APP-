@@ -13,6 +13,7 @@ import { ambianceFromBeat, applyEncounterRewards, emptyBrief, openingSceneBeat, 
 import { unpackTemplateJson } from '../src/lib/template-json.ts'
 import { coverBonusAlongLine, lightingFromStart, makeStartFog } from '../src/lib/vision.ts'
 import { actionRevealsHiding, hidingBrokenByWatchers, isHiding, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from '../src/lib/stealth.ts'
+import { LEGACY_SAMPLE_PASSCODE, SAMPLE_TABLE_NAME, SAMPLE_TABLE_PASSCODE } from '../src/lib/sample-table.ts'
 import { seedMandatoryFun } from './seed-mandatory-fun.ts'
 import {
   SURPRISED,
@@ -1380,14 +1381,25 @@ export function resolvePlayerAttack(opts: {
   return resolveCombatAttack({ ...opts, attackerId: String(attacker.id), skipRange: true })
 }
 
+function migrateSamplePasscode() {
+  const row = db.prepare('SELECT id, passcode_hash FROM dm_accounts WHERE name = ?').get(SAMPLE_TABLE_NAME) as
+    | { id: string; passcode_hash: string }
+    | undefined
+  if (!row) return
+  if (bcrypt.compareSync(SAMPLE_TABLE_PASSCODE, row.passcode_hash)) return
+  if (bcrypt.compareSync(LEGACY_SAMPLE_PASSCODE, row.passcode_hash)) {
+    db.prepare('UPDATE dm_accounts SET passcode_hash = ? WHERE id = ?').run(bcrypt.hashSync(SAMPLE_TABLE_PASSCODE, 10), row.id)
+  }
+}
+
 function seedDemo() {
-  const existing = db.prepare('SELECT id FROM dm_accounts WHERE name = ?').get('Hearthkeeper') as { id: string } | undefined
+  const existing = db.prepare('SELECT id FROM dm_accounts WHERE name = ?').get(SAMPLE_TABLE_NAME) as { id: string } | undefined
   if (existing) return
   const dmId = ids.id()
   db.prepare('INSERT INTO dm_accounts (id, name, passcode_hash, created_at) VALUES (?,?,?,?)').run(
     dmId,
-    'Hearthkeeper',
-    bcrypt.hashSync('torch', 10),
+    SAMPLE_TABLE_NAME,
+    bcrypt.hashSync(SAMPLE_TABLE_PASSCODE, 10),
     now(),
   )
   seedBestiaryForDm(dmId)
@@ -1532,7 +1544,8 @@ function seedDemo() {
 }
 
 seedDemo()
-const hearth = db.prepare('SELECT id FROM dm_accounts WHERE name = ?').get('Hearthkeeper') as { id: string } | undefined
+migrateSamplePasscode()
+const hearth = db.prepare('SELECT id FROM dm_accounts WHERE name = ?').get(SAMPLE_TABLE_NAME) as { id: string } | undefined
 if (hearth) {
   seedBestiaryForDm(hearth.id)
   seedMandatoryFun({ db, id: ids.id, insertMonster }, hearth.id)

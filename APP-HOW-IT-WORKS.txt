@@ -29,7 +29,7 @@ TWO WAYS IT RUNS
 LOCAL (`npm run dev`)
   SQLite in data/table.sqlite. WebSocket live updates. Uploads in /uploads.
   Seeded sample:
-    DM     table Hearthkeeper, passcode torch
+    DM     table Hearthkeeper, passcode hearth
     Join   HEARTH
     Elara  ELARA7K2
     Brok   BROK4M9X
@@ -44,7 +44,7 @@ HOSTED (GitHub Pages + Supabase)
   New projects: run supabase/schema.sql once.
   Older projects also need the migrate-*.sql files, then:
     notify pgrst, 'reload schema';
-  Hosted passcodes must be 6+ characters. `torch` is local-only.
+  Hosted passcodes must be 6+ characters. The sample passcode is `hearth`.
   Without those env vars, or if /docs is still the Pages source,
   phones cannot join.
 

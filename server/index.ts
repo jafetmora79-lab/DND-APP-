@@ -258,8 +258,8 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }))
 app.post('/api/auth/register', (req, res) => {
   const name = String(req.body?.name ?? '').trim()
   const passcode = String(req.body?.passcode ?? '')
-  if (name.length < 2 || passcode.length < 4) {
-    res.status(400).json({ error: 'Table name (2+) and passcode (4+) required' })
+  if (name.length < 2 || passcode.length < 6) {
+    res.status(400).json({ error: 'Table name (2+) and passcode (6+) required' })
     return
   }
   const exists = db.prepare('SELECT id FROM dm_accounts WHERE name = ? COLLATE NOCASE').get(name)
