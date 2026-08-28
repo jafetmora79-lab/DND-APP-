@@ -651,14 +651,14 @@ export function Live() {
 
   return (
     <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
-      <header className="shrink-0 border-b border-line">
-        <div className="flex items-center gap-2 px-3 py-2">
-          <Link to={`/dm/${campaignId}`} className="min-w-0 truncate font-display text-gold">
+      <header className="shrink-0 border-b border-line bg-panel-2/30">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <Link to={`/dm/${campaignId}`} className="min-w-0 truncate font-display text-gold-2 text-sm">
             {snap.campaign.name}
           </Link>
           <span className="hidden text-muted sm:inline">/</span>
-          <span className="hidden min-w-0 truncate sm:inline">{instance.name}</span>
-          <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs uppercase', setup ? 'bg-gold/20 text-gold' : instance.status === 'active' ? 'bg-moss/20 text-moss' : 'bg-gold/20 text-gold')}>
+          <span className="hidden min-w-0 truncate sm:inline text-sm">{instance.name}</span>
+          <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs uppercase font-medium', setup ? 'bg-gold/20 text-gold' : instance.status === 'active' ? 'bg-moss/20 text-moss' : 'bg-gold/20 text-gold')}>
             {setup ? 'setup' : instance.status}
           </span>
           <div className="ml-auto hidden items-center gap-2 lg:flex">
@@ -667,36 +667,36 @@ export function Live() {
             {tableActions}
           </div>
         </div>
-        <div className="flex gap-2 overflow-x-auto px-3 pb-2 lg:hidden">
+        <div className="flex gap-2 overflow-x-auto px-4 pb-3 lg:hidden">
           <LanguageToggle />
           {joinActions}
           {tableActions}
         </div>
       </header>
-      {error && <p className="shrink-0 border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
+      {error && <p className="shrink-0 border-b border-line bg-blood/10 px-4 py-2 text-sm text-blood">{error}</p>}
       {setup && !outcome && (
-        <p className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-gold/10 px-3 py-2 text-sm">
-          <span className="flex-1">Roll initiative. The popup walks each creature; you can enter the table d20 or let the app roll. Dex is added. Attacks still use physical dice.</span>
-          <Button size="sm" variant="outline" onClick={() => setInitOpen(true)}>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-gold/5 px-4 py-2.5 text-sm">
+          <span className="flex-1 text-muted">Roll initiative. The popup walks each creature; you can enter the table d20 or let the app roll. Dex is added. Attacks still use physical dice.</span>
+          <Button size="sm" variant="outline" onClick={() => setInitOpen(true)} className="h-8 px-3 text-xs">
             {t('init.open')}
           </Button>
-        </p>
+        </div>
       )}
       {!setup && !outcome && standingEnemies((snap.combatants ?? []).map(asCombatantLike)).length === 0 && snap.combatants.some((c) => c.source === 'bestiary') && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-gold/10 px-3 py-2 text-sm">
-          <span>No standing enemies. Finalize when the fight is actually over — Table still pauses if someone fled.</span>
-          <Button size="sm" variant="ember" disabled={busy} onClick={() => setFinalizeOpen(true)}>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-gold/5 px-4 py-2.5 text-sm">
+          <span className="text-muted">No standing enemies. Finalize when the fight is actually over — Table still pauses if someone fled.</span>
+          <Button size="sm" variant="ember" disabled={busy} onClick={() => setFinalizeOpen(true)} className="h-8 px-3 text-xs">
             Finalize
           </Button>
         </div>
       )}
 
-      <div className="flex shrink-0 gap-1 border-b border-line px-2 py-1 lg:hidden">
+      <div className="flex shrink-0 gap-1 border-b border-line bg-panel-2/30 px-3 py-2 lg:hidden">
         {(['map', 'tracker', 'sheet'] as const).map((tab) => (
           <button
             key={tab}
             type="button"
-            className={cn('min-h-10 rounded px-3 py-1 text-sm capitalize', hudTab === tab ? 'bg-gold text-bg' : 'text-muted')}
+            className={cn('min-h-9 rounded-lg px-3 py-1.5 text-xs capitalize font-medium transition-colors', hudTab === tab ? 'bg-gold text-bg' : 'text-muted hover:text-ink')}
             onClick={() => setHudTab(tab)}
           >
             {tab}
@@ -707,7 +707,7 @@ export function Live() {
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <aside
           className={cn(
-            'min-h-0 w-full flex-col overflow-y-auto border-line p-3 lg:flex lg:w-80 lg:shrink-0 lg:flex-none lg:overflow-hidden lg:border-r',
+            'min-h-0 w-full flex-col overflow-y-auto border-line bg-panel/30 lg:flex lg:w-80 lg:shrink-0 lg:flex-none lg:overflow-hidden lg:border-r',
             hudTab === 'tracker' ? 'flex min-h-0 flex-1' : 'hidden lg:flex',
           )}
         >
@@ -775,7 +775,7 @@ export function Live() {
           </div>
           <div className="shrink-0 lg:max-h-[42%] lg:overflow-y-auto">
           {selectedCombatant?.source === 'character' && (
-            <div className="mt-3 space-y-2 rounded-md border border-line bg-bg p-2">
+            <div className="mt-3 space-y-2 rounded-lg border border-line bg-panel/50 p-2.5">
               <Button
                 size="sm"
                 variant="outline"
@@ -786,12 +786,13 @@ export function Live() {
                     .then(() => refreshLive())
                     .catch((e) => setError(e instanceof Error ? e.message : 'Could not request reaction'))
                 }}
+                className="h-8 px-3 text-xs"
               >
                 Request reaction
               </Button>
-              <div className="flex flex-wrap items-center gap-1">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <select
-                  className="h-8 rounded-md border border-line bg-bg px-2 text-xs"
+                  className="h-8 rounded-lg border border-line bg-bg px-2 text-xs focus:border-gold focus:outline-none"
                   value={saveAbility}
                   onChange={(e) => setSaveAbility(e.target.value as Ability)}
                   aria-label="Save ability"
@@ -818,6 +819,7 @@ export function Live() {
                       .then(() => refreshLive())
                       .catch((e) => setError(e instanceof Error ? e.message : 'Could not request save'))
                   }}
+                  className="h-8 px-3 text-xs"
                 >
                   Request save
                 </Button>
@@ -829,7 +831,7 @@ export function Live() {
             const tpl = templates.find((t) => t.id === instance.encounterTemplateId)
             const brief = [tpl?.difficulty, tpl?.objective, tpl?.notes].filter(Boolean).join(' · ')
             if (!brief) return null
-            return <p className="mt-2 text-xs text-muted">{brief}</p>
+            return <p className="mt-2.5 text-xs text-muted">{brief}</p>
           })()}
           <div className="mt-3 flex gap-2">
             <Input
@@ -844,6 +846,7 @@ export function Live() {
                   setAddQ('')
                 }
               }}
+              className="h-8"
             />
           </div>
           <div className="mt-2 flex flex-wrap gap-1">

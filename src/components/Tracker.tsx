@@ -56,28 +56,28 @@ export function Tracker({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
-        <div>
-          <div className="font-display text-lg text-gold-2">{setup ? 'Initiative' : `Round ${round}`}</div>
-          <div className="text-sm text-muted">
+      <div className="flex items-center justify-between gap-3 border-b border-line bg-panel-2/50 px-3 py-2.5">
+        <div className="min-w-0">
+          <div className="font-display text-base font-semibold text-gold-2">{setup ? 'Initiative' : `Round ${round}`}</div>
+          <div className="text-xs text-muted truncate">
             {setup ? 'Enter rolls, Sort, then begin round 1' : whose ? `${whose.name}'s turn` : 'No combatants yet'}
           </div>
         </div>
         {isDm && (
-          <div className="flex flex-wrap justify-end gap-1">
-            <Button size="sm" variant="outline" onClick={onSort}>
+          <div className="flex flex-wrap justify-end gap-1.5 shrink-0">
+            <Button size="sm" variant="outline" onClick={onSort} className="h-8 px-3 text-xs">
               Sort
             </Button>
             {setup ? (
-              <Button size="sm" variant="ember" onClick={onBeginRound}>
+              <Button size="sm" variant="ember" onClick={onBeginRound} className="h-8 px-3 text-xs">
                 Begin round 1
               </Button>
             ) : (
               <>
-                <Button size="sm" variant="outline" onClick={onSkip ?? onNext}>
+                <Button size="sm" variant="outline" onClick={onSkip ?? onNext} className="h-8 px-3 text-xs">
                   Skip
                 </Button>
-                <Button size="sm" variant="ember" onClick={onNext}>
+                <Button size="sm" variant="ember" onClick={onNext} className="h-8 px-3 text-xs">
                   Next turn
                 </Button>
               </>
@@ -85,7 +85,7 @@ export function Tracker({
           </div>
         )}
       </div>
-      <ul className="mt-2 flex-1 space-y-2 overflow-y-auto scroll-thin pr-1">
+      <ul className="mt-2 flex-1 space-y-1.5 overflow-y-auto scroll-thin px-2 pb-2">
         {ordered.map((c, i) => {
           const econ = c.turnEconomy ?? emptyTurnEconomy()
           const canEcon = isDm || c.id === economyId
@@ -94,37 +94,37 @@ export function Tracker({
           <li
             key={c.id}
             className={cn(
-              'cursor-pointer rounded-md border p-2',
-              i === current ? 'border-ember bg-ember/15' : 'border-line bg-panel-2/40',
-              selectedId === c.id && 'ring-1 ring-gold',
-              c.deathState === 'dead' && 'opacity-70',
+              'cursor-pointer rounded-lg border p-2.5 transition-all hover:border-line/60',
+              i === current ? 'border-gold bg-gold/10 shadow-sm' : 'border-line bg-panel/50',
+              selectedId === c.id && 'ring-2 ring-gold/50',
+              c.deathState === 'dead' && 'opacity-60',
             )}
             onClick={() => onSelect(c.id)}
           >
             <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full" style={{ background: c.color }} />
-              <span className="flex-1 font-medium">{c.name}</span>
-              {c.deathState === 'dying' && <span className="text-[10px] uppercase tracking-wide text-blood">Dying</span>}
-              {c.deathState === 'stable' && <span className="text-[10px] uppercase tracking-wide text-gold">Stable</span>}
-              {c.deathState === 'dead' && <span className="text-[10px] uppercase tracking-wide text-blood">Dead</span>}
+              <span className="h-2.5 w-2.5 rounded-full shadow-sm" style={{ background: c.color }} />
+              <span className="flex-1 font-medium text-sm">{c.name}</span>
+              {c.deathState === 'dying' && <span className="text-[10px] uppercase tracking-wide text-blood font-semibold">Dying</span>}
+              {c.deathState === 'stable' && <span className="text-[10px] uppercase tracking-wide text-gold font-semibold">Stable</span>}
+              {c.deathState === 'dead' && <span className="text-[10px] uppercase tracking-wide text-blood font-semibold">Dead</span>}
               {c.hpCurrent <= 0 && c.source === 'bestiary' && c.deathState !== 'dead' && (
                 <span className="text-[10px] uppercase tracking-wide text-muted">Down</span>
               )}
               {isDm && (
-                <span className="flex gap-1">
-                  <button type="button" className="text-xs text-muted" onClick={() => onReorder(-1, c.id)}>
+                <span className="flex gap-0.5">
+                  <button type="button" className="text-xs text-muted hover:text-ink px-1" onClick={() => onReorder(-1, c.id)}>
                     ↑
                   </button>
-                  <button type="button" className="text-xs text-muted" onClick={() => onReorder(1, c.id)}>
+                  <button type="button" className="text-xs text-muted hover:text-ink px-1" onClick={() => onReorder(1, c.id)}>
                     ↓
                   </button>
                 </span>
               )}
             </div>
-            <div className="mt-1 flex items-center gap-2 text-xs">
+            <div className="mt-1.5 flex items-center gap-2 text-xs">
               {isDm ? (
                 <input
-                  className="w-12 rounded border border-line bg-bg px-1"
+                  className="w-10 rounded border border-line bg-bg px-1.5 py-0.5 text-center text-xs focus:border-gold focus:outline-none"
                   type="number"
                   value={c.initiative}
                   onClick={(e) => e.stopPropagation()}
@@ -140,19 +140,19 @@ export function Tracker({
                 Adv vs {c.advantageAgainst.map((id) => combatants.find((x) => x.id === id)?.name ?? 'foe').join(', ')}
               </div>
             )}
-            <div className="mt-1 flex items-center gap-2">
+            <div className="mt-2 flex items-center gap-2">
               {isDm ? (
                 <>
                   <input
-                    className="w-14 rounded border border-line bg-bg px-1 text-sm"
+                    className="w-12 rounded border border-line bg-bg px-1.5 py-0.5 text-center text-sm focus:border-gold focus:outline-none"
                     type="number"
                     value={c.hpCurrent}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => onPatch(c.id, { hpCurrent: Number(e.target.value) })}
                   />
-                  <span className="text-muted">/</span>
+                  <span className="text-muted text-sm">/</span>
                   <input
-                    className="w-14 rounded border border-line bg-bg px-1 text-sm"
+                    className="w-12 rounded border border-line bg-bg px-1.5 py-0.5 text-center text-sm focus:border-gold focus:outline-none"
                     type="number"
                     value={c.hpMax}
                     onClick={(e) => e.stopPropagation()}
@@ -166,22 +166,22 @@ export function Tracker({
                 </span>
               )}
             </div>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-bg">
-              <div className={cn('h-full', hpColor(c.hpCurrent, c.hpMax))} style={{ width: `${Math.max(0, Math.min(100, (c.hpCurrent / c.hpMax) * 100))}%` }} />
+            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-bg">
+              <div className={cn('h-full rounded-full transition-all', hpColor(c.hpCurrent, c.hpMax))} style={{ width: `${Math.max(0, Math.min(100, (c.hpCurrent / c.hpMax) * 100))}%` }} />
             </div>
             {c.conditions.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-1">
+              <div className="mt-1.5 flex flex-wrap gap-1">
                 {c.conditions.map((cond) => (
                   <span
                     key={cond}
-                    className="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-bg"
+                    className="rounded-md px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-bg font-medium"
                     style={{ background: conditionRingColor(cond) }}
                   >
                     {cond}
                     {isDm && (
                       <button
                         type="button"
-                        className="ml-1"
+                        className="ml-1 hover:opacity-70"
                         onClick={(e) => {
                           e.stopPropagation()
                           onPatch(c.id, { conditions: c.conditions.filter((x) => x !== cond) })
@@ -196,7 +196,7 @@ export function Tracker({
             )}
             {isDm && selectedId === c.id && (
               <select
-                className="mt-2 w-full rounded border border-line bg-bg px-2 py-1 text-xs"
+                className="mt-2 w-full rounded-lg border border-line bg-bg px-2 py-1.5 text-xs focus:border-gold focus:outline-none"
                 defaultValue=""
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) => {
@@ -211,34 +211,34 @@ export function Tracker({
                 ))}
               </select>
             )}
-            <div className="mt-1 text-[10px] uppercase tracking-wide text-muted">
+            <div className="mt-1.5 text-[10px] uppercase tracking-wide text-muted">
               Move {c.movementRemaining ?? 0} / {c.speedFeet ?? 30} ft
             </div>
             {isDm && selectedId === c.id && (
-              <div className="mt-1 flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
-                  className="rounded border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted"
+                  className="rounded-md border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted hover:border-gold/50 hover:text-ink"
                   onClick={() => onPatch(c.id, { movementRemaining: (c.movementRemaining ?? 0) + 5 })}
                 >
                   +5 ft
                 </button>
                 <button
                   type="button"
-                  className="rounded border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted"
+                  className="rounded-md border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted hover:border-gold/50 hover:text-ink"
                   onClick={() => onPatch(c.id, { movementRemaining: (c.movementRemaining ?? 0) + 30 })}
                 >
                   +30 ft
                 </button>
                 <button
                   type="button"
-                  className="rounded border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted"
+                  className="rounded-md border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted hover:border-gold/50 hover:text-ink"
                   onClick={() => onPatch(c.id, { movementRemaining: c.speedFeet ?? 30 })}
                 >
                   Reset
                 </button>
                 <input
-                  className="h-7 w-14 rounded border border-line bg-bg px-1 text-xs"
+                  className="h-7 w-14 rounded-md border border-line bg-bg px-1.5 text-xs focus:border-gold focus:outline-none"
                   type="number"
                   min={0}
                   value={c.movementRemaining ?? 0}
@@ -254,8 +254,8 @@ export function Tracker({
                     key={key}
                     type="button"
                     className={cn(
-                      'rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide',
-                      econ[key] ? 'bg-gold text-bg' : 'border border-line text-muted',
+                      'rounded-md px-1.5 py-0.5 text-[10px] uppercase tracking-wide transition-colors',
+                      econ[key] ? 'bg-gold text-bg font-medium' : 'border border-line text-muted hover:border-gold/50 hover:text-ink',
                     )}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -277,7 +277,7 @@ export function Tracker({
               <div className="mt-2 flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
                 <span className="text-[10px] uppercase tracking-wide text-muted">Saves</span>
                 <input
-                  className="h-8 w-10 rounded border border-line bg-bg px-1 text-xs"
+                  className="h-8 w-10 rounded-md border border-line bg-bg px-1.5 text-xs focus:border-gold focus:outline-none"
                   type="number"
                   min={0}
                   max={3}
@@ -286,7 +286,7 @@ export function Tracker({
                   aria-label="Death save successes"
                 />
                 <input
-                  className="h-8 w-10 rounded border border-line bg-bg px-1 text-xs"
+                  className="h-8 w-10 rounded-md border border-line bg-bg px-1.5 text-xs focus:border-gold focus:outline-none"
                   type="number"
                   min={0}
                   max={3}
@@ -295,7 +295,7 @@ export function Tracker({
                   aria-label="Death save failures"
                 />
                 <select
-                  className="h-8 rounded border border-line bg-bg px-1 text-xs"
+                  className="h-8 rounded-md border border-line bg-bg px-1.5 text-xs focus:border-gold focus:outline-none"
                   value={c.deathState}
                   onChange={(e) => onPatch(c.id, { deathState: e.target.value })}
                   aria-label="Death state"
@@ -310,7 +310,7 @@ export function Tracker({
             {c.source === 'character' && c.deathState === 'dying' && onDeathSave && (selectedId === c.id || economyId === c.id) && (
               <div className="mt-2 flex gap-1" onClick={(e) => e.stopPropagation()}>
                 <input
-                  className="h-8 w-14 rounded border border-line bg-bg px-1 text-xs"
+                  className="h-8 w-14 rounded-md border border-line bg-bg px-1.5 text-xs focus:border-gold focus:outline-none"
                   inputMode="numeric"
                   placeholder="d20"
                   value={deathD20}
@@ -331,7 +331,7 @@ export function Tracker({
               <Button
                 size="sm"
                 variant="ghost"
-                className="mt-1"
+                className="mt-2"
                 onClick={(e) => {
                   e.stopPropagation()
                   onRemove(c.id)
