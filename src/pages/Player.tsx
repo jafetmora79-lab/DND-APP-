@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { BookOpen, X } from 'lucide-react'
+import { Bell, BellOff, BookOpen, HeartPulse, Swords, User, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CharacterSheet } from '@/components/CharacterSheet'
 import { EncounterOutcomeOverlay } from '@/components/EncounterOutcome'
@@ -14,8 +14,10 @@ import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { decorateTokens, monsterForCombatant } from '@/lib/combat'
 import { tableAmbiance } from '@/lib/campaign-hub'
+import { haptic, notifyTurn, notificationPermissionAskedBefore, requestNotificationPermission, supportsNotifications } from '@/lib/haptics'
 import { LanguageToggle, useT } from '@/lib/i18n'
 import { useLive } from '@/lib/realtime'
+import { consumePendingJoin, rememberPlayerSession } from '@/lib/recent-sessions'
 import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
 import type { Attack, EncounterSnapshot, PlayerCharacter } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -37,6 +39,14 @@ export function Player() {
   const [launchAttack, setLaunchAttack] = useState<{ attack: Attack; index: number } | null>(null)
   const [initOpen, setInitOpen] = useState(true)
   const [statOpen, setStatOpen] = useState(false)
+  const [notifOn, setNotifOn] = useState(false)
+  const [deathOpen, setDeathOpen] = useState(false)
+  const [deathD20, setDeathD20] = useState('')
+  const [turnFlash, setTurnFlash] = useState(false)
+  const [turnBanner, setTurnBanner] = useState(false)
+  const lastTurnIdRef = useRef<string>('')
+  const lastHpRef = useRef<number | null>(null)
+  const sessionEnrichedRef = useRef(false)
 
   const load = useCallback(() => {
     if (!campaignId) return
@@ -49,6 +59,13 @@ export function Player() {
 
   const refreshLive = useLive(campaignId, setSnap)
 
+  useEffect(() => {
+    if (!supportsNotifications()) return
+    if (notificationPermissionAskedBefore()) {
+      setNotifOn(Notification.permission === 'granted')
+    }
+  }, [])
+
   const me = user && user.role === 'player' ? snap?.characters.find((c) => c.id === user.characterId) : null
   const viewing: PlayerCharacter | undefined = snap?.characters.find((c) => c.id === sheetId) ?? me ?? snap?.characters[0]
   const whose = snap
@@ -56,6 +73,70 @@ export function Player() {
     : undefined
   const myCombatant = snap?.combatants.find((c) => c.source === 'character' && c.sourceId === me?.id)
   const saveTargetId = focusId ?? myCombatant?.id ?? null
+  const myTurn = Boolean(myCombatant && whose && whose.id === myCombatant.id && !isFightSetup(snap?.session ?? null, snap?.instance ?? null))
+
+  useEffect(() => {
+    if (!snap || !me || user?.role !== 'player' || sessionEnrichedRef.current) return
+    if (!snap.campaign || !snap.campaign.name || !me.name) return
+    const pending = consumePendingJoin()
+    sessionEnrichedRef.current = true
+    if (pending && campaignId) {
+      rememberPlayerSession({
+        joinCode: pending.joinCode,
+        personalCode: pending.personalCode,
+        campaignName: snap.campaign.name,
+        characterName: me.name,
+        characterId: me.id,
+        campaignId,
+      })
+    }
+  }, [snap, me, user, campaignId])
+
+  useEffect(() => {
+    if (!myCombatant || !snap?.instance) return
+    const prevTurn = lastTurnIdRef.current
+    const nowTurn = `${snap.instance.currentTurnPosition}-${snap.instance.roundNumber}-${myCombatant.id}-${whose?.id ?? ''}`
+    if (prevTurn && prevTurn !== nowTurn && myTurn) {
+      haptic('turn')
+      setTurnFlash(true)
+      setTurnBanner(true)
+      const t1 = setTimeout(() => setTurnFlash(false), 900)
+      const t2 = setTimeout(() => setTurnBanner(false), 5000)
+      if (notifOn && me) notifyTurn(me.name, snap.campaign?.name ?? '')
+      return () => {
+        clearTimeout(t1)
+        clearTimeout(t2)
+      }
+    }
+    lastTurnIdRef.current = nowTurn
+  }, [myTurn, whose?.id, snap?.instance?.currentTurnPosition, snap?.instance?.roundNumber, myCombatant?.id, notifOn, me, snap?.campaign?.name])
+
+  useEffect(() => {
+    if (!myCombatant) {
+      lastHpRef.current = null
+      return
+    }
+    const nowHp = myCombatant.hpCurrent
+    if (lastHpRef.current !== null && nowHp < lastHpRef.current) {
+      haptic('hit')
+    } else if (lastHpRef.current !== null && nowHp > lastHpRef.current) {
+      haptic('success')
+    }
+    if (myCombatant.deathState === 'dead') {
+      haptic('death')
+    }
+    lastHpRef.current = nowHp
+  }, [myCombatant?.hpCurrent, myCombatant?.deathState])
+
+  useEffect(() => {
+    if (myCombatant?.deathState === 'dying') {
+      setDeathOpen(true)
+    } else {
+      setDeathOpen(false)
+      setDeathD20('')
+    }
+  }, [myCombatant?.deathState])
+
   const highlightIds = useMemo(() => {
     if (!myCombatant || (mapPick !== 'attack' && mapPick !== 'help')) return []
     return snap?.combatants.filter((c) => c.id !== myCombatant.id).map((c) => c.id) ?? []
@@ -68,10 +149,36 @@ export function Player() {
   const focusedMonster = monsterForCombatant(focusedCombatant, snap?.monsters)
 
   const onUseAttack = useCallback((attack: Attack, index: number) => {
+    haptic('tap')
     setLaunchAttack({ attack, index })
     setDrawer(false)
     setTab('map')
   }, [])
+
+  async function enableNotifs() {
+    if (!supportsNotifications()) return
+    const p = await requestNotificationPermission()
+    setNotifOn(p === 'granted')
+  }
+
+  function submitDeathSave() {
+    if (!myCombatant) return
+    const n = Number(deathD20)
+    if (!Number.isFinite(n) || n < 1 || n > 20) {
+      setNote('Enter a d20 (1–20)')
+      return
+    }
+    haptic('tap')
+    void api
+      .deathSave(myCombatant.id, { d20: n })
+      .then((r) => {
+        setNote(r.message)
+        setDeathD20('')
+        setDeathOpen(false)
+        refreshLive()
+      })
+      .catch((e) => setNote(e instanceof Error ? e.message : 'Death save failed'))
+  }
 
   if (!snap) {
     return <div className="p-6 text-muted">{error || t('player.connecting')}</div>
@@ -119,6 +226,20 @@ export function Player() {
               {me.sheet.hpCurrent}/{me.sheet.hpMax} {t('player.hp')}
             </div>
           )}
+          {supportsNotifications() && (
+            <button
+              type="button"
+              onClick={enableNotifs}
+              className={cn(
+                'shrink-0 rounded-md border p-2 text-xs transition',
+                notifOn ? 'border-ember/40 bg-ember/10 text-ember' : 'border-line text-muted hover:border-gold/40 hover:text-gold',
+              )}
+              aria-label={notifOn ? 'Turn notifications on' : 'Enable turn notifications'}
+              title={notifOn ? 'Turn notifications on' : 'Alert me when it’s my turn'}
+            >
+              {notifOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+            </button>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -152,12 +273,65 @@ export function Player() {
               : undefined
           }
         />
+
+        <button
+          type="button"
+          onClick={() => {
+            if (me) {
+              haptic('tap')
+              setSheetId(me.id)
+              setDrawer(true)
+            }
+          }}
+          className="fixed bottom-5 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full border border-gold/60 bg-gold text-bg shadow-[0_8px_24px_rgba(200,150,70,0.35)] transition active:scale-95"
+          aria-label="Open my character sheet"
+        >
+          <User className="h-6 w-6" />
+        </button>
+
+        {drawer && (
+          <div className="fixed inset-0 z-40 flex items-end bg-black/60 md:items-stretch md:justify-end">
+            <div className="flex h-[88dvh] w-full flex-col rounded-t-2xl border border-line bg-panel p-4 md:h-full md:max-w-lg md:rounded-none">
+              <div className="flex items-center justify-between">
+                <h2 className="font-display text-lg text-gold">Character sheets</h2>
+                <button type="button" onClick={() => setDrawer(false)} aria-label="Close">
+                  <X />
+                </button>
+              </div>
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
+                {snap.characters.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={cn('shrink-0 rounded-full border px-3 py-1 text-sm', sheetId === c.id ? 'border-gold bg-gold text-bg' : 'border-line')}
+                    onClick={() => {
+                      haptic('tap')
+                      setSheetId(c.id)
+                    }}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden pt-2">{sheet}</div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
 
   return (
-    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
+    <div className={cn('flex h-dvh min-h-0 flex-col overflow-hidden bg-bg', turnFlash && 'animate-turn-flash')}>
+      {turnBanner && myTurn && me && (
+        <div className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-2">
+          <div className="animate-turn-bounce flex items-center gap-2 rounded-full border-2 border-ember bg-ember px-5 py-2 text-sm font-bold uppercase tracking-wider text-white shadow-[0_0_40px_rgba(200,50,40,0.55)]">
+            <Swords className="h-4 w-4" />
+            {me.name} — Your Turn!
+          </div>
+        </div>
+      )}
+
       <header className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
         <div className="min-w-0 flex-1">
           <div className="truncate font-display text-gold">{snap.campaign.name}</div>
@@ -170,17 +344,34 @@ export function Player() {
           </div>
         </div>
         {me && (
-          <div className="stat-num text-sm">
-            {me.sheet.hpCurrent}/{me.sheet.hpMax} {t('player.hp')}
+          <div className={cn(
+            'stat-num text-sm',
+            myCombatant && myCombatant.deathState === 'dying' && 'animate-pulse text-blood',
+          )}>
+            {myCombatant ? `${myCombatant.hpCurrent}/${myCombatant.hpMax}` : `${me.sheet.hpCurrent}/${me.sheet.hpMax}`} {t('player.hp')}
           </div>
         )}
+        {supportsNotifications() && (
+          <button
+            type="button"
+            onClick={enableNotifs}
+            className={cn(
+              'shrink-0 rounded-md border p-2 transition',
+              notifOn ? 'border-ember/40 bg-ember/10 text-ember' : 'border-line text-muted hover:border-gold/40 hover:text-gold',
+            )}
+            aria-label={notifOn ? 'Turn notifications on' : 'Enable turn notifications'}
+            title={notifOn ? 'Turn notifications on' : 'Alert me when it’s my turn'}
+          >
+            {notifOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+          </button>
+        )}
         {setup && (
-          <Button size="sm" variant="outline" onClick={() => setInitOpen(true)}>
+          <Button size="sm" variant="outline" onClick={() => { haptic('tap'); setInitOpen(true) }}>
             {t('init.title')}
           </Button>
         )}
-        <Button size="sm" variant="outline" onClick={() => setDrawer(true)}>
-          <BookOpen className="h-4 w-4" /> {t('player.sheets')}
+        <Button size="sm" variant="outline" onClick={() => { haptic('tap'); setDrawer(true) }}>
+          <BookOpen className="h-4 w-4" /> <span className="hidden sm:inline">{t('player.sheets')}</span>
         </Button>
         <Button
           size="sm"
@@ -197,10 +388,10 @@ export function Player() {
       {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
 
       <div className="flex shrink-0 gap-1 border-b border-line px-2 py-1 lg:hidden">
-        <button type="button" className={cn('rounded px-3 py-1 text-sm', tab === 'map' ? 'bg-gold text-bg' : 'text-muted')} onClick={() => setTab('map')}>
+        <button type="button" className={cn('rounded px-3 py-1 text-sm', tab === 'map' ? 'bg-gold text-bg' : 'text-muted')} onClick={() => { haptic('tap'); setTab('map') }}>
           {t('player.map')}
         </button>
-        <button type="button" className={cn('rounded px-3 py-1 text-sm', tab === 'tracker' ? 'bg-gold text-bg' : 'text-muted')} onClick={() => setTab('tracker')}>
+        <button type="button" className={cn('rounded px-3 py-1 text-sm', tab === 'tracker' ? 'bg-gold text-bg' : 'text-muted')} onClick={() => { haptic('tap'); setTab('tracker') }}>
           {t('player.tracker')}
         </button>
       </div>
@@ -218,6 +409,7 @@ export function Player() {
             viewerCharacterId={user?.role === 'player' ? user.characterId : null}
             combatants={snap.combatants}
             onSelect={(id) => {
+              haptic('tap')
               if (mapPick === 'attack' || mapPick === 'help') {
                 setTargetId(id)
                 if (id) setFocusId(id)
@@ -262,9 +454,10 @@ export function Player() {
             setup={isFightSetup(snap.session, snap.instance)}
             selectedId={saveTargetId}
             economyId={myCombatant?.id}
-            onSelect={(id) => setFocusId(id)}
+            onSelect={(id) => { haptic('tap'); setFocusId(id) }}
             onPatch={(id, body) => {
               if (!myCombatant || id !== myCombatant.id) return
+              haptic('tap')
               setSnap((s) =>
                 s
                   ? {
@@ -284,6 +477,7 @@ export function Player() {
             onReorder={() => undefined}
             onDeathSave={(id, d20v) => {
               if (!myCombatant || id !== myCombatant.id) return
+              haptic('tap')
               void api
                 .deathSave(id, { d20: d20v })
                 .then((r) => {
@@ -305,6 +499,7 @@ export function Player() {
                 size="sm"
                 variant="ember"
                 onClick={() => {
+                  haptic('tap')
                   void api
                     .joinFight(snap.instance!.id)
                     .then(() => {
@@ -343,6 +538,21 @@ export function Player() {
         </>
       )}
 
+      {myTurn && me && (
+        <button
+          type="button"
+          onClick={() => {
+            haptic('tap')
+            setSheetId(me.id)
+            setDrawer(true)
+          }}
+          className="fixed bottom-5 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full border border-gold/60 bg-gold text-bg shadow-[0_8px_24px_rgba(200,150,70,0.35)] transition active:scale-95"
+          aria-label="Open my character sheet"
+        >
+          <User className="h-6 w-6" />
+        </button>
+      )}
+
       {drawer && (
         <div className="fixed inset-0 z-40 flex items-end bg-black/60 md:items-stretch md:justify-end">
           <div className="flex h-[88dvh] w-full flex-col rounded-t-2xl border border-line bg-panel p-4 md:h-full md:max-w-lg md:rounded-none">
@@ -358,13 +568,66 @@ export function Player() {
                   key={c.id}
                   type="button"
                   className={cn('shrink-0 rounded-full border px-3 py-1 text-sm', sheetId === c.id ? 'border-gold bg-gold text-bg' : 'border-line')}
-                  onClick={() => setSheetId(c.id)}
+                  onClick={() => {
+                    haptic('tap')
+                    setSheetId(c.id)
+                  }}
                 >
                   {c.name}
                 </button>
               ))}
             </div>
             <div className="min-h-0 flex-1 overflow-hidden pt-2">{sheet}</div>
+          </div>
+        </div>
+      )}
+
+      {deathOpen && myCombatant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl border-2 border-blood bg-panel p-5 shadow-[0_0_60px_rgba(200,30,30,0.5)]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blood/20 text-blood">
+                <HeartPulse className="h-6 w-6 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="font-display text-xl text-blood">Death Save</h3>
+                <p className="text-xs text-muted">You are dying. Roll a d20.</p>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => { haptic('tap'); setDeathD20(String(n)) }}
+                  className={cn(
+                    'rounded-md border py-2 text-sm font-semibold transition',
+                    deathD20 === String(n)
+                      ? n === 1
+                        ? 'border-blood bg-blood text-white'
+                        : n === 20
+                          ? 'border-ember bg-ember text-white'
+                          : 'border-gold bg-gold text-bg'
+                      : 'border-line hover:border-gold/60',
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => { setDeathOpen(false); setDeathD20('') }}>
+                Later
+              </Button>
+              <Button
+                variant="ember"
+                className="flex-1"
+                disabled={!deathD20}
+                onClick={submitDeathSave}
+              >
+                Roll {deathD20 && `d20 = ${deathD20}`}
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -387,7 +650,7 @@ export function Player() {
           <div className="flex h-[80dvh] w-full flex-col rounded-t-2xl border border-line bg-panel p-4 md:h-full md:max-w-lg md:rounded-none">
             <div className="flex items-center justify-between">
               <h2 className="font-display text-lg text-gold">Stat block</h2>
-              <button type="button" onClick={() => setStatOpen(false)} aria-label="Close">
+              <button type="button" onClick={() => { haptic('tap'); setStatOpen(false) }} aria-label="Close">
                 <X />
               </button>
             </div>

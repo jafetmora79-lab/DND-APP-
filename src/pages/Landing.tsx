@@ -1,10 +1,13 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ChevronRight, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth'
 import { publicAsset, usingSupabase } from '@/lib/config'
 import { LanguageToggle, useT } from '@/lib/i18n'
+import { forgetPlayerSession, getRecentSessions, setPendingJoin, type RecentPlayerSession } from '@/lib/recent-sessions'
+import { cn } from '@/lib/utils'
 
 export function Landing() {
   const { user, loading, loginDm, registerDm, joinPlayer } = useAuth()
@@ -19,6 +22,19 @@ export function Landing() {
   const [personal, setPersonal] = useState(sampleTable ? 'ELARA7K2' : '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [recent, setRecent] = useState<RecentPlayerSession[]>([])
+  const [rejoinBusy, setRejoinBusy] = useState<string | null>(null)
+
+  useEffect(() => {
+    setRecent(getRecentSessions())
+  }, [])
+
+  useEffect(() => {
+    if (mode !== 'join' || recent.length === 0) return
+    if (!joinCode && !personal) {
+      setJoinCode(recent[0].joinCode)
+    }
+  }, [mode, recent])
 
   async function submitDm(e: FormEvent) {
     e.preventDefault()
@@ -44,6 +60,7 @@ export function Landing() {
     setBusy(true)
     setError('')
     try {
+      setPendingJoin(joinCode, personal)
       const next = await joinPlayer(joinCode, personal)
       if (next.role === 'player') nav(`/play/${next.campaignId}`)
       else nav('/dm')
@@ -52,6 +69,27 @@ export function Landing() {
     } finally {
       setBusy(false)
     }
+  }
+
+  async function rejoin(s: RecentPlayerSession) {
+    setRejoinBusy(s.campaignId)
+    setError('')
+    try {
+      setPendingJoin(s.joinCode, s.personalCode)
+      const next = await joinPlayer(s.joinCode, s.personalCode)
+      if (next.role === 'player') nav(`/play/${next.campaignId}`)
+      else nav('/dm')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not rejoin')
+    } finally {
+      setRejoinBusy(null)
+    }
+  }
+
+  function removeRecent(e: React.MouseEvent, s: RecentPlayerSession) {
+    e.stopPropagation()
+    forgetPlayerSession(s.campaignId, s.characterId)
+    setRecent(getRecentSessions())
   }
 
   return (
@@ -112,18 +150,68 @@ export function Landing() {
               </Button>
             </form>
           ) : (
-            <form className="grid gap-3" onSubmit={submitJoin}>
-              <Field label={t('landing.joinCode')}>
-                <Input value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} autoCapitalize="characters" required />
-              </Field>
-              <Field label={t('landing.personalCode')}>
-                <Input value={personal} onChange={(e) => setPersonal(e.target.value.toUpperCase())} autoCapitalize="characters" required />
-              </Field>
-              {error && <p className="text-sm text-blood">{error}</p>}
-              <Button type="submit" size="lg" disabled={busy || loading}>
-                {busy ? t('landing.joining') : t('landing.start')}
-              </Button>
-            </form>
+            <div className="grid gap-3">
+              <form className="grid gap-3" onSubmit={submitJoin}>
+                <Field label={t('landing.joinCode')}>
+                  <Input value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} autoCapitalize="characters" required />
+                </Field>
+                <Field label={t('landing.personalCode')}>
+                  <Input value={personal} onChange={(e) => setPersonal(e.target.value.toUpperCase())} autoCapitalize="characters" required />
+                </Field>
+                {error && <p className="text-sm text-blood">{error}</p>}
+                <Button type="submit" size="lg" disabled={busy || loading}>
+                  {busy ? t('landing.joining') : t('landing.start')}
+                </Button>
+              </form>
+
+              {recent.length > 0 && (
+                <div className="mt-4 border-t border-line pt-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted">Recent characters</p>
+                  </div>
+                  <ul className="space-y-2">
+                    {recent.map((s) => (
+                      <li key={`${s.campaignId}-${s.characterId}`}>
+                        <button
+                          type="button"
+                          onClick={() => rejoin(s)}
+                          disabled={rejoinBusy !== null}
+                          className={cn(
+                            'group flex w-full items-center gap-3 rounded-lg border border-line bg-panel-2/50 p-3 text-left transition hover:border-gold/50 hover:bg-gold/5',
+                            rejoinBusy === s.campaignId && 'opacity-60',
+                          )}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="truncate font-semibold text-ink">{s.characterName}</span>
+                              <span className="shrink-0 rounded-full bg-panel-2 px-2 py-0.5 text-[10px] text-muted">{s.joinCode}</span>
+                            </div>
+                            <div className="mt-0.5 truncate text-xs text-muted">
+                              {s.campaignName} ·{' '}
+                              {new Date(s.lastUsed).toLocaleDateString(undefined, {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                              })}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => removeRecent(e, s)}
+                            className="shrink-0 rounded-md p-1.5 text-muted opacity-60 transition hover:bg-blood/20 hover:text-blood hover:opacity-100 group-hover:opacity-100"
+                            aria-label="Forget this character"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                          <ChevronRight className={cn('h-4 w-4 shrink-0 text-muted transition', rejoinBusy === s.campaignId && 'animate-pulse')} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
