@@ -2,7 +2,6 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { api, getToken, setToken } from './api'
 import { assertHostedBackend, usingSupabase } from './config'
 import { supabase } from './supabase'
-import { rememberPlayerSession } from './recent-sessions'
 import type { AuthUser } from './types'
 
 type AuthState = {
