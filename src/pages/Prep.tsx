@@ -325,7 +325,7 @@ export function Prep() {
         <div className="mt-6 rounded-xl border border-line bg-panel p-4">
           <h2 className="font-display text-xl text-gold">Campaign hub</h2>
           <p className="mt-1 text-sm text-muted">
-            Session timeline, stage scenes between fights, quests, NPCs, and party loot. The live table shows this to everyone between fights.
+            Session timeline, stage scenes between fights (set these before Live), quests, NPCs, and party loot. Use Up/Down to order scenes. After/Before pick which encounters each image sits between.
           </p>
           <div className="mt-4">
             <CampaignHubPanel

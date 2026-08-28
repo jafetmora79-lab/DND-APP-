@@ -58,6 +58,7 @@ export function Live() {
   const [saveDc, setSaveDc] = useState('13')
   const [initOpen, setInitOpen] = useState(true)
   const captionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hubTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback(async () => {
     if (!campaignId) return
@@ -325,6 +326,59 @@ export function Live() {
     }
   }
 
+  async function onCommitScene(scene: {
+    file: File
+    name: string
+    caption: string
+    afterTemplateId: string
+    beforeTemplateId: string
+    saveToCampaign: boolean
+  }) {
+    if (!campaignId) return
+    setBusy(true)
+    setError('')
+    try {
+      const uploaded = await api.uploadStageImage(campaignId, scene.file)
+      await api.patchSession(campaignId, {
+        ambianceImageUrl: uploaded.imageUrl,
+        ambianceCaption: scene.caption,
+      })
+      if (scene.saveToCampaign) {
+        const hub = parseHub(snap?.campaign.hub)
+        await api.patchCampaign(campaignId, {
+          hub: {
+            ...hub,
+            stages: [
+              ...hub.stages,
+              {
+                id: crypto.randomUUID().slice(0, 8),
+                name: scene.name,
+                imageUrl: uploaded.imageUrl,
+                caption: scene.caption,
+                afterTemplateId: scene.afterTemplateId,
+                beforeTemplateId: scene.beforeTemplateId,
+              },
+            ],
+          },
+        })
+      }
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function onHubChange(next: ReturnType<typeof parseHub>) {
+    if (!campaignId) return
+    setSnap((s) => (s ? { ...s, campaign: { ...s.campaign, hub: next } } : s))
+    if (hubTimer.current) clearTimeout(hubTimer.current)
+    hubTimer.current = setTimeout(() => {
+      api.patchCampaign(campaignId, { hub: next }).catch((e) => setError(e.message))
+    }, 400)
+  }
+
   async function onClearScene() {
     if (!campaignId) return
     await api.patchSession(campaignId, { ambianceImageUrl: null })
@@ -442,6 +496,7 @@ export function Live() {
             caption: snap.session?.ambianceCaption ?? '',
             onCaption,
             onUpload: onUploadScene,
+            onCommitScene,
             onClearImage: onClearScene,
             hasImage: Boolean(snap.session?.ambianceImageUrl),
             templates,
@@ -452,6 +507,11 @@ export function Live() {
             activeFight: Boolean(instance && instance.status === 'active'),
             stages: parseHub(snap.campaign.hub).stages,
             onSelectStage,
+            onHubChange,
+            onUploadStage: async (file) => {
+              const r = await api.uploadStageImage(campaignId!, file)
+              return r.imageUrl
+            },
           }}
           onShortRest={(characterId, hpCurrent) => {
             const ch = snap.characters.find((c) => c.id === characterId)

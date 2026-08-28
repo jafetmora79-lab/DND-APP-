@@ -174,7 +174,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
           )}
         </div>
         <p className="mt-1 text-xs text-muted">
-          Images for the table between fights. Pick which encounter each scene sits after and before.
+          Set these before you open Live. Top to bottom is the night’s order. Each scene sits after one encounter and before the next.
         </p>
         <ul className="mt-2 space-y-2">
           {data.stages.map((s, i) => (
@@ -182,10 +182,21 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
               {canEdit ? (
                 <StageEditor
                   stage={s}
+                  index={i}
+                  total={data.stages.length}
                   templates={templates}
                   onChange={(next) => {
                     const stages = data.stages.slice()
                     stages[i] = next
+                    patch({ ...data, stages })
+                  }}
+                  onMove={(dir) => {
+                    const j = i + dir
+                    if (j < 0 || j >= data.stages.length) return
+                    const stages = data.stages.slice()
+                    const swap = stages[i]!
+                    stages[i] = stages[j]!
+                    stages[j] = swap
                     patch({ ...data, stages })
                   }}
                   onRemove={() => patch({ ...data, stages: data.stages.filter((x) => x.id !== s.id) })}
@@ -394,14 +405,20 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
 
 function StageEditor({
   stage,
+  index,
+  total,
   templates,
   onChange,
+  onMove,
   onRemove,
   onUploadImage,
 }: {
   stage: CampaignStage
+  index: number
+  total: number
   templates: EncounterTemplate[]
   onChange: (next: CampaignStage) => void
+  onMove: (dir: -1 | 1) => void
   onRemove: () => void
   onUploadImage?: (file: File) => Promise<string>
 }) {
@@ -425,6 +442,17 @@ function StageEditor({
 
   return (
     <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] uppercase tracking-wider text-muted">Scene {index + 1}</span>
+        <div className="flex gap-1">
+          <button type="button" className="text-xs text-muted disabled:opacity-40" disabled={index === 0} onClick={() => onMove(-1)}>
+            Up
+          </button>
+          <button type="button" className="text-xs text-muted disabled:opacity-40" disabled={index === total - 1} onClick={() => onMove(1)}>
+            Down
+          </button>
+        </div>
+      </div>
       <Input value={stage.name} onChange={(e) => onChange({ ...stage, name: e.target.value })} placeholder="Scene name" />
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="grid gap-1 text-xs text-muted">
