@@ -213,6 +213,8 @@ as $$
 declare
   sess record;
   ch record;
+  q text;
+  n int;
 begin
   if auth.uid() is null then
     raise exception 'Sign-in required';
@@ -221,10 +223,40 @@ begin
   if not found then
     raise exception 'No table is using that join code tonight';
   end if;
-  select * into ch from public.player_characters
-    where campaign_id = sess.campaign_id and upper(personal_code) = upper(trim(p_personal));
-  if not found then
-    raise exception 'That personal code does not belong to this campaign';
+  q := regexp_replace(btrim(coalesce(p_personal, '')), '\s+', ' ', 'g');
+  if q = '' then
+    raise exception 'Enter your character name.';
+  end if;
+  select count(*) into n from public.player_characters
+    where campaign_id = sess.campaign_id
+      and upper(regexp_replace(btrim(name), '\s+', ' ', 'g')) = upper(q);
+  if n > 1 then
+    raise exception 'Two characters share that name. Ask the DM to rename one.';
+  end if;
+  if n = 1 then
+    select * into ch from public.player_characters
+      where campaign_id = sess.campaign_id
+        and upper(regexp_replace(btrim(name), '\s+', ' ', 'g')) = upper(q);
+  else
+    select count(*) into n from public.player_characters
+      where campaign_id = sess.campaign_id
+        and (upper(regexp_replace(btrim(name), '\s+', ' ', 'g')) = upper(q)
+          or upper(regexp_replace(btrim(name), '\s+', ' ', 'g')) like upper(q) || ' %');
+    if n > 1 then
+      raise exception 'Several characters match that name. Use the full character name.';
+    end if;
+    if n = 1 then
+      select * into ch from public.player_characters
+        where campaign_id = sess.campaign_id
+          and (upper(regexp_replace(btrim(name), '\s+', ' ', 'g')) = upper(q)
+            or upper(regexp_replace(btrim(name), '\s+', ' ', 'g')) like upper(q) || ' %');
+    else
+      select * into ch from public.player_characters
+        where campaign_id = sess.campaign_id and upper(personal_code) = upper(q);
+      if not found then
+        raise exception 'No character with that name at this table.';
+      end if;
+    end if;
   end if;
   insert into public.character_access (user_id, character_id, campaign_id)
   values (auth.uid(), ch.id, ch.campaign_id)

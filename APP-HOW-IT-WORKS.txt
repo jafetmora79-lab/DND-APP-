@@ -31,8 +31,7 @@ LOCAL (`npm run dev`)
   Seeded sample:
     DM     table Hearthkeeper, passcode torch
     Join   HEARTH
-    Elara  ELARA7K2
-    Brok   BROK4M9X
+    Players join as Elara or Brok (full names Elara Voss, Brok Ironvein)
 
 HOSTED (GitHub Pages + Supabase)
   Same UI. Postgres + RLS + Auth + Realtime + Storage.
@@ -57,13 +56,11 @@ DM
   Then campaigns → Prep and/or Live.
 
 PLAYER
-  Home → six-character TABLE join code (on the DM live header) + personal
-  CHARACTER code (Prep → Characters). Lands on the same campaign live table.
+  Home → six-character TABLE join code (on the DM live header) + your
+  CHARACTER name (Prep → Characters). Lands on the same campaign live table.
 
 The table join code belongs to the campaign session. It does not change when
-you start the next fight. Personal codes belong to characters. DM can
-regenerate a personal code in Prep. Other players’ codes are masked as
-•••••••• in player snapshots.
+you start the next fight. Players type the character name (Elara, Brok…).
 
 
 THE NIGHT, IN ORDER
@@ -324,7 +321,7 @@ SYNC, REFRESH, PAUSE
 Local: WebSocket pushes an EncounterSnapshot after changes.
 Hosted: Supabase Realtime, then the client reloads live().
 
-Player snapshots mask other personal codes and omit hidden/fog tokens.
+Player snapshots omit hidden/fog tokens.
 HTTP refresh and live updates use the same player-facing payload locally.
 
 Encounter instance holds: status (active / paused / completed), round, current
@@ -364,6 +361,7 @@ HOSTED SQL CHEAT SHEET (EXISTING PROJECTS)
   migrate-per-turn-movement.sql   speed_feet, movement_remaining
   migrate-vision-terrain.sql      player read of fight bestiary rows
   migrate-cover-hide.sql          cover AC, Hide RPC (apply_hide_result)
+  migrate-join-by-name.sql        players join with character name, not a code
 
 Then: notify pgrst, 'reload schema';
 

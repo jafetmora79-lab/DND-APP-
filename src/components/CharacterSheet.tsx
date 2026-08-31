@@ -14,7 +14,6 @@ type Props = {
   isDm?: boolean
   onChange: (patch: Partial<PlayerCharacter> & { sheet?: PlayerCharacter['sheet'] }) => void
   onImportPdf?: (file: File) => void
-  onRegenCode?: () => void
   onUseAttack?: (attack: Attack, index: number) => void
 }
 
@@ -91,7 +90,7 @@ function TinyNum({
   )
 }
 
-export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf, onRegenCode, onUseAttack }: Props) {
+export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf, onUseAttack }: Props) {
   const { t } = useT()
   const sheet = character.sheet
   const [tab, setTab] = useState<Tab>('sheet')
@@ -185,16 +184,16 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
                       )}
                     </div>
                   )}
-                  {isDm && character.personalCode && character.personalCode !== '••••••••' && (
-                    <p className="flex max-w-full flex-wrap items-center justify-end gap-2 font-mono text-xs text-gold">
+                  {isDm && character.name && (
+                    <p className="flex max-w-full flex-wrap items-center justify-end gap-2 text-xs text-gold">
                       <span className="truncate">
-                        {t('sheet.personalCode')} {character.personalCode}
+                        {t('sheet.joinAs')} {character.name}
                       </span>
                       <button
                         className="inline-flex items-center gap-1 text-gold underline"
                         type="button"
                         onClick={async () => {
-                          const ok = await copyText(character.personalCode)
+                          const ok = await copyText(character.name)
                           if (!ok) return
                           setCopied(true)
                           window.setTimeout(() => setCopied(false), 1600)
@@ -203,11 +202,6 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
                         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                         {copied ? t('sheet.copied') : t('sheet.copy')}
                       </button>
-                      {onRegenCode && (
-                        <button className="underline" onClick={onRegenCode} type="button">
-                          {t('sheet.regenerate')}
-                        </button>
-                      )}
                     </p>
                   )}
                 </div>
