@@ -114,8 +114,11 @@ export const localApi = {
   endSession: (campaignId: string) => req(`/api/campaigns/${campaignId}/end-session`, { method: 'POST' }),
   beginRound: (campaignId: string) => req(`/api/campaigns/${campaignId}/begin-round`, { method: 'POST' }),
   peekJoin: (code: string) => req<{ campaignName: string; joinCode: string }>(`/api/join/${code}`),
-  join: (code: string, personalCode: string) =>
-    req<{ token: string; user: AuthUser }>(`/api/join/${code}`, { method: 'POST', body: JSON.stringify({ personalCode }) }),
+  join: (code: string, playerName: string) =>
+    req<{ token: string; user: AuthUser }>(`/api/join/${code}`, {
+      method: 'POST',
+      body: JSON.stringify({ playerName, personalCode: playerName }),
+    }),
   live: (campaignId: string) => req<EncounterSnapshot>(`/api/campaigns/${campaignId}/live`),
   addCombatant: (instanceId: string, body: Record<string, unknown>) =>
     req(`/api/instances/${instanceId}/combatants`, { method: 'POST', body: JSON.stringify(body) }),

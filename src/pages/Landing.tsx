@@ -19,7 +19,7 @@ export function Landing() {
   const [name, setName] = useState(sampleTable ? 'Hearthkeeper' : '')
   const [passcode, setPasscode] = useState(sampleTable ? 'torch' : '')
   const [joinCode, setJoinCode] = useState(sampleTable ? 'HEARTH' : '')
-  const [personal, setPersonal] = useState(sampleTable ? 'ELARA7K2' : '')
+  const [personal, setPersonal] = useState(sampleTable ? 'Elara' : '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [recent, setRecent] = useState<RecentPlayerSession[]>([])
@@ -155,9 +155,15 @@ export function Landing() {
                 <Field label={t('landing.joinCode')}>
                   <Input value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} autoCapitalize="characters" required />
                 </Field>
-                <Field label={t('landing.personalCode')}>
-                  <Input value={personal} onChange={(e) => setPersonal(e.target.value.toUpperCase())} autoCapitalize="characters" required />
-                </Field>
+              <Field label={t('landing.playerName')}>
+                <Input
+                  value={personal}
+                  onChange={(e) => setPersonal(e.target.value)}
+                  autoCapitalize="words"
+                  autoComplete="nickname"
+                  required
+                />
+              </Field>
                 {error && <p className="text-sm text-blood">{error}</p>}
                 <Button type="submit" size="lg" disabled={busy || loading}>
                   {busy ? t('landing.joining') : t('landing.start')}

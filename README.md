@@ -10,8 +10,8 @@ Monster stat blocks are seeded from the Systems Reference Document 5.1 (© Wizar
 
 - **Dungeon Master login** with a table name and passcode. Run as many campaigns as you want.
 - **Shared bestiary** across every campaign at that table (~300 SRD creatures, plus your own).
-- **Prep library** per campaign: square 5-ft battle maps you draw from scratch (optional picture as background, blocked squares tokens cannot walk on), encounter templates, player characters with personal join codes.
-- **Live session**: the campaign table stays open on one join code. Between fights, players see their character sheets and a scene image (or a hearth placeholder) while you talk and travel. Start or resume an encounter when you are ready. Copy buttons sit next to join codes and personal character codes.
+- **Prep library** per campaign: square 5-ft battle maps you draw from scratch (optional picture as background, blocked squares tokens cannot walk on), encounter templates, player characters. Players join with tonight’s table code plus their character name.
+- **Live session**: the campaign table stays open on one join code. Between fights, players see their character sheets and a scene image (or a hearth placeholder) while you talk and travel. Start or resume an encounter when you are ready. Copy buttons sit next to join codes and character names.
 - **Map & tokens** (Konva): pan/zoom, drag tokens on a square grid (5 ft per square), paint fog of war. Tokens snap back if dropped on a blocked square. Each creature has a name, HP bar, Armor Class, and a colored ring per condition (Poisoned, Unconscious / sleeping, and the rest of the tracker list).
 - **Encounter tracker**: initiative, current/max/temp HP, conditions, next-turn. State hangs off the encounter instance, not the night’s join code.
 - **Attacks**: pick an attack, tap a creature in range, enter the d20 from the table and the damage. d20 + bonus must be **higher than Armor Class** to hit (equal to AC misses). Natural 20 hits. Natural 1 misses and the target has advantage against the attacker next turn — same rule for players and for the DM’s monsters.
@@ -57,8 +57,8 @@ A seeded campaign is ready on first boot:
 | Role | How to enter |
 | --- | --- |
 | Dungeon Master | Table **Hearthkeeper**, passcode **torch** |
-| Player (Elara) | Join code **HEARTH**, personal code **ELARA7K2** |
-| Player (Brok) | Join code **HEARTH**, personal code **BROK4M9X** |
+| Player (Elara) | Join code **HEARTH**, name **Elara** |
+| Player (Brok) | Join code **HEARTH**, name **Brok** |
 
 The **Cragmaw Ambush** is paused in round 2 with the bugbear already wounded. Open Live as the DM — you sit at the tavern table first. Resume the ambush when the party is ready, or join as a player and read your sheet beside the scene.
 
@@ -70,7 +70,7 @@ With `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`, the same UI talks to Supaba
 
 | Concern | Local (`npm run dev`) | Hosted |
 | --- | --- | --- |
-| Auth | Passcode + personal codes | Same UX; DMs are Auth users, players join anonymously then claim a character |
+| Auth | Passcode + character name | Same UX; DMs are Auth users, players join anonymously then claim a character |
 | Database | SQLite | Postgres + RLS (`supabase/schema.sql`) |
 | Live sync | WebSocket | Supabase Realtime |
 | Map images | `/uploads` | Storage bucket `maps` |

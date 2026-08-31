@@ -7,7 +7,7 @@ The app talks to Supabase when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` 
 In the Supabase dashboard:
 
 1. **Authentication → Providers → Email** — turn **off** “Confirm email” (table-name + passcode login has no inbox).
-2. **Authentication → Providers → Anonymous** — **enable** (players join with a personal code, not an email).
+2. **Authentication → Providers → Anonymous** — **enable** (players join with their character name, not an email).
 3. Copy **Project URL** and **anon public** key from **Settings → API**.
 4. **Storage → New buckets** named `maps` and `pdfs`, both **public** (or run `storage-bucket.sql`). Character sheet PDFs upload to `pdfs`, falling back to `maps/character-pdfs/` if that bucket is missing.
 
@@ -36,6 +36,8 @@ If it was applied before campaign flow (skip dead on next turn, player initiativ
 If it was applied before player token tap stat blocks, also run `migrate-vision-terrain.sql`.
 
 If it was applied before cover terrain and Hide, also run `migrate-cover-hide.sql`.
+
+If it was applied before players joined with their character name, also run `migrate-join-by-name.sql`. Until that runs, hosted join still expects the old personal code.
 
 ## 3. App env
 

@@ -1003,14 +1003,14 @@ export function Prep() {
                     onClick={() => setSelectedChar(c)}
                   >
                     <div className="font-medium">{c.name}</div>
-                    <div className="font-mono text-xs text-gold">{c.personalCode}</div>
+                    <div className="text-xs text-gold">Join as {c.name}</div>
                   </button>
                   <Button
                     size="icon"
                     variant="ghost"
                     className="h-8 w-8 shrink-0"
-                    title={`Copy ${c.name}'s personal code`}
-                    onClick={() => copyCode(c.personalCode, c.id)}
+                    title={`Copy ${c.name}`}
+                    onClick={() => copyCode(c.name, c.id)}
                   >
                     {copied === c.id ? <Check className="h-4 w-4 text-moss" /> : <Copy className="h-4 w-4" />}
                   </Button>
@@ -1042,11 +1042,6 @@ export function Prep() {
                       ? `Read ${r.fieldCount} fields from the PDF.`
                       : 'Stored the PDF, but it had no readable character fields.',
                   )
-                  await reload()
-                }}
-                onRegenCode={async () => {
-                  const r = await api.regenCode(selectedChar.id)
-                  setSelectedChar({ ...selectedChar, personalCode: r.personalCode })
                   await reload()
                 }}
               />

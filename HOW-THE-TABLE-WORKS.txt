@@ -3,9 +3,9 @@ HOW THE D&D LIVE TABLE WORKS
 
 This is a campaign companion for running Dungeons & Dragons 5e at a real table.
 The Dungeon Master preps maps, monsters, characters, and encounter templates on
-one screen. Players join from phones with a table join code plus their personal
-character code. Between fights everyone sits at a shared “tavern table.” When
-combat starts, the map, tokens, tracker, and sheets stay in sync.
+one screen. Players join from phones with a table join code plus their character
+name. Between fights everyone sits at a shared “tavern table.” When combat
+starts, the map, tokens, tracker, and sheets stay in sync.
 
 The live site is typically:
 
@@ -23,7 +23,7 @@ LOCAL (npm run dev)
   - WebSocket live updates
   - Open http://127.0.0.1:4731
   - Sample DM: table name Hearthkeeper, passcode torch
-  - Sample players: join code HEARTH, personal codes ELARA7K2 and BROK4M9X
+  - Sample players: join code HEARTH, names Elara and Brok
 
 HOSTED (GitHub Pages + Supabase)
   - Same UI, talking to Postgres, Auth, Realtime, and Storage
@@ -50,13 +50,13 @@ DUNGEON MASTER
 
 PLAYER
   Home → enter the table join code (six characters, shown on the DM live
-  header) AND the personal character code (from Prep → Characters).
+  header) AND your character name (from Prep → Characters).
   The player lands on the same live table as the DM: tavern scene + sheets
   between fights, map + their sheet during combat.
 
 The join code belongs to the campaign table. It does not change when you start
-the next encounter. Personal codes belong to characters. The DM can regenerate
-a personal code from Prep.
+the next encounter. Players type the character name the DM created. First name
+is enough if it is unique at that table.
 
 
 3. THE DM LOOP (THE WHOLE SESSION)
@@ -200,7 +200,7 @@ B) LIVE COMBAT — + Name buttons during a fight, or Join this fight on a phone
 
 C) What does NOT add them
 
-  - Joining the table as a player (join code + personal code) puts them at the
+  - Joining the table as a player (join code + character name) puts them at the
     hub with their sheet. It does not drop a token onto a fight that is already
     running, unless they were placed on that template and you started it.
   - Creating a character in Prep does not put them on any encounter until you
@@ -306,7 +306,7 @@ If you want the extra columns anyway, supabase/migrate-encounter-play.sql
 and migrate-campaign-table.sql are still there. For skip-dead turns, player
 initiative, and Join this fight on existing hosted projects, also run
 migrate-campaign-flow.sql. For player monster stat blocks on token tap, also
-run migrate-vision-terrain.sql. For cover and Hide, also run migrate-cover-hide.sql, then:
+run migrate-vision-terrain.sql. For cover and Hide, also run migrate-cover-hide.sql. For joining by character name instead of a personal code, also run migrate-join-by-name.sql, then:
 
   notify pgrst, 'reload schema';
 
@@ -317,8 +317,8 @@ Local SQLite adds missing columns automatically on boot.
 ------------------------------
 
   1. DM: Start → Hearthkeeper / torch (or your own table).
-  2. Open the campaign. Prep → Characters: confirm names, colors, codes.
-     Copy personal codes to the players.
+  2. Open the campaign. Prep → Characters: confirm names and token colors.
+     Players join with those names.
   3. Prep → Maps: make or open the battle map. Paint walls, cover, and other terrain.
      Upload scenery pictures on Run order as scene beats.
   4. Prep → Encounters: name it, pick the map, add monsters, Place each
@@ -326,7 +326,7 @@ Local SQLite adds missing columns automatically on boot.
   5. Prep → Run order: opening scene first, then the encounter, then the
      next scene, and so on. Up/Down to sort.
   6. Start campaign (Open Live). Copy the join code. Players join with that
-     code + personal code. The opening scene is on the table. Narrate.
+     code plus their character name. The opening scene is on the table. Narrate.
   7. Start the next encounter when you need a fight. Checklist: who is placed,
      Day/Night/Inside, surprise. Tokens appear where you placed them.
   8. Initiative popup walks each creature. Enter the table d20 or let the

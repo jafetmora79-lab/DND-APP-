@@ -9,7 +9,7 @@ type AuthState = {
   loading: boolean
   loginDm: (name: string, passcode: string) => Promise<void>
   registerDm: (name: string, passcode: string) => Promise<void>
-  joinPlayer: (joinCode: string, personalCode: string) => Promise<AuthUser>
+  joinPlayer: (joinCode: string, playerName: string) => Promise<AuthUser>
   logout: () => void
 }
 
@@ -62,9 +62,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(r.token)
         setUser(r.user)
       },
-      joinPlayer: async (joinCode, personalCode) => {
+      joinPlayer: async (joinCode, playerName) => {
         assertHostedBackend()
-        const r = await api.join(joinCode, personalCode)
+        const r = await api.join(joinCode, playerName)
         setToken(r.token)
         setUser(r.user)
         return r.user

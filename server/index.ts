@@ -11,6 +11,7 @@ import { sessionFromRow } from '../src/lib/session.ts'
 import { clampMovementRemaining, combatantStatsFromMonster, parseDeathState, parseSpeedFeet, parseTurnEconomy, snapshotForPlayer, statsForLiveCombatant } from '../src/lib/combat.ts'
 import { parseActivity, parsePrompt } from '../src/lib/combat-activity.ts'
 import { emptySheet, type AuthUser, type EncounterSnapshot, type FogState, type NamedEntry } from '../src/lib/types.ts'
+import { matchJoinName } from '../src/lib/join-name.ts'
 import {
     clampGridDim,
     clampGridSize,
@@ -1101,14 +1102,21 @@ app.post('/api/join/:code', (req, res) => {
     res.status(404).json({ error: 'No table is using that join code tonight' })
     return
   }
-  const code = String(req.body?.personalCode ?? '').trim().toUpperCase()
-  const ch = db
-    .prepare('SELECT * FROM player_characters WHERE campaign_id = ? AND personal_code = ? COLLATE NOCASE')
-    .get(session.campaign_id, code) as Record<string, unknown> | undefined
-  if (!ch) {
-    res.status(401).json({ error: 'That personal code does not belong to this campaign' })
+  const needle = String(req.body?.playerName ?? req.body?.personalCode ?? '')
+  const chars = db.prepare('SELECT * FROM player_characters WHERE campaign_id = ?').all(session.campaign_id) as Record<string, unknown>[]
+  const hit = matchJoinName(
+    chars.map((c) => ({
+      id: String(c.id ?? ''),
+      name: String(c.name ?? ''),
+      personalCode: String(c.personal_code ?? ''),
+    })),
+    needle,
+  )
+  if (!hit.ok) {
+    res.status(401).json({ error: hit.error })
     return
   }
+  const ch = hit.character
   const token = ids.token()
   db.prepare('INSERT INTO auth_tokens (token, role, character_id, campaign_id, created_at) VALUES (?,?,?,?,?)').run(
     token,

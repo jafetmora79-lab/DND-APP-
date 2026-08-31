@@ -84,7 +84,7 @@ export function Player() {
     if (pending && campaignId) {
       rememberPlayerSession({
         joinCode: pending.joinCode,
-        personalCode: pending.personalCode,
+        personalCode: me.name,
         campaignName: snap.campaign.name,
         characterName: me.name,
         characterId: me.id,

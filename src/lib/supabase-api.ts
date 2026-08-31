@@ -1290,13 +1290,13 @@ export const supabaseApi: TableApi = {
     return data as { campaignName: string; joinCode: string }
   },
 
-  async join(code, personal) {
+  async join(code, playerName) {
     await db().auth.signOut()
     const { data: anon, error: anonErr } = await db().auth.signInAnonymously()
     if (anonErr) {
       throw new Error('Anonymous sign-in is off. In Supabase: Authentication → Providers → Anonymous → Enable.')
     }
-    const { data, error } = await db().rpc('join_table', { p_join: code, p_personal: personal })
+    const { data, error } = await db().rpc('join_table', { p_join: code, p_personal: playerName })
     throwIf(error)
     const payload = data as { characterId: string; campaignId: string; name: string }
     return {
