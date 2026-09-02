@@ -314,6 +314,7 @@ export function PlayerTurnPanel({
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
             <Input className="h-10 w-24" inputMode="numeric" placeholder="d20" value={initD20} onChange={(e) => setInitD20(e.target.value)} aria-label="Initiative d20" />
             <Button
+              size="default"
               disabled={busy}
               onClick={() => {
                 const roll = Number(initD20)
@@ -328,7 +329,6 @@ export function PlayerTurnPanel({
                   .catch((e) => setMsg(e instanceof Error ? e.message : 'Could not set initiative'))
                   .finally(() => setBusy(false))
               }}
-              className="h-10 px-4 text-sm"
             >
               Submit
             </Button>
@@ -344,7 +344,7 @@ export function PlayerTurnPanel({
           </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
             <Input className="h-10 w-24" inputMode="numeric" placeholder="d20" value={saveD20} onChange={(e) => setSaveD20(e.target.value)} aria-label="Save d20" />
-            <Button disabled={busy} onClick={() => void answerSave()} className="h-10 px-4 text-sm">
+            <Button size="default" disabled={busy} onClick={() => void answerSave()}>
               Submit save
             </Button>
           </div>
@@ -356,10 +356,10 @@ export function PlayerTurnPanel({
           <div className="text-xs uppercase tracking-wider text-gold font-semibold">Reaction requested</div>
           <Input className="mt-2 h-10" placeholder="Optional note or attack name" value={reactionNote} onChange={(e) => setReactionNote(e.target.value)} />
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <Button disabled={busy} onClick={() => void answerReaction(true)} className="h-10 px-4 text-sm">
+            <Button size="default" disabled={busy} onClick={() => void answerReaction(true)}>
               Use reaction
             </Button>
-            <Button variant="outline" disabled={busy} onClick={() => void answerReaction(false)} className="h-10 px-4 text-sm">
+            <Button size="default" variant="outline" disabled={busy} onClick={() => void answerReaction(false)}>
               Decline
             </Button>
           </div>
@@ -368,35 +368,35 @@ export function PlayerTurnPanel({
 
       {myTurn && combatant && !setup && (
         <>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            <Button variant={menu === 'action' || menu === 'attack' || menu === 'hide' || (menu === 'other' && slot === 'action') || menu === 'help' ? 'default' : 'outline'} disabled={Boolean(econ?.action)} onClick={() => openSlot('action')} className="h-10 px-4 text-sm">
+          <div className="mt-3 flex flex-wrap gap-2 justify-center">
+            <Button variant={menu === 'action' || menu === 'attack' || menu === 'hide' || (menu === 'other' && slot === 'action') || menu === 'help' ? 'default' : 'outline'} disabled={Boolean(econ?.action)} onClick={() => openSlot('action')} size="default">
               Action
             </Button>
-            <Button variant={menu === 'bonus' || (menu === 'other' && slot === 'bonus') ? 'default' : 'outline'} disabled={Boolean(econ?.bonus)} onClick={() => openSlot('bonus')} className="h-10 px-4 text-sm">
+            <Button variant={menu === 'bonus' || (menu === 'other' && slot === 'bonus') ? 'default' : 'outline'} disabled={Boolean(econ?.bonus)} onClick={() => openSlot('bonus')} size="default">
               Bonus action
             </Button>
-            <Button variant={menu === 'reaction' || (menu === 'other' && slot === 'reaction') ? 'default' : 'outline'} disabled={Boolean(econ?.reaction)} onClick={() => openSlot('reaction')} className="h-10 px-4 text-sm">
+            <Button variant={menu === 'reaction' || (menu === 'other' && slot === 'reaction') ? 'default' : 'outline'} disabled={Boolean(econ?.reaction)} onClick={() => openSlot('reaction')} size="default">
               Reaction
             </Button>
-            <Button variant="ghost" disabled={busy} onClick={() => void endTurn()} className="h-10 px-4 text-sm">
+            <Button variant="ghost" disabled={busy} onClick={() => void endTurn()} size="default">
               End turn
             </Button>
             {menu && (
-              <Button variant="ghost" onClick={resetMenus} className="h-10 px-4 text-sm col-span-2 sm:col-span-1">
+              <Button variant="ghost" onClick={resetMenus} size="default">
                 Cancel
               </Button>
             )}
           </div>
 
           {(menu === 'action' || menu === 'bonus' || menu === 'reaction') && (
-            <div className="mt-2 grid grid-cols-2 gap-1 sm:flex sm:flex-wrap">
+            <div className="mt-2 flex flex-wrap gap-2 justify-center">
               {declareList.map((k) => (
                 <Button
                   key={k.kind}
                   variant="outline"
                   disabled={busy || (k.kind === 'attack' && !canAct)}
                   onClick={() => onKind(k.kind)}
-                  className="h-9 px-3 text-xs"
+                  size="sm"
                 >
                   {k.label}
                 </Button>
@@ -405,7 +405,7 @@ export function PlayerTurnPanel({
           )}
 
           {menu === 'other' && (
-            <div className="mt-2 grid grid-cols-2 gap-1 sm:flex sm:flex-wrap">
+            <div className="mt-2 flex flex-wrap gap-2 justify-center">
               {OTHER_ACTION_LABELS.map((label) => (
                 <Button
                   key={label}
@@ -418,7 +418,7 @@ export function PlayerTurnPanel({
                     }
                     void declare('other', { other: label })
                   }}
-                  className="h-9 px-3 text-xs"
+                  size="sm"
                 >
                   {label}
                 </Button>
@@ -427,9 +427,9 @@ export function PlayerTurnPanel({
           )}
 
           {menu === 'custom' && (
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end justify-center">
               <Input className="h-10 flex-1 min-w-[12rem]" placeholder="What do you do?" value={custom} onChange={(e) => setCustom(e.target.value)} />
-              <Button disabled={busy || !custom.trim()} onClick={() => void declare('custom', { custom })} className="h-10 px-4 text-sm">
+              <Button disabled={busy || !custom.trim()} onClick={() => void declare('custom', { custom })} size="default">
                 Declare action
               </Button>
             </div>
@@ -468,7 +468,7 @@ export function PlayerTurnPanel({
                     </div>
                     <p className="mt-1 text-xs text-muted">Highest passive Perception among enemies</p>
                   </div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center justify-center">
                     <Input className="h-10 w-24" inputMode="numeric" placeholder="d20" value={d20} onChange={(e) => setD20(e.target.value)} aria-label="Hide Stealth d20" />
                     <Button
                       disabled={busy}
@@ -480,7 +480,7 @@ export function PlayerTurnPanel({
                         }
                         void declare('hide', { d20: roll })
                       }}
-                      className="h-10 px-4 text-sm"
+                      size="default"
                     >
                       Resolve Hide
                     </Button>
@@ -493,24 +493,24 @@ export function PlayerTurnPanel({
           {menu === 'help' && (
             <div className="mt-2">
               <p className="text-xs text-muted">Tap an ally on the map or pick from the list.</p>
-              <div className="mt-2 grid grid-cols-2 gap-1 sm:flex sm:flex-wrap">
+              <div className="mt-2 flex flex-wrap gap-2 justify-center">
                 {others.map((c) => (
-                  <Button key={c.id} variant={selectedId === c.id ? 'default' : 'outline'} onClick={() => onSelectedId(c.id)} className="h-9 px-3 text-xs">
+                  <Button key={c.id} variant={selectedId === c.id ? 'default' : 'outline'} onClick={() => onSelectedId(c.id)} size="sm">
                     {c.name}
                   </Button>
                 ))}
               </div>
-              <Button className="mt-2 w-full h-10 px-4 text-sm" disabled={busy || !selectedId} onClick={() => void declare('help', { targetId: selectedId ?? undefined })}>
+              <Button className="mt-2 w-full" size="default" disabled={busy || !selectedId} onClick={() => void declare('help', { targetId: selectedId ?? undefined })}>
                 Help {target?.name ?? '…'}
               </Button>
             </div>
           )}
 
           {menu === 'attack' && step === 'pick' && (
-            <div className="mt-2 grid grid-cols-2 gap-1 sm:flex sm:flex-wrap">
-              {namedAttacks.length === 0 && <p className="col-span-2 text-xs text-muted">No named attacks on your sheet.</p>}
+            <div className="mt-2 flex flex-wrap gap-2 justify-center">
+              {namedAttacks.length === 0 && <p className="w-full text-xs text-muted text-center">No named attacks on your sheet.</p>}
               {namedAttacks.map(({ atk, i }) => (
-                <Button key={`${atk.name}-${i}`} variant="outline" disabled={!canAct} onClick={() => startAttack(atk, i)} className="h-9 px-3 text-xs">
+                <Button key={`${atk.name}-${i}`} variant="outline" disabled={!canAct} onClick={() => startAttack(atk, i)} size="sm">
                   {atk.name} {atk.bonus || ''}
                 </Button>
               ))}
@@ -562,7 +562,7 @@ export function PlayerTurnPanel({
                   )
                 })}
               </div>
-              <Button className="mt-2 w-full h-10 px-4 text-sm" disabled={!selectedId} onClick={() => {
+              <Button className="mt-2 w-full" size="default" disabled={!selectedId} onClick={() => {
                 const adv = Boolean(selectedId && combatant && hasHiddenAdvantage(combatant, selectedId))
                 setRollMode(adv ? 'advantage' : 'normal')
                 setShowAttackRollModal(true)
@@ -585,14 +585,14 @@ export function PlayerTurnPanel({
                   <>
                     <div className="mb-4">
                       <p className="text-xs uppercase tracking-wider text-gold font-semibold mb-3">Roll Mode</p>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="flex gap-2 justify-center">
                         {(['normal', 'advantage', 'disadvantage'] as const).map((m) => (
-                          <Button key={m} variant={rollMode === m ? 'default' : 'outline'} onClick={() => setRollMode(m)} className="h-9 text-xs">
+                          <Button key={m} variant={rollMode === m ? 'default' : 'outline'} onClick={() => setRollMode(m)} size="sm">
                             {m === 'normal' ? 'Normal' : m === 'advantage' ? 'Adv' : 'Dis'}
                           </Button>
                         ))}
                       </div>
-                      {hasAdv && <p className="mt-2 text-xs text-gold">Advantage vs this target</p>}
+                      {hasAdv && <p className="mt-2 text-xs text-gold text-center">Advantage vs this target</p>}
                     </div>
 
                     <div className="mb-4">
@@ -623,10 +623,10 @@ export function PlayerTurnPanel({
                     )}
 
                     <div className="flex gap-2">
-                      <Button variant="outline" className="flex-1 h-10" onClick={() => setShowAttackRollModal(false)}>
+                      <Button variant="outline" className="flex-1" size="default" onClick={() => setShowAttackRollModal(false)}>
                         Cancel
                       </Button>
-                      <Button disabled={busy || !preview} className="flex-1 h-10" onClick={continueFromRoll}>
+                      <Button disabled={busy || !preview} className="flex-1" size="default" onClick={continueFromRoll}>
                         Continue
                       </Button>
                     </div>
@@ -641,10 +641,10 @@ export function PlayerTurnPanel({
                     </div>
 
                     <div className="flex gap-2">
-                      <Button variant="outline" className="flex-1 h-10" onClick={() => setShowAttackRollModal(false)}>
+                      <Button variant="outline" className="flex-1" size="default" onClick={() => setShowAttackRollModal(false)}>
                         Cancel
                       </Button>
-                      <Button disabled={busy || !damage} className="flex-1 h-10" onClick={() => {
+                      <Button disabled={busy || !damage} className="flex-1" size="default" onClick={() => {
                         const dmg = Number(damage)
                         if (!Number.isFinite(dmg) || dmg < 0) {
                           setMsg('Enter the damage you rolled (0 if you deal none).')
