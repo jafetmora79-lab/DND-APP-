@@ -58,6 +58,39 @@ export const CONDITIONS = [
   'Exhaustion 6',
 ] as const
 
+/** i18n key for each condition name — pass through t() before rendering to a user. */
+export const CONDITION_LABEL_KEY: Record<(typeof CONDITIONS)[number], string> = {
+  Blinded: 'condition.blinded',
+  Charmed: 'condition.charmed',
+  Deafened: 'condition.deafened',
+  Frightened: 'condition.frightened',
+  Grappled: 'condition.grappled',
+  Incapacitated: 'condition.incapacitated',
+  Invisible: 'condition.invisible',
+  Paralyzed: 'condition.paralyzed',
+  Petrified: 'condition.petrified',
+  Poisoned: 'condition.poisoned',
+  Prone: 'condition.prone',
+  Restrained: 'condition.restrained',
+  Stunned: 'condition.stunned',
+  Unconscious: 'condition.unconscious',
+  Surprised: 'condition.surprised',
+  Dodging: 'condition.dodging',
+  Disengaging: 'condition.disengaging',
+  Hiding: 'condition.hiding',
+  'Exhaustion 1': 'condition.exhaustion1',
+  'Exhaustion 2': 'condition.exhaustion2',
+  'Exhaustion 3': 'condition.exhaustion3',
+  'Exhaustion 4': 'condition.exhaustion4',
+  'Exhaustion 5': 'condition.exhaustion5',
+  'Exhaustion 6': 'condition.exhaustion6',
+}
+
+/** Falls back to the raw condition name if it isn't one of the known CONDITIONS (e.g. legacy/custom data). */
+export function conditionLabelKey(name: string): string {
+  return (CONDITION_LABEL_KEY as Record<string, string>)[name] ?? name
+}
+
 /** Colored rings drawn around map tokens for tracker conditions. Unconscious stands in for sleep. */
 export const CONDITION_RING: Record<(typeof CONDITIONS)[number], string> = {
   Blinded: '#9ca3af',

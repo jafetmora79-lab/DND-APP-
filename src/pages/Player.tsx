@@ -178,7 +178,7 @@ export function Player() {
         setDeathOpen(false)
         refreshLive()
       })
-      .catch((e) => setNote(e instanceof Error ? e.message : 'Death save failed'))
+      .catch((e) => setNote(e instanceof Error ? e.message : t('player.deathSaveFailed')))
   }
 
   if (!snap) {
@@ -235,8 +235,8 @@ export function Player() {
                 'shrink-0 rounded-md border p-2 text-xs transition',
                 notifOn ? 'border-ember/40 bg-ember/10 text-ember' : 'border-line text-muted hover:border-gold/40 hover:text-gold',
               )}
-              aria-label={notifOn ? 'Turn notifications on' : 'Enable turn notifications'}
-              title={notifOn ? 'Turn notifications on' : 'Alert me when it’s my turn'}
+              aria-label={notifOn ? t('player.notifOn') : t('player.enableNotif')}
+              title={notifOn ? t('player.notifOn') : t('player.notifHint')}
             >
               {notifOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
             </button>
@@ -297,7 +297,7 @@ export function Player() {
             }
           }}
           className="fixed bottom-5 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full border border-gold/60 bg-gold text-bg shadow-[0_8px_24px_rgba(200,150,70,0.35)] transition active:scale-95"
-          aria-label="Open party overview"
+          aria-label={t('player.openPartyOverview')}
         >
           <Users className="h-6 w-6" />
         </button>
@@ -359,8 +359,8 @@ export function Player() {
               'shrink-0 rounded-md border p-2 transition',
               notifOn ? 'border-ember/40 bg-ember/10 text-ember' : 'border-line text-muted hover:border-gold/40 hover:text-gold',
             )}
-            aria-label={notifOn ? 'Turn notifications on' : 'Enable turn notifications'}
-            title={notifOn ? 'Turn notifications on' : 'Alert me when it’s my turn'}
+            aria-label={notifOn ? t('player.notifOn') : t('player.enableNotif')}
+            title={notifOn ? t('player.notifOn') : t('player.notifHint')}
           >
             {notifOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
           </button>
@@ -437,7 +437,7 @@ export function Player() {
                           s ? { ...s, tokens: s.tokens.map((t) => (t.id === id ? { ...t, x: prev.x, y: prev.y } : t)) } : s,
                         )
                       }
-                      const msg = e instanceof Error ? e.message : 'Could not move'
+                      const msg = e instanceof Error ? e.message : t('player.couldNotMove')
                       setError(msg)
                       throw e instanceof Error ? e : new Error(msg)
                     }
@@ -485,7 +485,7 @@ export function Player() {
                   setNote(r.message)
                   refreshLive()
                 })
-                .catch((e) => setNote(e instanceof Error ? e.message : 'Death save failed'))
+                .catch((e) => setNote(e instanceof Error ? e.message : t('player.deathSaveFailed')))
             }}
           />
         </aside>
@@ -495,7 +495,7 @@ export function Player() {
         <>
           {!myCombatant && (
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-panel px-3 py-2 text-sm">
-              <span className="text-muted">You are not on the map yet.</span>
+              <span className="text-muted">{t('player.notOnMapYet')}</span>
               <Button
                 size="sm"
                 variant="ember"
@@ -504,13 +504,13 @@ export function Player() {
                   void api
                     .joinFight(snap.instance!.id)
                     .then(() => {
-                      setNote('You are on the map.')
+                      setNote(t('player.onTheMap'))
                       refreshLive()
                     })
-                    .catch((e) => setError(e instanceof Error ? e.message : 'Could not join the fight'))
+                    .catch((e) => setError(e instanceof Error ? e.message : t('player.couldNotJoinFight')))
                 }}
               >
-                Join this fight
+                {t('player.joinThisFight')}
               </Button>
             </div>
           )}
@@ -548,7 +548,7 @@ export function Player() {
             setDrawer(true)
           }}
           className="fixed bottom-5 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full border border-gold/60 bg-gold text-bg shadow-[0_8px_24px_rgba(200,150,70,0.35)] transition active:scale-95"
-          aria-label="Open party overview"
+          aria-label={t('player.openPartyOverview')}
         >
           <Users className="h-6 w-6" />
         </button>
@@ -578,8 +578,8 @@ export function Player() {
                 <HeartPulse className="h-6 w-6 animate-pulse" />
               </div>
               <div>
-                <h3 className="font-display text-xl text-blood">Death Save</h3>
-                <p className="text-xs text-muted">You are dying. Roll a d20.</p>
+                <h3 className="font-display text-xl text-blood">{t('player.deathSave')}</h3>
+                <p className="text-xs text-muted">{t('player.dyingRollD20')}</p>
               </div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2">
@@ -605,7 +605,7 @@ export function Player() {
             </div>
             <div className="mt-4 flex gap-2">
               <Button variant="outline" className="flex-1" onClick={() => { setDeathOpen(false); setDeathD20('') }}>
-                Later
+                {t('common.later')}
               </Button>
               <Button
                 variant="ember"
@@ -613,7 +613,7 @@ export function Player() {
                 disabled={!deathD20}
                 onClick={submitDeathSave}
               >
-                Roll {deathD20 && `d20 = ${deathD20}`}
+                {t('init.roll')} {deathD20 && `d20 = ${deathD20}`}
               </Button>
             </div>
           </div>
@@ -637,8 +637,8 @@ export function Player() {
         <div className="fixed inset-0 z-40 flex items-end bg-black/60 md:items-stretch md:justify-end">
           <div className="flex h-[80dvh] w-full flex-col rounded-t-2xl border border-line bg-panel p-4 md:h-full md:max-w-lg md:rounded-none">
             <div className="flex items-center justify-between">
-              <h2 className="font-display text-lg text-gold">Stat block</h2>
-              <button type="button" onClick={() => { haptic('tap'); setStatOpen(false) }} aria-label="Close">
+              <h2 className="font-display text-lg text-gold">{t('player.stats')}</h2>
+              <button type="button" onClick={() => { haptic('tap'); setStatOpen(false) }} aria-label={t('common.close')}>
                 <X />
               </button>
             </div>

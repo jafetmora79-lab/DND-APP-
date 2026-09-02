@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useT } from '@/lib/i18n'
 
 type RollInputModalProps = {
   isOpen: boolean
@@ -24,6 +25,7 @@ export function RollInputModal({
   disabled = false,
   d20 = true,
 }: RollInputModalProps) {
+  const { t } = useT()
   if (!isOpen) return null
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -47,7 +49,7 @@ export function RollInputModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <p className="mb-2 text-xs uppercase tracking-wider text-gold font-semibold">Enter your roll</p>
+            <p className="mb-2 text-xs uppercase tracking-wider text-gold font-semibold">{t('roll.enterYourRoll')}</p>
             <Input
               type="number"
               inputMode="numeric"
@@ -58,7 +60,7 @@ export function RollInputModal({
               className="h-14 text-center text-2xl font-bold"
               disabled={disabled}
             />
-            {d20 && <p className="mt-1 text-xs text-muted">Enter 1-20</p>}
+            {d20 && <p className="mt-1 text-xs text-muted">{t('roll.enterRange')}</p>}
           </div>
 
           <div className="flex gap-3 pt-2">
@@ -70,7 +72,7 @@ export function RollInputModal({
               onClick={onCancel}
               disabled={disabled}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -78,7 +80,7 @@ export function RollInputModal({
               className="flex-1"
               disabled={disabled}
             >
-              Submit
+              {t('init.submit')}
             </Button>
           </div>
         </form>

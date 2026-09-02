@@ -3,6 +3,7 @@ import { Heart, Skull, Activity, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/input'
 import { CharacterSheet } from '@/components/CharacterSheet'
+import { useT } from '@/lib/i18n'
 import type { PlayerCharacter } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -16,6 +17,7 @@ type Props = {
 }
 
 export function PartyOverview({ characters, selectedId, onSelectCharacter, onClose, canEditId, onChange }: Props) {
+  const { t } = useT()
   const [notes, setNotes] = useState(() => localStorage.getItem('dnd-party-notes') || '')
   const [viewingSheet, setViewingSheet] = useState<string | null>(null)
 
@@ -41,8 +43,8 @@ export function PartyOverview({ characters, selectedId, onSelectCharacter, onClo
     <div className="fixed inset-0 z-40 flex items-end bg-black/60 md:items-stretch md:justify-end">
       <div className="flex h-[88dvh] w-full flex-col rounded-t-2xl border border-line bg-panel p-4 md:h-full md:max-w-lg md:rounded-none">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-lg text-gold-2">Party Overview</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-muted hover:text-ink">
+          <h2 className="font-display text-lg text-gold-2">{t('partyOverview.title')}</h2>
+          <button type="button" onClick={onClose} aria-label={t('common.close')} className="text-muted hover:text-ink">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -50,7 +52,7 @@ export function PartyOverview({ characters, selectedId, onSelectCharacter, onClo
         {!viewingSheet ? (
           <>
             <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-gold">Party Members</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-gold">{t('partyOverview.members')}</h3>
               <div className="space-y-2">
                 {characters.map((char) => {
                   const percent = hpPercent(char.sheet.hpCurrent, char.sheet.hpMax)
@@ -75,7 +77,7 @@ export function PartyOverview({ characters, selectedId, onSelectCharacter, onClo
                             {isDead && <Skull className="h-4 w-4 text-blood" />}
                             {isDying && <Activity className="h-4 w-4 animate-pulse text-blood" />}
                           </div>
-                          <div className="mt-1 text-xs text-muted">Level {char.sheet.level}</div>
+                          <div className="mt-1 text-xs text-muted">{t('partyOverview.level', { level: char.sheet.level })}</div>
                         </div>
                         <Button
                           size="sm"
@@ -86,13 +88,13 @@ export function PartyOverview({ characters, selectedId, onSelectCharacter, onClo
                             setViewingSheet(char.id)
                           }}
                         >
-                          View Sheet
+                          {t('partyOverview.viewSheet')}
                         </Button>
                       </div>
 
                       <div className="mt-2">
                         <div className="mb-1 flex items-center justify-between text-xs">
-                          <span className="text-muted">HP</span>
+                          <span className="text-muted">{t('player.hp')}</span>
                           <span className={cn('font-medium', (isDying || isDead) && 'text-blood')}>
                             {char.sheet.hpCurrent}/{char.sheet.hpMax}
                           </span>
@@ -106,12 +108,12 @@ export function PartyOverview({ characters, selectedId, onSelectCharacter, onClo
                         <div className="mt-2 flex items-center gap-3 text-xs">
                           <div className="flex items-center gap-1">
                             <Heart className="h-3 w-3 text-moss" />
-                            <span className="text-muted">Saves:</span>
+                            <span className="text-muted">{t('partyOverview.saves')}</span>
                             <span className="font-medium text-moss">{deathSaves}/3</span>
                           </div>
                           <div className="flex items-center gap-1">
                             <Skull className="h-3 w-3 text-blood" />
-                            <span className="text-muted">Fails:</span>
+                            <span className="text-muted">{t('partyOverview.fails')}</span>
                             <span className="font-medium text-blood">{deathFails}/3</span>
                           </div>
                         </div>
@@ -119,19 +121,19 @@ export function PartyOverview({ characters, selectedId, onSelectCharacter, onClo
                     </div>
                   )
                 })}
-                {characters.length === 0 && <p className="text-sm text-muted">No characters in this campaign yet.</p>}
+                {characters.length === 0 && <p className="text-sm text-muted">{t('partyOverview.empty')}</p>}
               </div>
 
               <div className="space-y-3 pt-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-gold">Campaign Notes</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-gold">{t('partyOverview.campaignNotes')}</h3>
                 <div className="rounded-lg border border-line bg-panel/50 p-3">
                   <Textarea
                     className="min-h-[100px] resize-none"
-                    placeholder="Add your personal notes about the campaign..."
+                    placeholder={t('partyOverview.notesPlaceholder')}
                     value={notes}
                     onChange={(e) => saveNotes(e.target.value)}
                   />
-                  <p className="mt-2 text-xs text-muted">Notes are saved locally on your device.</p>
+                  <p className="mt-2 text-xs text-muted">{t('partyOverview.notesHint')}</p>
                 </div>
               </div>
             </div>
@@ -140,7 +142,7 @@ export function PartyOverview({ characters, selectedId, onSelectCharacter, onClo
           <>
             <div className="mt-4 flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={() => setViewingSheet(null)} className="h-8 px-3 text-xs">
-                ← Back to Party
+                {t('partyOverview.backToParty')}
               </Button>
               <span className="text-sm text-muted">{viewing?.name}</span>
             </div>

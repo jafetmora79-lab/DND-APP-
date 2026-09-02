@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/input'
+import { useT } from '@/lib/i18n'
 import { formatEntries, parseEntries } from '@/lib/named-entries'
 import { ABILITIES, ABILITY_LABELS, type Monster, type NamedEntry } from '@/lib/types'
 import { crXp } from '@/lib/utils'
@@ -25,42 +26,44 @@ function EntriesField({
   items?: NamedEntry[]
   onChange: (items: NamedEntry[]) => void
 }) {
+  const { t } = useT()
   return (
-    <Field label={`${label} (one per block: Name. Description)`}>
+    <Field label={t('monsterForm.entriesFormat', { label })}>
       <Textarea value={formatEntries(items)} onChange={(e) => onChange(parseEntries(e.target.value))} />
     </Field>
   )
 }
 
 export function MonsterForm({ monster, editingNew, onChange, onSave, onDelete }: Props) {
+  const { t } = useT()
   return (
     <div className="space-y-3 rounded-xl border border-line bg-panel p-4">
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Name">
+        <Field label={t('monsterForm.name')}>
           <Input value={monster.name ?? ''} onChange={(e) => onChange(setField(monster, 'name', e.target.value))} />
         </Field>
-        <Field label="Size">
+        <Field label={t('monsterForm.size')}>
           <Input value={monster.size ?? ''} onChange={(e) => onChange(setField(monster, 'size', e.target.value))} />
         </Field>
-        <Field label="Type">
+        <Field label={t('monsterForm.type')}>
           <Input value={monster.creatureType ?? ''} onChange={(e) => onChange(setField(monster, 'creatureType', e.target.value))} />
         </Field>
-        <Field label="Alignment">
+        <Field label={t('monsterForm.alignment')}>
           <Input value={monster.alignment ?? ''} onChange={(e) => onChange(setField(monster, 'alignment', e.target.value))} />
         </Field>
-        <Field label="AC">
+        <Field label={t('monsterForm.ac')}>
           <Input type="number" value={monster.acValue ?? 10} onChange={(e) => onChange(setField(monster, 'acValue', Number(e.target.value)))} />
         </Field>
-        <Field label="AC note">
-          <Input value={monster.acNote ?? ''} onChange={(e) => onChange(setField(monster, 'acNote', e.target.value))} placeholder="natural armor" />
+        <Field label={t('monsterForm.acNote')}>
+          <Input value={monster.acNote ?? ''} onChange={(e) => onChange(setField(monster, 'acNote', e.target.value))} placeholder={t('monsterForm.acNotePlaceholder')} />
         </Field>
-        <Field label="HP">
+        <Field label={t('monsterForm.hp')}>
           <Input type="number" value={monster.hpMax ?? 10} onChange={(e) => onChange(setField(monster, 'hpMax', Number(e.target.value)))} />
         </Field>
-        <Field label="Hit dice">
+        <Field label={t('monsterForm.hitDice')}>
           <Input value={monster.hitDiceFormula ?? ''} onChange={(e) => onChange(setField(monster, 'hitDiceFormula', e.target.value))} />
         </Field>
-        <Field label="Speed" className="col-span-2">
+        <Field label={t('monsterForm.speed')} className="col-span-2">
           <Input value={monster.speed ?? ''} onChange={(e) => onChange(setField(monster, 'speed', e.target.value))} />
         </Field>
       </div>
@@ -76,34 +79,34 @@ export function MonsterForm({ monster, editingNew, onChange, onSave, onDelete }:
         ))}
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Saving throws">
+        <Field label={t('monsterForm.savingThrows')}>
           <Input value={monster.savingThrows ?? ''} onChange={(e) => onChange(setField(monster, 'savingThrows', e.target.value))} />
         </Field>
-        <Field label="Skills">
+        <Field label={t('monsterForm.skills')}>
           <Input value={monster.skills ?? ''} onChange={(e) => onChange(setField(monster, 'skills', e.target.value))} />
         </Field>
-        <Field label="Damage vulnerabilities">
+        <Field label={t('monsterForm.damageVulnerabilities')}>
           <Input
             value={monster.damageVulnerabilities ?? ''}
             onChange={(e) => onChange(setField(monster, 'damageVulnerabilities', e.target.value))}
           />
         </Field>
-        <Field label="Damage resistances">
+        <Field label={t('monsterForm.damageResistances')}>
           <Input value={monster.damageResistances ?? ''} onChange={(e) => onChange(setField(monster, 'damageResistances', e.target.value))} />
         </Field>
-        <Field label="Damage immunities">
+        <Field label={t('monsterForm.damageImmunities')}>
           <Input value={monster.damageImmunities ?? ''} onChange={(e) => onChange(setField(monster, 'damageImmunities', e.target.value))} />
         </Field>
-        <Field label="Condition immunities">
+        <Field label={t('monsterForm.conditionImmunities')}>
           <Input value={monster.conditionImmunities ?? ''} onChange={(e) => onChange(setField(monster, 'conditionImmunities', e.target.value))} />
         </Field>
-        <Field label="Senses" className="col-span-2">
+        <Field label={t('monsterForm.senses')} className="col-span-2">
           <Input value={monster.senses ?? ''} onChange={(e) => onChange(setField(monster, 'senses', e.target.value))} />
         </Field>
-        <Field label="Languages" className="col-span-2">
+        <Field label={t('monsterForm.languages')} className="col-span-2">
           <Input value={monster.languages ?? ''} onChange={(e) => onChange(setField(monster, 'languages', e.target.value))} />
         </Field>
-        <Field label="CR">
+        <Field label={t('monsterForm.cr')}>
           <Input
             type="number"
             step="0.125"
@@ -114,10 +117,10 @@ export function MonsterForm({ monster, editingNew, onChange, onSave, onDelete }:
             }}
           />
         </Field>
-        <Field label="XP">
+        <Field label={t('monsterForm.xp')}>
           <Input type="number" value={monster.xp ?? 0} onChange={(e) => onChange(setField(monster, 'xp', Number(e.target.value)))} />
         </Field>
-        <Field label="Proficiency bonus">
+        <Field label={t('monsterForm.proficiencyBonus')}>
           <Input
             type="number"
             value={monster.proficiencyBonus ?? 2}
@@ -125,33 +128,33 @@ export function MonsterForm({ monster, editingNew, onChange, onSave, onDelete }:
           />
         </Field>
       </div>
-      <EntriesField label="Traits" items={monster.traits} onChange={(traits) => onChange(setField(monster, 'traits', traits))} />
-      <EntriesField label="Actions" items={monster.actions} onChange={(actions) => onChange(setField(monster, 'actions', actions))} />
+      <EntriesField label={t('monsterForm.traits')} items={monster.traits} onChange={(traits) => onChange(setField(monster, 'traits', traits))} />
+      <EntriesField label={t('monsterForm.actions')} items={monster.actions} onChange={(actions) => onChange(setField(monster, 'actions', actions))} />
       <EntriesField
-        label="Bonus actions"
+        label={t('monsterForm.bonusActions')}
         items={monster.bonusActions}
         onChange={(bonusActions) => onChange(setField(monster, 'bonusActions', bonusActions))}
       />
-      <EntriesField label="Reactions" items={monster.reactions} onChange={(reactions) => onChange(setField(monster, 'reactions', reactions))} />
+      <EntriesField label={t('monsterForm.reactions')} items={monster.reactions} onChange={(reactions) => onChange(setField(monster, 'reactions', reactions))} />
       <EntriesField
-        label="Legendary actions"
+        label={t('monsterForm.legendaryActions')}
         items={monster.legendaryActions}
         onChange={(legendaryActions) => onChange(setField(monster, 'legendaryActions', legendaryActions))}
       />
       <EntriesField
-        label="Lair actions"
+        label={t('monsterForm.lairActions')}
         items={monster.lairActions}
         onChange={(lairActions) => onChange(setField(monster, 'lairActions', lairActions))}
       />
       <div className="flex gap-2">
-        <Button onClick={onSave}>{editingNew ? 'Add to bestiary' : 'Save changes'}</Button>
+        <Button onClick={onSave}>{editingNew ? t('monsterForm.addToBestiary') : t('monsterForm.saveChanges')}</Button>
         {onDelete && (
           <Button variant="ghost" onClick={onDelete}>
-            Delete
+            {t('common.delete')}
           </Button>
         )}
       </div>
-      <p className="text-xs text-muted">Edits do not rewrite monsters already placed in a paused fight.</p>
+      <p className="text-xs text-muted">{t('monsterForm.editHint')}</p>
     </div>
   )
 }

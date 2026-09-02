@@ -1,3 +1,4 @@
+import { useT } from '@/lib/i18n'
 import { abilityMod, cn, signed } from '@/lib/utils'
 import type { Monster } from '@/lib/types'
 
@@ -25,6 +26,7 @@ function Entries({ title, items }: { title: string; items?: { name: string; desc
 }
 
 export function StatBlock({ monster, className }: { monster: Monster; className?: string }) {
+  const { t } = useT()
   const scores = [
     ['STR', monster.str],
     ['DEX', monster.dex],
@@ -42,9 +44,9 @@ export function StatBlock({ monster, className }: { monster: Monster; className?
         </p>
       </header>
       <div className="h-px border-gold/30" />
-      <Line label="Armor Class" value={`${monster.acValue}${monster.acNote ? ` (${monster.acNote})` : ''}`} />
-      <Line label="Hit Points" value={`${monster.hpMax}${monster.hitDiceFormula ? ` (${monster.hitDiceFormula})` : ''}`} />
-      <Line label="Speed" value={monster.speed} />
+      <Line label={t('statBlock.armorClass')} value={`${monster.acValue}${monster.acNote ? ` (${monster.acNote})` : ''}`} />
+      <Line label={t('statBlock.hitPoints')} value={`${monster.hpMax}${monster.hitDiceFormula ? ` (${monster.hitDiceFormula})` : ''}`} />
+      <Line label={t('statBlock.speed')} value={monster.speed} />
       <div className="grid grid-cols-6 gap-1 border-y border-line py-2 text-center">
         {scores.map(([k, v]) => (
           <div key={k}>
@@ -55,23 +57,23 @@ export function StatBlock({ monster, className }: { monster: Monster; className?
           </div>
         ))}
       </div>
-      <Line label="Saving Throws" value={monster.savingThrows} />
-      <Line label="Skills" value={monster.skills} />
-      <Line label="Damage Vulnerabilities" value={monster.damageVulnerabilities} />
-      <Line label="Damage Resistances" value={monster.damageResistances} />
-      <Line label="Damage Immunities" value={monster.damageImmunities} />
-      <Line label="Condition Immunities" value={monster.conditionImmunities} />
-      <Line label="Senses" value={monster.senses} />
-      <Line label="Languages" value={monster.languages} />
-      <Line label="Challenge" value={`${monster.challengeRating} (${monster.xp.toLocaleString()} XP)`} />
-      <Line label="Proficiency Bonus" value={signed(monster.proficiencyBonus)} />
+      <Line label={t('statBlock.savingThrows')} value={monster.savingThrows} />
+      <Line label={t('statBlock.skills')} value={monster.skills} />
+      <Line label={t('statBlock.damageVulnerabilities')} value={monster.damageVulnerabilities} />
+      <Line label={t('statBlock.damageResistances')} value={monster.damageResistances} />
+      <Line label={t('statBlock.damageImmunities')} value={monster.damageImmunities} />
+      <Line label={t('statBlock.conditionImmunities')} value={monster.conditionImmunities} />
+      <Line label={t('statBlock.senses')} value={monster.senses} />
+      <Line label={t('statBlock.languages')} value={monster.languages} />
+      <Line label={t('statBlock.challenge')} value={`${monster.challengeRating} (${monster.xp.toLocaleString()} XP)`} />
+      <Line label={t('statBlock.proficiencyBonus')} value={signed(monster.proficiencyBonus)} />
       <div className="h-px border-gold/30" />
-      <Entries title="Traits" items={monster.traits} />
-      <Entries title="Actions" items={monster.actions} />
-      <Entries title="Bonus Actions" items={monster.bonusActions} />
-      <Entries title="Reactions" items={monster.reactions} />
-      <Entries title="Legendary Actions" items={monster.legendaryActions} />
-      <Entries title="Lair Actions" items={monster.lairActions} />
+      <Entries title={t('statBlock.traits')} items={monster.traits} />
+      <Entries title={t('statBlock.actions')} items={monster.actions} />
+      <Entries title={t('statBlock.bonusActions')} items={monster.bonusActions} />
+      <Entries title={t('statBlock.reactions')} items={monster.reactions} />
+      <Entries title={t('statBlock.legendaryActions')} items={monster.legendaryActions} />
+      <Entries title={t('statBlock.lairActions')} items={monster.lairActions} />
     </article>
   )
 }

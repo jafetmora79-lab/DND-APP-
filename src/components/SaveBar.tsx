@@ -86,12 +86,12 @@ export function CheckBar({
     const dcN = isHide ? hideDc : Number(dc)
     try {
       if (!isHide && (!Number.isInteger(dcN) || dcN < 1)) {
-        setMsg('Enter a DC.')
+        setMsg(t('live.enterDc'))
         return
       }
       if (isHide) {
         if (!map) {
-          setMsg('Need the map to hide.')
+          setMsg(t('save.needMapToHide'))
           return
         }
         const result = resolveHideAttempt({
@@ -129,7 +129,7 @@ export function CheckBar({
       setMsg(cover && ability === 'dex' ? `${r.message} (cover +${cover})` : r.message)
       if (instanceId) void api.logActivity(instanceId, r.message).catch(() => undefined)
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not resolve')
+      setMsg(e instanceof Error ? e.message : t('save.couldNotResolve'))
     }
   }
 

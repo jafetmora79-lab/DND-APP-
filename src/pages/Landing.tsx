@@ -49,7 +49,7 @@ export function Landing() {
       else await loginDm(name, passcode)
       nav('/dm')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not sign in')
+      setError(err instanceof Error ? err.message : t('landing.couldNotSignIn'))
     } finally {
       setBusy(false)
     }
@@ -65,7 +65,7 @@ export function Landing() {
       if (next.role === 'player') nav(`/play/${next.campaignId}`)
       else nav('/dm')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not join')
+      setError(err instanceof Error ? err.message : t('landing.couldNotJoin'))
     } finally {
       setBusy(false)
     }
@@ -80,7 +80,7 @@ export function Landing() {
       if (next.role === 'player') nav(`/play/${next.campaignId}`)
       else nav('/dm')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not rejoin')
+      setError(err instanceof Error ? err.message : t('landing.couldNotRejoin'))
     } finally {
       setRejoinBusy(null)
     }
@@ -173,7 +173,7 @@ export function Landing() {
               {recent.length > 0 && (
                 <div className="mt-4 border-t border-line pt-4">
                   <div className="mb-2 flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted">Recent characters</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t('landing.recentCharacters')}</p>
                   </div>
                   <ul className="space-y-2">
                     {recent.map((s) => (
@@ -206,7 +206,7 @@ export function Landing() {
                             type="button"
                             onClick={(e) => removeRecent(e, s)}
                             className="shrink-0 rounded-md p-1.5 text-muted opacity-60 transition hover:bg-blood/20 hover:text-blood hover:opacity-100 group-hover:opacity-100"
-                            aria-label="Forget this character"
+                            aria-label={t('landing.forgetCharacter')}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>

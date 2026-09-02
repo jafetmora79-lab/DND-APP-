@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { emptyBeat, parseHub, emptyHub, isCombatBeat } from '@/lib/campaign-hub'
+import { useT } from '@/lib/i18n'
 import type { CampaignHub, EncounterTemplate, PlayerCharacter, QuestStatus, SessionBeat, SessionBeatKind, SessionBeatStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -22,6 +23,7 @@ function nid() {
 }
 
 export function CampaignHubPanel({ hub, characters, templates = [], canEdit, compact, playerView, onChange, onUploadImage }: Props) {
+  const { t } = useT()
   const data = parseHub(hub ?? emptyHub())
   const [addedId, setAddedId] = useState<string | null>(null)
 
@@ -41,14 +43,14 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
         ? emptyBeat({
             id,
             kind: 'combat',
-            title: templates[0]?.name || 'Encounter',
+            title: templates[0]?.name || t('campaignHub.encounter'),
             templateId: templates[0]?.id ?? '',
             status: 'upcoming',
           })
         : emptyBeat({
             id,
             kind: 'social',
-            title: 'New scene',
+            title: t('campaignHub.newScene'),
             status: 'upcoming',
           })
     setAddedId(id)
@@ -58,19 +60,19 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
   return (
     <div className={cn('space-y-4', compact && 'space-y-3')}>
       <section>
-        <h3 className="text-xs uppercase tracking-wider text-muted">Tonight</h3>
+        <h3 className="text-xs uppercase tracking-wider text-muted">{t('campaignHub.tonight')}</h3>
         {canEdit ? (
           <div className="mt-2 grid gap-2">
-            <Field label="Session title">
-              <Input value={data.sessionTitle} onChange={(e) => patch({ ...data, sessionTitle: e.target.value })} placeholder="Night of the Cragmaw" />
+            <Field label={t('campaignHub.sessionTitle')}>
+              <Input value={data.sessionTitle} onChange={(e) => patch({ ...data, sessionTitle: e.target.value })} placeholder={t('campaignHub.sessionTitlePlaceholder')} />
             </Field>
-            <Field label="Session notes">
-              <Input value={data.sessionNotes} onChange={(e) => patch({ ...data, sessionNotes: e.target.value })} placeholder="Ambush, then town rumors…" />
+            <Field label={t('campaignHub.sessionNotes')}>
+              <Input value={data.sessionNotes} onChange={(e) => patch({ ...data, sessionNotes: e.target.value })} placeholder={t('campaignHub.sessionNotesPlaceholder')} />
             </Field>
           </div>
         ) : (
           <div className="mt-1">
-            <div className="font-display text-lg text-gold">{data.sessionTitle || 'At the table'}</div>
+            <div className="font-display text-lg text-gold">{data.sessionTitle || t('campaignHub.atTheTable')}</div>
             {!playerView && data.sessionNotes && <p className="text-sm text-muted">{data.sessionNotes}</p>}
           </div>
         )}
@@ -78,21 +80,21 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
 
       <section>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-xs uppercase tracking-wider text-muted">{playerView ? 'Now' : 'Run order'}</h3>
+          <h3 className="text-xs uppercase tracking-wider text-muted">{playerView ? t('campaignHub.now') : t('prep.hubTitle')}</h3>
           {canEdit && (
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" className="min-h-10 flex-1 sm:flex-none" onClick={() => addBeat('social')}>
-                Add scene
+                {t('campaignHub.addScene')}
               </Button>
               <Button type="button" size="sm" variant="outline" className="min-h-10 flex-1 sm:flex-none" onClick={() => addBeat('combat')}>
-                Add encounter
+                {t('campaignHub.addEncounter')}
               </Button>
             </div>
           )}
         </div>
         {!playerView && (
           <p className="mt-1 text-xs text-muted">
-            Top to bottom is what Live follows: opening scene, then Start encounter, then the next scene after that fight ends. Add scene / Add encounter appends at the bottom. Players only see the active scene, not what comes next.
+            {t('campaignHub.runOrderBlurb')}
           </p>
         )}
         <ul className="mt-2 space-y-2">
@@ -137,12 +139,12 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                         {!playerView && <span className="mr-2 text-[10px] uppercase tracking-wide text-muted">{data.beats.indexOf(b) + 1}.</span>}
                         {b.title}
                       </span>
-                      <span className="text-[10px] uppercase tracking-wide text-muted">{b.status}</span>
+                      <span className="text-[10px] uppercase tracking-wide text-muted">{t(`campaignHub.status.${b.status}`)}</span>
                     </div>
                     <div className="text-xs text-muted">
                       {isCombatBeat(b)
-                        ? `Encounter${templates.find((t) => t.id === b.templateId) ? ` · ${templates.find((t) => t.id === b.templateId)?.name}` : ''}`
-                        : 'Scene'}
+                        ? `${t('campaignHub.encounter')}${templates.find((t) => t.id === b.templateId) ? ` · ${templates.find((t) => t.id === b.templateId)?.name}` : ''}`
+                        : t('campaignHub.scene')}
                       {!playerView && b.notes ? ` · ${b.notes}` : ''}
                     </div>
                     {!playerView && !isCombatBeat(b) && b.caption ? <p className="text-xs text-muted">{b.caption}</p> : null}
@@ -152,20 +154,20 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
             </li>
           ))}
           {data.beats.length === 0 && !playerView && (
-            <li className="text-sm text-muted">No run yet. Add the opening scene, then the first encounter, and keep alternating.</li>
+            <li className="text-sm text-muted">{t('campaignHub.noRunYet')}</li>
           )}
           {playerView && data.beats.every((b) => b.status !== 'active') && (
-            <li className="text-sm text-muted">The DM will show the next scene here.</li>
+            <li className="text-sm text-muted">{t('campaignHub.nextSceneHere')}</li>
           )}
         </ul>
       </section>
 
       <section>
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-xs uppercase tracking-wider text-muted">Quests</h3>
+          <h3 className="text-xs uppercase tracking-wider text-muted">{t('campaignHub.quests')}</h3>
           {canEdit && (
-            <Button size="sm" variant="ghost" onClick={() => patch({ ...data, quests: [...data.quests, { id: nid(), name: 'New quest', status: 'open', notes: '', npcIds: [] }] })}>
-              Add quest
+            <Button size="sm" variant="ghost" onClick={() => patch({ ...data, quests: [...data.quests, { id: nid(), name: t('campaignHub.newQuest'), status: 'open', notes: '', npcIds: [] }] })}>
+              {t('campaignHub.addQuest')}
             </Button>
           )}
         </div>
@@ -188,38 +190,38 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                       patch({ ...data, quests })
                     }}
                   >
-                    <option value="open">Open</option>
-                    <option value="complete">Complete</option>
-                    <option value="failed">Failed</option>
+                    <option value="open">{t('campaignHub.questStatus.open')}</option>
+                    <option value="complete">{t('campaignHub.questStatus.complete')}</option>
+                    <option value="failed">{t('campaignHub.questStatus.failed')}</option>
                   </select>
                   <Input value={q.notes} onChange={(e) => {
                     const quests = data.quests.slice()
                     quests[i] = { ...q, notes: e.target.value }
                     patch({ ...data, quests })
-                  }} placeholder="Notes" />
+                  }} placeholder={t('sheet.notes')} />
                   <Button type="button" size="sm" variant="danger" className="min-h-10 w-fit" onClick={() => patch({ ...data, quests: data.quests.filter((x) => x.id !== q.id) })}>
-                    Remove quest
+                    {t('campaignHub.removeQuest')}
                   </Button>
                 </div>
               ) : (
                 <div className="text-sm">
                   <span className="font-medium">{q.name}</span>
-                  <span className="ml-2 text-[10px] uppercase tracking-wide text-muted">{q.status}</span>
+                  <span className="ml-2 text-[10px] uppercase tracking-wide text-muted">{t(`campaignHub.questStatus.${q.status}`)}</span>
                   {!playerView && q.notes && <p className="text-xs text-muted">{q.notes}</p>}
                 </div>
               )}
             </li>
           ))}
-          {data.quests.length === 0 && <li className="text-sm text-muted">No quests tracked.</li>}
+          {data.quests.length === 0 && <li className="text-sm text-muted">{t('campaignHub.noQuestsTracked')}</li>}
         </ul>
       </section>
 
       <section>
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-xs uppercase tracking-wider text-muted">NPCs</h3>
+          <h3 className="text-xs uppercase tracking-wider text-muted">{t('campaignHub.npcs')}</h3>
           {canEdit && (
-            <Button size="sm" variant="ghost" onClick={() => patch({ ...data, npcs: [...data.npcs, { id: nid(), name: 'New NPC', role: '', notes: '' }] })}>
-              Add NPC
+            <Button size="sm" variant="ghost" onClick={() => patch({ ...data, npcs: [...data.npcs, { id: nid(), name: t('campaignHub.newNpc'), role: '', notes: '' }] })}>
+              {t('campaignHub.addNpc')}
             </Button>
           )}
         </div>
@@ -232,19 +234,19 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                     const npcs = data.npcs.slice()
                     npcs[i] = { ...n, name: e.target.value }
                     patch({ ...data, npcs })
-                  }} placeholder="Name" />
+                  }} placeholder={t('sheet.attackName')} />
                   <Input value={n.role} onChange={(e) => {
                     const npcs = data.npcs.slice()
                     npcs[i] = { ...n, role: e.target.value }
                     patch({ ...data, npcs })
-                  }} placeholder="Role" />
+                  }} placeholder={t('campaignHub.role')} />
                   <Input value={n.notes} onChange={(e) => {
                     const npcs = data.npcs.slice()
                     npcs[i] = { ...n, notes: e.target.value }
                     patch({ ...data, npcs })
-                  }} placeholder="Notes" />
+                  }} placeholder={t('sheet.notes')} />
                   <Button type="button" size="sm" variant="danger" className="min-h-10 w-fit" onClick={() => patch({ ...data, npcs: data.npcs.filter((x) => x.id !== n.id) })}>
-                    Remove NPC
+                    {t('campaignHub.removeNpc')}
                   </Button>
                 </div>
               ) : (
@@ -256,16 +258,16 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
               )}
             </li>
           ))}
-          {data.npcs.length === 0 && <li className="text-sm text-muted">No NPCs yet.</li>}
+          {data.npcs.length === 0 && <li className="text-sm text-muted">{t('campaignHub.noNpcsYet')}</li>}
         </ul>
       </section>
 
       <section>
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-xs uppercase tracking-wider text-muted">Party loot</h3>
+          <h3 className="text-xs uppercase tracking-wider text-muted">{t('campaignHub.partyLoot')}</h3>
           {canEdit && (
-            <Button size="sm" variant="ghost" onClick={() => patch({ ...data, loot: [...data.loot, { id: nid(), name: 'New item', qty: 1, notes: '', holder: '' }] })}>
-              Add loot
+            <Button size="sm" variant="ghost" onClick={() => patch({ ...data, loot: [...data.loot, { id: nid(), name: t('campaignHub.newItem'), qty: 1, notes: '', holder: '' }] })}>
+              {t('campaignHub.addLoot')}
             </Button>
           )}
         </div>
@@ -279,12 +281,12 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                       const loot = data.loot.slice()
                       loot[i] = { ...item, name: e.target.value }
                       patch({ ...data, loot })
-                    }} placeholder="Item" />
+                    }} placeholder={t('campaignHub.item')} />
                     <Input type="number" min={1} value={item.qty} onChange={(e) => {
                       const loot = data.loot.slice()
                       loot[i] = { ...item, qty: Number(e.target.value) || 1 }
                       patch({ ...data, loot })
-                    }} aria-label="Quantity" />
+                    }} aria-label={t('campaignHub.quantity')} />
                   </div>
                   <select
                     className="h-10 rounded-md border border-line bg-bg px-2 text-sm"
@@ -295,7 +297,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                       patch({ ...data, loot })
                     }}
                   >
-                    <option value="">Party</option>
+                    <option value="">{t('campaignHub.party')}</option>
                     {characters.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -306,35 +308,35 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
                     const loot = data.loot.slice()
                     loot[i] = { ...item, notes: e.target.value }
                     patch({ ...data, loot })
-                  }} placeholder="Notes" />
+                  }} placeholder={t('sheet.notes')} />
                   <Button type="button" size="sm" variant="danger" className="min-h-10 w-fit" onClick={() => patch({ ...data, loot: data.loot.filter((x) => x.id !== item.id) })}>
-                    Remove loot
+                    {t('campaignHub.removeLoot')}
                   </Button>
                 </div>
               ) : (
                 <div className="text-sm">
                   {item.qty}× {item.name}
-                  <span className="text-muted"> · {item.holder ? characters.find((c) => c.id === item.holder)?.name ?? 'carried' : 'party'}</span>
+                  <span className="text-muted"> · {item.holder ? characters.find((c) => c.id === item.holder)?.name ?? t('campaignHub.carried') : t('campaignHub.party')}</span>
                   {!playerView && item.notes && <p className="text-xs text-muted">{item.notes}</p>}
                 </div>
               )}
             </li>
           ))}
-          {data.loot.length === 0 && <li className="text-sm text-muted">No loot recorded.</li>}
+          {data.loot.length === 0 && <li className="text-sm text-muted">{t('campaignHub.noLootRecorded')}</li>}
         </ul>
       </section>
 
       <section>
-        <h3 className="text-xs uppercase tracking-wider text-muted">Recap</h3>
+        <h3 className="text-xs uppercase tracking-wider text-muted">{t('campaignHub.recap')}</h3>
         {canEdit ? (
           <textarea
             className="mt-2 min-h-24 w-full rounded-md border border-line bg-bg px-3 py-2 text-sm"
             value={data.recap}
             onChange={(e) => patch({ ...data, recap: e.target.value })}
-            placeholder="What happened last session…"
+            placeholder={t('campaignHub.recapPlaceholder')}
           />
         ) : (
-          <p className="mt-1 whitespace-pre-wrap text-sm text-muted">{data.recap || 'No recap yet.'}</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-muted">{data.recap || t('campaignHub.noRecapYet')}</p>
         )}
       </section>
     </div>
@@ -364,6 +366,7 @@ function BeatEditor({
   onRemove: () => void
   onUploadImage?: (file: File) => Promise<string>
 }) {
+  const { t } = useT()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [open, setOpen] = useState(!compact || Boolean(forceOpen))
@@ -378,7 +381,7 @@ function BeatEditor({
       const imageUrl = await onUploadImage(file)
       onChange({ ...beat, imageUrl })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed')
+      setError(e instanceof Error ? e.message : t('campaignHub.uploadFailed'))
     } finally {
       setBusy(false)
     }
@@ -393,26 +396,26 @@ function BeatEditor({
           onClick={() => compact && setOpen((v) => !v)}
         >
           <span className="text-[10px] uppercase tracking-wider text-muted">
-            {index + 1}. {combat ? 'Encounter' : 'Scene'}
-            {compact ? (details ? ' · hide' : ' · edit') : ''}
+            {index + 1}. {combat ? t('campaignHub.encounter') : t('campaignHub.scene')}
+            {compact ? (details ? ` · ${t('campaignHub.hide')}` : ` · ${t('campaignHub.edit')}`) : ''}
           </span>
-          <div className="truncate font-medium">{beat.title || (combat ? 'Encounter' : 'Scene')}</div>
+          <div className="truncate font-medium">{beat.title || (combat ? t('campaignHub.encounter') : t('campaignHub.scene'))}</div>
         </button>
         <div className="flex shrink-0 flex-wrap gap-1">
           <Button type="button" size="sm" variant="outline" className="min-h-10" disabled={index === 0} onClick={() => onMove(-1)}>
-            Up
+            {t('campaignHub.up')}
           </Button>
           <Button type="button" size="sm" variant="outline" className="min-h-10" disabled={index === total - 1} onClick={() => onMove(1)}>
-            Down
+            {t('campaignHub.down')}
           </Button>
           <Button type="button" size="sm" variant="danger" className="min-h-10" onClick={onRemove}>
-            Remove
+            {t('campaignHub.remove')}
           </Button>
         </div>
       </div>
       {details && (
         <>
-          <Input value={beat.title} onChange={(e) => onChange({ ...beat, title: e.target.value })} placeholder={combat ? 'Encounter name' : 'Scene name'} />
+          <Input value={beat.title} onChange={(e) => onChange({ ...beat, title: e.target.value })} placeholder={combat ? t('campaignHub.encounterName') : t('campaignHub.sceneName')} />
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
             <select
               className="h-10 min-h-10 rounded-md border border-line bg-bg px-2 text-sm"
@@ -432,19 +435,19 @@ function BeatEditor({
                 }
               }}
             >
-              <option value="social">Scene — social</option>
-              <option value="travel">Scene — travel</option>
-              <option value="other">Scene — other</option>
-              <option value="combat">Encounter</option>
+              <option value="social">{t('campaignHub.kind.social')}</option>
+              <option value="travel">{t('campaignHub.kind.travel')}</option>
+              <option value="other">{t('campaignHub.kind.other')}</option>
+              <option value="combat">{t('campaignHub.encounter')}</option>
             </select>
             <select
               className="h-10 min-h-10 rounded-md border border-line bg-bg px-2 text-sm"
               value={beat.status}
               onChange={(e) => onChange({ ...beat, status: e.target.value as SessionBeatStatus })}
             >
-              <option value="upcoming">Upcoming</option>
-              <option value="active">Active</option>
-              <option value="done">Done</option>
+              <option value="upcoming">{t('campaignHub.status.upcoming')}</option>
+              <option value="active">{t('campaignHub.status.active')}</option>
+              <option value="done">{t('campaignHub.status.done')}</option>
             </select>
             {combat ? (
               <select
@@ -452,11 +455,15 @@ function BeatEditor({
                 value={beat.templateId}
                 onChange={(e) => {
                   const templateId = e.target.value
-                  const t = templates.find((x) => x.id === templateId)
-                  onChange({ ...beat, templateId, title: beat.title === 'Encounter' || !beat.title ? t?.name || beat.title : beat.title })
+                  const template = templates.find((x) => x.id === templateId)
+                  onChange({
+                    ...beat,
+                    templateId,
+                    title: beat.title === 'Encounter' || beat.title === t('campaignHub.encounter') || !beat.title ? template?.name || beat.title : beat.title,
+                  })
                 }}
               >
-                <option value="">Pick encounter</option>
+                <option value="">{t('campaignHub.pickEncounter')}</option>
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -470,7 +477,7 @@ function BeatEditor({
               {beat.imageUrl ? (
                 <img src={beat.imageUrl} alt="" className="h-24 w-full rounded object-cover" />
               ) : (
-                <div className="flex h-24 items-center justify-center rounded border border-dashed border-line text-xs text-muted">No image yet</div>
+                <div className="flex h-24 items-center justify-center rounded border border-dashed border-line text-xs text-muted">{t('campaignHub.noImageYet')}</div>
               )}
               <div className="flex flex-wrap items-center gap-2">
                 {onUploadImage && (
@@ -486,19 +493,19 @@ function BeatEditor({
                         if (file) void onFile(file)
                       }}
                     />
-                    {busy ? 'Uploading…' : beat.imageUrl ? 'Change image' : 'Upload image'}
+                    {busy ? t('campaignHub.uploading') : beat.imageUrl ? t('campaignHub.changeImage') : t('campaignHub.uploadImage')}
                   </label>
                 )}
                 {beat.imageUrl && (
                   <Button type="button" size="sm" variant="ghost" className="min-h-10" onClick={() => onChange({ ...beat, imageUrl: '' })}>
-                    Remove image
+                    {t('campaignHub.removeImage')}
                   </Button>
                 )}
               </div>
-              <Input value={beat.caption} onChange={(e) => onChange({ ...beat, caption: e.target.value })} placeholder="Caption on the table" />
+              <Input value={beat.caption} onChange={(e) => onChange({ ...beat, caption: e.target.value })} placeholder={t('campaignHub.captionOnTable')} />
             </>
           )}
-          <Input value={beat.notes} onChange={(e) => onChange({ ...beat, notes: e.target.value })} placeholder="Notes" />
+          <Input value={beat.notes} onChange={(e) => onChange({ ...beat, notes: e.target.value })} placeholder={t('sheet.notes')} />
           {error && <p className="text-xs text-blood">{error}</p>}
         </>
       )}

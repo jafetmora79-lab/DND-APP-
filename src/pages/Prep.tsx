@@ -85,6 +85,7 @@ function placementTokens(
   characters: TemplateCharacter[],
   roster: PlayerCharacter[],
   bestiary: Monster[],
+  playerLabel: string,
 ): MapToken[] {
   const cell = map.gridSize
   const occupied = new Set<string>()
@@ -123,7 +124,7 @@ function placementTokens(
       y: ch.startY * cell + cell / 2,
       refType: 'character',
       refId: ch.characterId,
-      label: ch.name || pc?.name || 'Player',
+      label: ch.name || pc?.name || playerLabel,
       color: look.from,
       color2: look.to,
       sizeSquares: 1,
@@ -172,7 +173,7 @@ export function Prep() {
   const [tpl, setTpl] = useState<Partial<EncounterTemplate>>({ name: '', mapId: '', monsters: [], characters: [] })
   const [msg, setMsg] = useState('')
   const [editingMapId, setEditingMapId] = useState<string | null>(null)
-  const [newMapName, setNewMapName] = useState('New encounter map')
+  const [newMapName, setNewMapName] = useState(t('prep.newEncounterMap'))
   const [newMapCols, setNewMapCols] = useState(20)
   const [newMapRows, setNewMapRows] = useState(15)
   const [beastPick, setBeastPick] = useState('')
@@ -181,6 +182,10 @@ export function Prep() {
   const [copied, setCopied] = useState('')
   const [placingCharacterId, setPlacingCharacterId] = useState<string | null>(null)
   const [hub, setHub] = useState(emptyHub())
+  const msgIsError =
+    /could not|before saving|run migrate|no se pudo|antes de guardar|prep\.(?:nameEncounterAndPickMapBeforeSaving|couldNotEndCampaign|couldNotStartCampaign|couldNotSaveHub|couldNotSaveEncounter)/i.test(
+      msg,
+    )
 
   async function reload() {
     if (!campaignId) return
@@ -226,33 +231,33 @@ export function Prep() {
     const r = await api.uploadMap(campaignId, form)
     await reload()
     setEditingMapId(r.map.id)
-    setMsg('Picture attached as background. Paint walls and terrain on the 5-ft grid.')
+    setMsg(t('prep.backgroundAttached'))
   }
 
   async function createBlankMap() {
     if (!campaignId) return
     const r = await api.createMap(campaignId, {
-      name: newMapName.trim() || 'Untitled map',
+      name: newMapName.trim() || t('prep.untitledMap'),
       gridSize: DEFAULT_SCRATCH_CELL,
       gridCols: newMapCols,
       gridRows: newMapRows,
     })
     await reload()
     setEditingMapId(r.map.id)
-    setMsg(`Blank ${newMapCols}×${newMapRows} grid created (${mapFeet(newMapCols, newMapRows)}). Paint walls and terrain, then use it in an encounter.`)
+    setMsg(t('prep.blankGridCreated', { cols: newMapCols, rows: newMapRows, size: mapFeet(newMapCols, newMapRows) }))
   }
 
   async function saveMonster() {
     if (!selectedMonster?.name) return
     await api.saveMonster(selectedMonster)
     setEditingNew(false)
-    setMsg('Monster saved to your shared bestiary.')
+    setMsg(t('prep.monsterSaved'))
     await reload()
   }
 
   async function saveTemplate() {
     if (!campaignId || !tpl.name || !tpl.mapId) {
-      setMsg('Name the encounter and pick a map before saving.')
+      setMsg(t('prep.nameEncounterAndPickMapBeforeSaving'))
       return
     }
     try {
@@ -290,11 +295,11 @@ export function Prep() {
       const gap = templateReadyGap(saved ?? tpl)
       setMsg(
         gap
-          ? `Encounter saved as a draft. ${gap} before Live can start it.`
-          : 'Encounter saved and added to the run order. Start campaign to put it on the table.',
+          ? t('prep.encounterSavedDraft', { gap })
+          : t('prep.encounterSavedRunOrder'),
       )
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not save the encounter.')
+      setMsg(e instanceof Error ? e.message : t('prep.couldNotSaveEncounter'))
     }
   }
 
@@ -323,9 +328,9 @@ export function Prep() {
               if (!campaignId) return
               try {
                 await api.endSession(campaignId)
-                setMsg('Campaign ended. Tonight’s join code no longer works. Start campaign when you want the table open again.')
+                setMsg(t('prep.campaignEnded'))
               } catch (e) {
-                setMsg(e instanceof Error ? e.message : 'Could not end the campaign.')
+                setMsg(e instanceof Error ? e.message : t('prep.couldNotEndCampaign'))
               }
             }}
           >
@@ -338,7 +343,7 @@ export function Prep() {
                 await api.ensureSession(campaignId)
                 nav(`/dm/${campaignId}/live`)
               } catch (e) {
-                setMsg(e instanceof Error ? e.message : 'Could not start the campaign.')
+                setMsg(e instanceof Error ? e.message : t('prep.couldNotStartCampaign'))
               }
             }}
           >
@@ -359,7 +364,7 @@ export function Prep() {
         ))}
       </div>
       {msg && (
-        <p className={cn('mt-3 text-sm', /could not|before saving|run migrate/i.test(msg) ? 'text-blood' : 'text-moss')}>
+        <p className={cn('mt-3 text-sm', msgIsError ? 'text-blood' : 'text-moss')}>
           {msg}
         </p>
       )}
@@ -391,11 +396,11 @@ export function Prep() {
               if (!campaignId) return
               api
                 .patchCampaign(campaignId, { hub: { ...hub, stages: [] } })
-                .then(() => setMsg('Run order saved.'))
-                .catch((e) => setMsg(e instanceof Error ? e.message : 'Could not save the hub.'))
+                .then(() => setMsg(t('prep.runOrderSaved')))
+                .catch((e) => setMsg(e instanceof Error ? e.message : t('prep.couldNotSaveHub')))
             }}
           >
-            Save run order
+            {t('prep.saveRunOrder')}
           </Button>
         </div>
       )}
@@ -416,28 +421,28 @@ export function Prep() {
         <div className="mt-6 space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-line bg-panel p-4">
-              <h2 className="font-display text-xl text-gold">New 5-ft grid</h2>
-              <p className="mt-1 text-xs text-muted">Create a square battle map from scratch. Each square is 5 feet — the same scale used for movement and encounters.</p>
+              <h2 className="font-display text-xl text-gold">{t('prep.new5FtGrid')}</h2>
+              <p className="mt-1 text-xs text-muted">{t('prep.new5FtGridBlurb')}</p>
               <div className="mt-3 grid gap-3">
-                <Field label="Name">
+                <Field label={t('monsterForm.name')}>
                   <Input value={newMapName} onChange={(e) => setNewMapName(e.target.value)} />
                 </Field>
                 <div className="grid grid-cols-2 gap-2">
-                  <Field label="Squares wide">
+                  <Field label={t('mapMaker.squaresWide')}>
                     <Input type="number" min={1} max={80} value={newMapCols} onChange={(e) => setNewMapCols(Number(e.target.value) || 1)} />
                   </Field>
-                  <Field label="Squares high">
+                  <Field label={t('mapMaker.squaresHigh')}>
                     <Input type="number" min={1} max={80} value={newMapRows} onChange={(e) => setNewMapRows(Number(e.target.value) || 1)} />
                   </Field>
                 </div>
                 <p className="text-sm text-gold">{mapFeet(newMapCols, newMapRows)}</p>
-                <Button onClick={() => createBlankMap().catch((e) => setMsg(e.message))}>Create blank map</Button>
+                <Button onClick={() => createBlankMap().catch((e) => setMsg(e.message))}>{t('prep.createBlankMap')}</Button>
               </div>
             </div>
             <label className="flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-line bg-panel p-4 text-center text-muted hover:text-ink">
-              <span className="font-display text-xl text-gold">Optional background</span>
-              <span className="mt-2 max-w-xs text-sm">Upload a picture to start a map with scenery under the grid. You still paint walls and terrain on the 5-ft grid itself.</span>
-              <span className="mt-1 text-xs">PNG, JPG, WebP, or SVG</span>
+              <span className="font-display text-xl text-gold">{t('mapMaker.backgroundPicture')}</span>
+              <span className="mt-2 max-w-xs text-sm">{t('mapMaker.backgroundHint')}</span>
+              <span className="mt-1 text-xs">{t('prep.backgroundFormats')}</span>
               <input
                 type="file"
                 accept="image/*"
@@ -467,15 +472,15 @@ export function Prep() {
               <div className="p-3">
                 <div className="font-display text-lg text-gold">{m.name}</div>
                 <p className="text-xs text-muted">
-                  {m.gridCols}×{m.gridRows} squares · {mapFeet(m.gridCols, m.gridRows)}
-                  {m.blocked?.some((v) => v > 0) ? ' · terrain painted' : ''}
+                  {t('prep.mapCardSummary', { cols: m.gridCols, rows: m.gridRows, size: mapFeet(m.gridCols, m.gridRows) })}
+                  {m.blocked?.some((v) => v > 0) ? ` · ${t('prep.terrainPainted')}` : ''}
                 </p>
                 <div className="mt-2 flex gap-2">
                   <Button size="sm" onClick={() => setEditingMapId(m.id)}>
-                    Edit map
+                    {t('prep.editMap')}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => api.deleteMap(m.id).then(reload)}>
-                    Delete
+                    {t('common.delete')}
                   </Button>
                 </div>
               </div>
@@ -489,7 +494,7 @@ export function Prep() {
       {tab === 'Bestiary' && (
         <div className="mt-6 grid gap-4 lg:grid-cols-[20rem_1fr]">
           <div className="rounded-xl border border-line bg-panel p-3">
-            <Input placeholder="Search name or type…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <Input placeholder={t('prep.searchNameOrType')} value={q} onChange={(e) => setQ(e.target.value)} />
             <Button
               className="mt-2 w-full"
               variant="outline"
@@ -498,9 +503,9 @@ export function Prep() {
                 setSelectedMonster(blankMonster())
               }}
             >
-              Add a monster
+              {t('prep.addMonster')}
             </Button>
-            <p className="mt-2 text-xs text-muted">{filtered.length} entries · shared across every campaign at this table</p>
+            <p className="mt-2 text-xs text-muted">{t('prep.sharedBestiaryEntries', { count: filtered.length })}</p>
             <ul className="mt-3 max-h-[70vh] space-y-1 overflow-y-auto scroll-thin">
               {filtered.map((m) => (
                 <li key={m.id}>
@@ -517,7 +522,7 @@ export function Prep() {
                   >
                     <span className="font-medium">{m.name}</span>
                     <span className="ml-2 text-xs text-muted">
-                      CR {m.challengeRating} · {m.creatureType}
+                      {t('monsterForm.cr')} {m.challengeRating} · {m.creatureType}
                     </span>
                   </button>
                 </li>
@@ -537,11 +542,11 @@ export function Prep() {
                 {'id' in selectedMonster && selectedMonster.id ? (
                   <StatBlock monster={selectedMonster as Monster} />
                 ) : (
-                  <p className="text-sm text-muted">Fill the form and save to preview the printed block.</p>
+                  <p className="text-sm text-muted">{t('prep.fillFormPreview')}</p>
                 )}
               </div>
             ) : (
-              <p className="text-muted">Search the SRD 5.1 seed or add something of your own. Built once, used in every campaign.</p>
+              <p className="text-muted">{t('prep.bestiaryEmptyHint')}</p>
             )}
           </div>
         </div>
@@ -550,38 +555,38 @@ export function Prep() {
       {tab === 'Encounters' && (
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <div className="rounded-xl border border-line bg-panel p-4">
-            <h2 className="font-display text-xl text-gold">{tpl.id ? 'Edit template' : 'New template'}</h2>
+            <h2 className="font-display text-xl text-gold">{tpl.id ? t('prep.editTemplate') : t('prep.newTemplate')}</h2>
             <div className="mt-3 grid gap-3">
-              <Field label="Name">
+              <Field label={t('monsterForm.name')}>
                 <Input value={tpl.name ?? ''} onChange={(e) => setTpl({ ...tpl, name: e.target.value })} />
               </Field>
-              <Field label="Objective">
-                <Input value={tpl.objective ?? ''} onChange={(e) => setTpl({ ...tpl, objective: e.target.value })} placeholder="Hold the bridge / rescue Sildar" />
+              <Field label={t('prep.objective')}>
+                <Input value={tpl.objective ?? ''} onChange={(e) => setTpl({ ...tpl, objective: e.target.value })} placeholder={t('prep.objectivePlaceholder')} />
               </Field>
               <div className="grid grid-cols-2 gap-2">
-                <Field label="Difficulty">
-                  <Input value={tpl.difficulty ?? ''} onChange={(e) => setTpl({ ...tpl, difficulty: e.target.value })} placeholder="Easy / Deadly" />
+                <Field label={t('prep.difficulty')}>
+                  <Input value={tpl.difficulty ?? ''} onChange={(e) => setTpl({ ...tpl, difficulty: e.target.value })} placeholder={t('prep.difficultyPlaceholder')} />
                 </Field>
-                <Field label="XP award">
+                <Field label={t('prep.xpAward')}>
                   <Input type="number" min={0} value={tpl.xpAward ?? 0} onChange={(e) => setTpl({ ...tpl, xpAward: Number(e.target.value) || 0 })} />
                 </Field>
               </div>
-              <Field label="Notes">
-                <Input value={tpl.notes ?? ''} onChange={(e) => setTpl({ ...tpl, notes: e.target.value })} placeholder="Tactics, terrain, secrets…" />
+              <Field label={t('sheet.notes')}>
+                <Input value={tpl.notes ?? ''} onChange={(e) => setTpl({ ...tpl, notes: e.target.value })} placeholder={t('prep.notesPlaceholder')} />
               </Field>
-              <Field label="Loot on win">
-                <Input value={tpl.lootNotes ?? ''} onChange={(e) => setTpl({ ...tpl, lootNotes: e.target.value })} placeholder="Bag of 15 gp, potion of healing" />
+              <Field label={t('prep.lootOnWin')}>
+                <Input value={tpl.lootNotes ?? ''} onChange={(e) => setTpl({ ...tpl, lootNotes: e.target.value })} placeholder={t('prep.lootPlaceholder')} />
               </Field>
-              <Field label="Play order">
+              <Field label={t('prep.playOrder')}>
                 <Input type="number" value={tpl.sortOrder ?? 0} onChange={(e) => setTpl({ ...tpl, sortOrder: Number(e.target.value) || 0 })} />
               </Field>
-              <Field label="Map">
+              <Field label={t('player.map')}>
                 <select
                   className="h-10 rounded-md border border-line bg-bg px-3 text-sm"
                   value={tpl.mapId ?? ''}
                   onChange={(e) => setTpl({ ...tpl, mapId: e.target.value })}
                 >
-                  <option value="">Choose a map</option>
+                  <option value="">{t('prep.chooseMap')}</option>
                   {maps.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name}
@@ -590,10 +595,10 @@ export function Prep() {
                 </select>
               </Field>
               <div className="rounded-lg border border-line/70 p-3">
-                <div className="text-xs uppercase tracking-wider text-muted">Monsters</div>
-                <Field label="Filter">
+                <div className="text-xs uppercase tracking-wider text-muted">{t('prep.monsters')}</div>
+                <Field label={t('prep.filter')}>
                   <Input
-                    placeholder="Search the bestiary…"
+                    placeholder={t('prep.searchBestiary')}
                     value={beastFilter}
                     onChange={(e) => setBeastFilter(e.target.value)}
                   />
@@ -604,10 +609,10 @@ export function Prep() {
                     value={beastPick}
                     onChange={(e) => setBeastPick(e.target.value)}
                   >
-                    <option value="">Choose a monster…</option>
+                    <option value="">{t('prep.chooseMonster')}</option>
                     {encounterMonsters.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.name} · CR {m.challengeRating}
+                        {m.name} · {t('monsterForm.cr')} {m.challengeRating}
                       </option>
                     ))}
                   </select>
@@ -617,7 +622,7 @@ export function Prep() {
                     max={20}
                     value={beastQty}
                     onChange={(e) => setBeastQty(Math.max(1, Number(e.target.value) || 1))}
-                    aria-label="Quantity"
+                    aria-label={t('campaignHub.quantity')}
                   />
                   <Button
                     type="button"
@@ -678,7 +683,7 @@ export function Prep() {
                       setBeastQty(1)
                     }}
                   >
-                    Add
+                    {t('prep.add')}
                   </Button>
                 </div>
                 <ul className="mt-3 space-y-2">
@@ -736,13 +741,15 @@ export function Prep() {
                 </ul>
               </div>
               <div className="rounded-lg border border-line/70 p-3">
-                <div className="text-xs uppercase tracking-wider text-muted">Player starting squares</div>
+                <div className="text-xs uppercase tracking-wider text-muted">{t('prep.playerStartingSquares')}</div>
                 <p className="mt-1 text-xs text-muted">
-                  Place each character, then drag their token or click a square to set where they start. Save the template or they will not appear when the fight starts.
+                  {t('prep.playerStartingSquaresHint')}
                 </p>
                 {placingCharacterId && (
                   <p className="mt-2 text-xs text-gold">
-                    Click a square on the map to set {characters.find((c) => c.id === placingCharacterId)?.name ?? 'this character'}’s start.
+                    {t('prep.clickSquareToSetStart', {
+                      name: characters.find((c) => c.id === placingCharacterId)?.name ?? t('prep.thisCharacter'),
+                    })}
                   </p>
                 )}
                 <ul className="mt-2 space-y-2">
@@ -760,7 +767,7 @@ export function Prep() {
                               variant={placing ? 'default' : 'ghost'}
                               onClick={() => setPlacingCharacterId(placing ? null : ch.id)}
                             >
-                              {placing ? 'Click a square…' : 'Move'}
+                              {placing ? t('prep.clickSquare') : t('map.move')}
                             </Button>
                             <Button
                               size="sm"
@@ -770,7 +777,7 @@ export function Prep() {
                                 setTpl({ ...tpl, characters: (tpl.characters ?? []).filter((c) => c.characterId !== ch.id) })
                               }}
                             >
-                              Remove
+                              {t('campaignHub.remove')}
                             </Button>
                           </>
                         ) : (
@@ -786,22 +793,22 @@ export function Prep() {
                               const cell = spreadCells(origin, 1, map.gridCols, map.gridRows, map.blocked, occupied)[0]
                               setTpl(placeCharacterOnTemplate(tpl, ch, cell))
                               setPlacingCharacterId(ch.id)
-                              setMsg(`Placed ${ch.name}. Drag the token or click another square, then save the template.`)
+                              setMsg(t('prep.placedCharacterHint', { name: ch.name }))
                             }}
                           >
-                            Place on map
+                            {t('prep.placeOnMap')}
                           </Button>
                         )}
                       </li>
                     )
                   })}
-                  {characters.length === 0 && <li className="text-xs text-muted">Create characters first, then place them here.</li>}
+                  {characters.length === 0 && <li className="text-xs text-muted">{t('prep.createCharactersFirst')}</li>}
                 </ul>
               </div>
-              <p className="text-xs text-muted">Each copy gets its own circle. Drag them apart so four goblins are four tokens, not one stack.</p>
+              <p className="text-xs text-muted">{t('prep.monsterCopiesHint')}</p>
               <div className="flex gap-2">
                 <div className="flex flex-wrap gap-2">
-                  <Button onClick={saveTemplate}>{tpl.id ? 'Save changes' : 'Save template'}</Button>
+                  <Button onClick={saveTemplate}>{tpl.id ? t('monsterForm.saveChanges') : t('prep.saveTemplate')}</Button>
                   {tpl.id ? (
                     <Button
                       variant="outline"
@@ -809,7 +816,7 @@ export function Prep() {
                         setTpl({ name: '', mapId: tpl.mapId ?? '', monsters: [], characters: [], objective: '', notes: '', difficulty: '', xpAward: 0, lootNotes: '' })
                       }
                     >
-                      New encounter
+                      {t('prep.newEncounter')}
                     </Button>
                   ) : null}
                 </div>
@@ -821,7 +828,7 @@ export function Prep() {
                       setTpl({ name: '', mapId: '', monsters: [], characters: [], notes: '', objective: '', difficulty: '', xpAward: 0, lootNotes: '', sortOrder: templates.length })
                     }}
                   >
-                    New template
+                    {t('prep.newTemplate')}
                   </Button>
                 )}
                 {tpl.id && (
@@ -832,13 +839,13 @@ export function Prep() {
                       setTpl({
                         ...tpl,
                         id: undefined,
-                        name: `${tpl.name ?? 'Encounter'} (copy)`,
+                        name: t('prep.encounterCopyName', { name: tpl.name ?? t('prep.encounter') }),
                         sortOrder: (tpl.sortOrder ?? 0) + 1,
                       })
-                      setMsg('Duplicated locally — save to keep the copy.')
+                      setMsg(t('prep.duplicatedLocally'))
                     }}
                   >
-                    Duplicate
+                    {t('prep.duplicate')}
                   </Button>
                 )}
               </div>
@@ -855,6 +862,7 @@ export function Prep() {
                     tpl.characters ?? [],
                     characters,
                     monsters,
+                    t('prep.player'),
                   )}
                   fog={{
                     cols: maps.find((m) => m.id === tpl.mapId)!.gridCols,
@@ -869,19 +877,19 @@ export function Prep() {
                     const map = maps.find((m) => m.id === tpl.mapId)
                     if (!map) return
                     if (tokenOccupiesBlocked(map.blocked, col, row, map.gridCols, map.gridRows)) {
-                      setMsg('That square is blocked. Pick an open square.')
+                      setMsg(t('prep.squareBlocked'))
                       return
                     }
                     const ch =
                       characters.find((c) => c.id === placingCharacterId) ??
                       characters.find((c) => !(tpl.characters ?? []).some((x) => x.characterId === c.id))
                     if (!ch) {
-                      setMsg('Choose Place on map or Move for a character, then click a square.')
+                      setMsg(t('prep.choosePlaceOrMove'))
                       return
                     }
                     setTpl(placeCharacterOnTemplate(tpl, ch, { col, row }))
                     setPlacingCharacterId(ch.id)
-                    setMsg(`Set ${ch.name} to square (${col + 1}, ${row + 1}). Save the template to keep this start.`)
+                    setMsg(t('prep.setCharacterSquare', { name: ch.name, col: col + 1, row: row + 1 }))
                   }}
                   onMove={(id, x, y) => {
                     const map = maps.find((m) => m.id === tpl.mapId)!
@@ -923,30 +931,30 @@ export function Prep() {
                 />
               </div>
             ) : (
-              <p className="rounded-xl border border-dashed border-line p-6 text-sm text-muted">Choose a map to place starting tokens.</p>
+              <p className="rounded-xl border border-dashed border-line p-6 text-sm text-muted">{t('prep.chooseMapForTokens')}</p>
             )}
             <ul className="space-y-3">
-              {sortTemplates(templates).map((t) => (
-                <li key={t.id} className="rounded-xl border border-line bg-panel p-4">
+              {sortTemplates(templates).map((template) => (
+                <li key={template.id} className="rounded-xl border border-line bg-panel p-4">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="font-display text-lg text-gold">{t.name}</div>
-                    {templateReady(t) ? (
+                    <div className="font-display text-lg text-gold">{template.name}</div>
+                    {templateReady(template) ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-moss/20 px-2 py-0.5 text-xs uppercase tracking-wider text-moss">
-                        <Check className="h-3.5 w-3.5" /> Ready
+                        <Check className="h-3.5 w-3.5" /> {t('tableHub.ready')}
                       </span>
                     ) : (
                       <span className="rounded-full bg-panel-2 px-2 py-0.5 text-xs uppercase tracking-wider text-muted">
-                        Draft · {templateReadyGap(t)}
+                        {t('prep.draftGap', { gap: templateReadyGap(template) ?? '' })}
                       </span>
                     )}
                   </div>
                   <p className="text-sm text-muted">
-                    {t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ') || 'No monsters yet'}
-                    {(t.characters?.length ?? 0) > 0 ? ` · ${t.characters!.map((c) => c.name).join(', ')}` : ''}
+                    {template.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ') || t('prep.noMonstersYet')}
+                    {(template.characters?.length ?? 0) > 0 ? ` · ${template.characters!.map((c) => c.name).join(', ')}` : ''}
                   </p>
-                  {(t.difficulty || t.objective || t.xpAward) && (
+                  {(template.difficulty || template.objective || template.xpAward) && (
                     <p className="text-xs text-gold">
-                      {[t.difficulty, t.objective, t.xpAward ? `${t.xpAward} XP` : ''].filter(Boolean).join(' · ')}
+                      {[template.difficulty, template.objective, template.xpAward ? `${template.xpAward} ${t('monsterForm.xp')}` : ''].filter(Boolean).join(' · ')}
                     </p>
                   )}
                   <div className="mt-2 flex gap-2">
@@ -956,20 +964,20 @@ export function Prep() {
                       onClick={() => {
                         setPlacingCharacterId(null)
                         setTpl({
-                          ...t,
-                          monsters: t.monsters.map((m, i) => ({
+                          ...template,
+                          monsters: template.monsters.map((m, i) => ({
                             ...m,
                             startX: Number.isFinite(m.startX) ? m.startX : 2 + (i % 8),
                             startY: Number.isFinite(m.startY) ? m.startY : 2 + Math.floor(i / 8),
                           })),
-                          characters: t.characters ?? [],
+                          characters: template.characters ?? [],
                         })
                       }}
                     >
-                      Edit placement
+                      {t('prep.editPlacement')}
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => api.deleteTemplate(t.id).then(reload)}>
-                      Delete
+                    <Button size="sm" variant="ghost" onClick={() => api.deleteTemplate(template.id).then(reload)}>
+                      {t('common.delete')}
                     </Button>
                   </div>
                 </li>
@@ -987,7 +995,11 @@ export function Prep() {
               variant="outline"
               onClick={async () => {
                 if (!campaignId) return
-                const r = await api.createCharacter(campaignId, { name: 'New adventurer', sheet: emptySheet(), tokenColor: TOKEN_PALETTE[characters.length % TOKEN_PALETTE.length] })
+                const r = await api.createCharacter(campaignId, {
+                  name: t('prep.newAdventurer'),
+                  sheet: emptySheet(),
+                  tokenColor: TOKEN_PALETTE[characters.length % TOKEN_PALETTE.length],
+                })
                 await reload()
                 setSelectedChar(r.character)
               }}
@@ -1003,13 +1015,13 @@ export function Prep() {
                     onClick={() => setSelectedChar(c)}
                   >
                     <div className="font-medium">{c.name}</div>
-                    <div className="text-xs text-gold">Join as {c.name}</div>
+                    <div className="text-xs text-gold">{t('prep.joinAsName', { name: c.name })}</div>
                   </button>
                   <Button
                     size="icon"
                     variant="ghost"
                     className="h-8 w-8 shrink-0"
-                    title={`Copy ${c.name}`}
+                    title={t('prep.copyName', { name: c.name })}
                     onClick={() => copyCode(c.name, c.id)}
                   >
                     {copied === c.id ? <Check className="h-4 w-4 text-moss" /> : <Copy className="h-4 w-4" />}
@@ -1039,8 +1051,8 @@ export function Prep() {
                   setSelectedChar(r.character)
                   setMsg(
                     r.fieldCount
-                      ? `Read ${r.fieldCount} fields from the PDF.`
-                      : 'Stored the PDF, but it had no readable character fields.',
+                      ? t('prep.readPdfFields', { fieldCount: r.fieldCount })
+                      : t('prep.storedPdfNoFields'),
                   )
                   await reload()
                 }}
