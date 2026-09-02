@@ -74,12 +74,8 @@ export function PlayerTurnPanel({
   const [pending, setPending] = useState<{ attack: Attack; index: number } | null>(null)
   const [rollMode, setRollMode] = useState<RollMode>('normal')
   const [d20, setD20] = useState('')
-  const [d20b, setD20b] = useState('')
-  const [damage, setDamage] = useState('')
   const [custom, setCustom] = useState('')
   const [reactionNote, setReactionNote] = useState('')
-  const [saveD20, setSaveD20] = useState('')
-  const [initD20, setInitD20] = useState('')
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
   const [modalType, setModalType] = useState<ModalType>(null)
@@ -108,8 +104,6 @@ export function PlayerTurnPanel({
     setStep('pick')
     setPending(null)
     setD20('')
-    setD20b('')
-    setDamage('')
     setCustom('')
     setRollMode('normal')
     setModalType(null)
@@ -122,8 +116,6 @@ export function PlayerTurnPanel({
     setStep('target')
     setPending({ attack, index })
     setD20('')
-    setD20b('')
-    setDamage('')
     setMsg('')
     onSelectedId(null)
     const hasAdv = Boolean(selectedId && combatant && hasHiddenAdvantage(combatant, selectedId))
@@ -197,20 +189,17 @@ export function PlayerTurnPanel({
   const preview = useMemo(() => {
     if (!pending || !target) return null
     const roll = Number(d20)
-    const rollb = Number(d20b)
     if (!Number.isInteger(roll) || roll < 1 || roll > 20) return null
-    if (mode !== 'normal' && (!Number.isInteger(rollb) || rollb < 1 || rollb > 20)) return null
     const bonus = parseAttackBonus(pending.attack.bonus)
-    const dice = pickUsedD20(roll, mode === 'normal' ? undefined : rollb, mode)
+    const dice = pickUsedD20(roll, undefined, mode)
     const outcome = attackOutcome(dice.used, bonus, previewAc)
     const total = dice.used + bonus
     return { outcome, total, bonus, used: dice.used }
-  }, [pending, target, d20, d20b, mode, previewAc])
+  }, [pending, target, d20, mode, previewAc])
 
   async function submitAttack(dmg: number) {
     if (!pending || !selectedId) return
     const roll = Number(d20)
-    const rollb = Number(d20b)
     setBusy(true)
     try {
       const r = await api.playerAttack(instanceId, {
@@ -218,7 +207,7 @@ export function PlayerTurnPanel({
         targetId: selectedId,
         attackIndex: pending.index,
         d20: roll,
-        d20b: mode === 'normal' ? undefined : rollb,
+        d20b: undefined,
         rollMode: mode,
         damage: dmg,
       })
@@ -234,7 +223,7 @@ export function PlayerTurnPanel({
 
   function continueFromRoll() {
     if (!preview) {
-      setMsg(mode === 'normal' ? 'Enter the d20 you rolled at the table (1–20).' : 'Enter both d20s for advantage or disadvantage.')
+      setMsg('Enter the d20 you rolled at the table (1–20).')
       return
     }
     if (preview.outcome === 'miss' || preview.outcome === 'fumble') {
@@ -259,13 +248,11 @@ export function PlayerTurnPanel({
     }
   }
 
-  async function answerSave() {
-    const roll = Number(saveD20)
+  async function answerSave(d20Value: number) {
     setBusy(true)
     try {
-      const r = await api.answerPrompt(instanceId, { d20: roll })
+      const r = await api.answerPrompt(instanceId, { d20: d20Value })
       setMsg(r.message || '')
-      setSaveD20('')
       setModalType(null)
       onSettled?.()
     } catch (e) {
@@ -617,7 +604,6 @@ export function PlayerTurnPanel({
         d20={true}
         disabled={busy}
         onSubmit={(value) => {
-          setInitD20(String(value))
           setBusy(true)
           void api
             .setInitiative(combatant!.id, { d20: value })
@@ -641,8 +627,7 @@ export function PlayerTurnPanel({
         d20={true}
         disabled={busy}
         onSubmit={(value) => {
-          setSaveD20(String(value))
-          void answerSave()
+          void answerSave(value)
         }}
         onCancel={() => setModalType(null)}
       />
@@ -656,7 +641,6 @@ export function PlayerTurnPanel({
         d20={true}
         disabled={busy}
         onSubmit={(value) => {
-          setD20(String(value))
           void declare('hide', { d20: value })
           setModalType(null)
         }}
@@ -667,19 +651,13 @@ export function PlayerTurnPanel({
         isOpen={modalType === 'attack-d20'}
         title={`${pending?.attack.name ?? 'Attack'} Roll`}
         subtitle={`${target?.name ?? 'Target'} • AC ${previewAc}`}
-        description={mode !== 'normal' ? 'Enter both d20 rolls (advantage or disadvantage)' : 'Enter the d20 you rolled at the table.'}
-        placeholder={mode !== 'normal' ? 'd20 (first roll)' : 'd20'}
+        description="Enter the d20 you rolled at the table."
+        placeholder="d20"
         d20={true}
         disabled={busy}
         onSubmit={(value) => {
-          if (mode === 'normal') {
-            setD20(String(value))
-            setTimeout(() => continueFromRoll(), 50)
-          } else {
-            setD20(String(value))
-            setModalType(null)
-            setMsg('Enter the second d20 roll below.')
-          }
+          setD20(String(value))
+          setTimeout(() => continueFromRoll(), 50)
         }}
         onCancel={() => {
           setModalType(null)
@@ -696,7 +674,6 @@ export function PlayerTurnPanel({
         d20={false}
         disabled={busy}
         onSubmit={(value) => {
-          setDamage(String(value))
           void submitAttack(value)
           setModalType(null)
         }}
