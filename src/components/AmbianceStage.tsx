@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { publicAsset } from '@/lib/config'
+import { useT } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -9,6 +10,7 @@ type Props = {
 }
 
 export function AmbianceStage({ imageUrl, caption, className }: Props) {
+  const { t } = useT()
   const fallback = publicAsset('tavern-hearth.jpg')
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
   const src = imageUrl && failedUrl !== imageUrl ? imageUrl : fallback
@@ -17,7 +19,7 @@ export function AmbianceStage({ imageUrl, caption, className }: Props) {
     <figure className={cn('relative overflow-hidden bg-hud', className)}>
       <img
         src={src}
-        alt={caption || 'Campaign scene'}
+        alt={caption || t('ambiance.fallbackAlt')}
         className="h-full w-full object-cover"
         onError={() => {
           if (imageUrl) setFailedUrl(imageUrl)

@@ -3,6 +3,7 @@ import { CONDITIONS, conditionRingColor, type Combatant, type TurnEconomy } from
 import { cn, hpColor } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { emptyTurnEconomy } from '@/lib/combat'
+import { useT } from '@/lib/i18n'
 
 type Props = {
   combatants: Combatant[]
@@ -24,11 +25,11 @@ type Props = {
   onResetDeath?: (id: string) => void
 }
 
-const ECON: { key: keyof TurnEconomy; label: string }[] = [
-  { key: 'action', label: 'Action' },
-  { key: 'bonus', label: 'Bonus' },
-  { key: 'reaction', label: 'Reaction' },
-  { key: 'movement', label: 'Move' },
+const ECON: { key: keyof TurnEconomy; labelKey: string }[] = [
+  { key: 'action', labelKey: 'econ.action' },
+  { key: 'bonus', labelKey: 'econ.bonus' },
+  { key: 'reaction', labelKey: 'econ.reaction' },
+  { key: 'movement', labelKey: 'econ.move' },
 ]
 
 export function Tracker({
@@ -50,6 +51,7 @@ export function Tracker({
   onDeathSave,
   onResetDeath,
 }: Props) {
+  const { t } = useT()
   const ordered = [...combatants].sort((a, b) => a.turnOrderPosition - b.turnOrderPosition)
   const whose = ordered[current]
   const [deathD20, setDeathD20] = useState('')
@@ -58,27 +60,27 @@ export function Tracker({
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-3 border-b border-line bg-panel-2/50 px-3 py-2.5">
         <div className="min-w-0">
-          <div className="font-display text-base font-semibold text-gold-2">{setup ? 'Initiative' : `Round ${round}`}</div>
+          <div className="font-display text-base font-semibold text-gold-2">{setup ? t('init.title') : t('tracker.round', { round })}</div>
           <div className="text-xs text-muted truncate">
-            {setup ? 'Enter rolls, Sort, then begin round 1' : whose ? `${whose.name}'s turn` : 'No combatants yet'}
+            {setup ? t('tracker.setupHint') : whose ? t('tracker.whoseTurn', { name: whose.name }) : t('tracker.noCombatants')}
           </div>
         </div>
         {isDm && (
           <div className="flex flex-wrap justify-end gap-1.5 shrink-0">
             <Button size="sm" variant="outline" onClick={onSort} className="h-8 px-3 text-xs">
-              Sort
+              {t('tracker.sort')}
             </Button>
             {setup ? (
               <Button size="sm" variant="ember" onClick={onBeginRound} className="h-8 px-3 text-xs">
-                Begin round 1
+                {t('tracker.beginRound1')}
               </Button>
             ) : (
               <>
                 <Button size="sm" variant="outline" onClick={onSkip ?? onNext} className="h-8 px-3 text-xs">
-                  Skip
+                  {t('tracker.skip')}
                 </Button>
                 <Button size="sm" variant="ember" onClick={onNext} className="h-8 px-3 text-xs">
-                  Next turn
+                  {t('tracker.nextTurn')}
                 </Button>
               </>
             )}
@@ -104,11 +106,11 @@ export function Tracker({
             <div className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full shadow-sm" style={{ background: c.color }} />
               <span className="flex-1 font-medium text-sm">{c.name}</span>
-              {c.deathState === 'dying' && <span className="text-[10px] uppercase tracking-wide text-blood font-semibold">Dying</span>}
-              {c.deathState === 'stable' && <span className="text-[10px] uppercase tracking-wide text-gold font-semibold">Stable</span>}
-              {c.deathState === 'dead' && <span className="text-[10px] uppercase tracking-wide text-blood font-semibold">Dead</span>}
+              {c.deathState === 'dying' && <span className="text-[10px] uppercase tracking-wide text-blood font-semibold">{t('tracker.dying')}</span>}
+              {c.deathState === 'stable' && <span className="text-[10px] uppercase tracking-wide text-gold font-semibold">{t('tracker.stable')}</span>}
+              {c.deathState === 'dead' && <span className="text-[10px] uppercase tracking-wide text-blood font-semibold">{t('tracker.dead')}</span>}
               {c.hpCurrent <= 0 && c.source === 'bestiary' && c.deathState !== 'dead' && (
-                <span className="text-[10px] uppercase tracking-wide text-muted">Down</span>
+                <span className="text-[10px] uppercase tracking-wide text-muted">{t('tracker.down')}</span>
               )}
               {isDm && (
                 <span className="flex gap-0.5">
@@ -131,13 +133,13 @@ export function Tracker({
                   onChange={(e) => onPatch(c.id, { initiative: Number(e.target.value) })}
                 />
               ) : (
-                <span className="stat-num text-muted">Init {c.initiative}</span>
+                <span className="stat-num text-muted">{t('tracker.init', { value: c.initiative })}</span>
               )}
-              <span className="text-muted">AC {c.ac}</span>
+              <span className="text-muted">{t('tracker.ac', { value: c.ac })}</span>
             </div>
             {c.advantageAgainst?.length > 0 && (
               <div className="mt-1 text-[10px] uppercase tracking-wide text-gold">
-                Adv vs {c.advantageAgainst.map((id) => combatants.find((x) => x.id === id)?.name ?? 'foe').join(', ')}
+                {t('tracker.advVs', { names: c.advantageAgainst.map((id) => combatants.find((x) => x.id === id)?.name ?? t('tracker.foe')).join(', ') })}
               </div>
             )}
             <div className="mt-2 flex items-center gap-2">
@@ -205,14 +207,14 @@ export function Tracker({
                   e.target.value = ''
                 }}
               >
-                <option value="">Add condition…</option>
+                <option value="">{t('tracker.addCondition')}</option>
                 {CONDITIONS.map((cond) => (
                   <option key={cond}>{cond}</option>
                 ))}
               </select>
             )}
             <div className="mt-1.5 text-[10px] uppercase tracking-wide text-muted">
-              Move {c.movementRemaining ?? 0} / {c.speedFeet ?? 30} ft
+              {t('tracker.move', { remaining: c.movementRemaining ?? 0, speed: c.speedFeet ?? 30 })}
             </div>
             {isDm && selectedId === c.id && (
               <div className="mt-1.5 flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -221,21 +223,21 @@ export function Tracker({
                   className="rounded-md border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted hover:border-gold/50 hover:text-ink"
                   onClick={() => onPatch(c.id, { movementRemaining: (c.movementRemaining ?? 0) + 5 })}
                 >
-                  +5 ft
+                  {t('tracker.plus5ft')}
                 </button>
                 <button
                   type="button"
                   className="rounded-md border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted hover:border-gold/50 hover:text-ink"
                   onClick={() => onPatch(c.id, { movementRemaining: (c.movementRemaining ?? 0) + 30 })}
                 >
-                  +30 ft
+                  {t('tracker.plus30ft')}
                 </button>
                 <button
                   type="button"
                   className="rounded-md border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted hover:border-gold/50 hover:text-ink"
                   onClick={() => onPatch(c.id, { movementRemaining: c.speedFeet ?? 30 })}
                 >
-                  Reset
+                  {t('tracker.reset')}
                 </button>
                 <input
                   className="h-7 w-14 rounded-md border border-line bg-bg px-1.5 text-xs focus:border-gold focus:outline-none"
@@ -243,13 +245,13 @@ export function Tracker({
                   min={0}
                   value={c.movementRemaining ?? 0}
                   onChange={(e) => onPatch(c.id, { movementRemaining: Number(e.target.value) || 0 })}
-                  aria-label="Movement remaining"
+                  aria-label={t('tracker.movementRemainingAria')}
                 />
               </div>
             )}
             {canEcon && (
               <div className="mt-2 flex flex-wrap gap-1">
-                {ECON.map(({ key, label }) => (
+                {ECON.map(({ key, labelKey }) => (
                   <button
                     key={key}
                     type="button"
@@ -262,7 +264,7 @@ export function Tracker({
                       onPatch(c.id, { turnEconomy: { ...econ, [key]: !econ[key] } })
                     }}
                   >
-                    {label}
+                    {t(labelKey)}
                     {econ[key] ? ' ✓' : ''}
                   </button>
                 ))}
@@ -270,12 +272,12 @@ export function Tracker({
             )}
             {c.source === 'character' && dying && (
               <div className="mt-2 text-[10px] uppercase tracking-wide text-muted">
-                Death saves {c.deathSuccess}/3 ok · {c.deathFail}/3 fail
+                {t('tracker.deathSaves', { success: c.deathSuccess, fail: c.deathFail })}
               </div>
             )}
             {isDm && c.source === 'character' && selectedId === c.id && (
               <div className="mt-2 flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                <span className="text-[10px] uppercase tracking-wide text-muted">Saves</span>
+                <span className="text-[10px] uppercase tracking-wide text-muted">{t('tracker.saves')}</span>
                 <input
                   className="h-8 w-10 rounded-md border border-line bg-bg px-1.5 text-xs focus:border-gold focus:outline-none"
                   type="number"
@@ -283,7 +285,7 @@ export function Tracker({
                   max={3}
                   value={c.deathSuccess}
                   onChange={(e) => onPatch(c.id, { deathSuccess: Math.max(0, Math.min(3, Number(e.target.value))) })}
-                  aria-label="Death save successes"
+                  aria-label={t('tracker.deathSaveSuccessesAria')}
                 />
                 <input
                   className="h-8 w-10 rounded-md border border-line bg-bg px-1.5 text-xs focus:border-gold focus:outline-none"
@@ -292,18 +294,18 @@ export function Tracker({
                   max={3}
                   value={c.deathFail}
                   onChange={(e) => onPatch(c.id, { deathFail: Math.max(0, Math.min(3, Number(e.target.value))) })}
-                  aria-label="Death save failures"
+                  aria-label={t('tracker.deathSaveFailuresAria')}
                 />
                 <select
                   className="h-8 rounded-md border border-line bg-bg px-1.5 text-xs focus:border-gold focus:outline-none"
                   value={c.deathState}
                   onChange={(e) => onPatch(c.id, { deathState: e.target.value })}
-                  aria-label="Death state"
+                  aria-label={t('tracker.deathStateAria')}
                 >
-                  <option value="ok">Ok</option>
-                  <option value="dying">Dying</option>
-                  <option value="stable">Stable</option>
-                  <option value="dead">Dead</option>
+                  <option value="ok">{t('tracker.stateOk')}</option>
+                  <option value="dying">{t('tracker.dying')}</option>
+                  <option value="stable">{t('tracker.stable')}</option>
+                  <option value="dead">{t('tracker.dead')}</option>
                 </select>
               </div>
             )}
@@ -312,7 +314,7 @@ export function Tracker({
                 <input
                   className="h-8 w-14 rounded-md border border-line bg-bg px-1.5 text-xs focus:border-gold focus:outline-none"
                   inputMode="numeric"
-                  placeholder="d20"
+                  placeholder={t('attack.d20Placeholder')}
                   value={deathD20}
                   onChange={(e) => setDeathD20(e.target.value)}
                 />
@@ -323,7 +325,7 @@ export function Tracker({
                     setDeathD20('')
                   }}
                 >
-                  Death save
+                  {t('tracker.deathSave')}
                 </Button>
               </div>
             )}
@@ -337,7 +339,7 @@ export function Tracker({
                   onRemove(c.id)
                 }}
               >
-                Remove from fight
+                {t('tracker.removeFromFight')}
               </Button>
             )}
             {isDm && dying && onResetDeath && selectedId === c.id && (
@@ -350,7 +352,7 @@ export function Tracker({
                   onResetDeath(c.id)
                 }}
               >
-                Reset death saves
+                {t('tracker.resetDeathSaves')}
               </Button>
             )}
           </li>

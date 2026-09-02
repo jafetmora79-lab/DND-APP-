@@ -6,6 +6,7 @@ import { AmbianceStage } from '@/components/AmbianceStage'
 import { StartFightDialog } from '@/components/StartFightDialog'
 import { CampaignHubPanel } from '@/components/CampaignHubPanel'
 import { adjacentBeat, currentRunPointer, isCombatBeat, parseHub, remainingStartEncounters, sceneBeats, tableSceneBeat } from '@/lib/campaign-hub'
+import { useT } from '@/lib/i18n'
 import { templateReady } from '@/lib/token-look'
 import { applyShortRestHp, type StartFightOpts } from '@/lib/turn-flow'
 import type { CampaignHub, EncounterInstance, EncounterOutcome, EncounterTemplate, PlayerCharacter } from '@/lib/types'
@@ -68,6 +69,7 @@ export function TableHub({
   dm,
   onShortRest,
 }: Props) {
+  const { t } = useT()
   const fileRef = useRef<HTMLInputElement>(null)
   const [startTpl, setStartTpl] = useState<EncounterTemplate | null>(null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
@@ -93,7 +95,7 @@ export function TableHub({
               lastOutcome === 'won' ? 'bg-gold/20 text-gold-2' : 'bg-blood/20 text-blood',
             )}
           >
-            Last fight: {lastOutcome === 'won' ? 'victory' : 'defeat'}
+            {t('tableHub.lastFight')}: {lastOutcome === 'won' ? t('tableHub.victory') : t('tableHub.defeat')}
           </div>
         )}
         {dm && (
@@ -113,11 +115,11 @@ export function TableHub({
             />
             <Button size="sm" variant="outline" className="min-h-10" onClick={() => fileRef.current?.click()} disabled={dm.busy}>
               <ImagePlus className="h-4 w-4" />
-              {dm.hasImage ? 'Change scene' : 'Set scene'}
+              {dm.hasImage ? t('tableHub.changeScene') : t('tableHub.setScene')}
             </Button>
             {dm.hasImage && !tableScene?.imageUrl && (
               <Button size="sm" variant="ghost" className="min-h-10 bg-bg/70" disabled={dm.busy} onClick={dm.onClearImage}>
-                Use tavern scene
+                {t('tableHub.useTavernScene')}
               </Button>
             )}
           </div>
@@ -133,24 +135,24 @@ export function TableHub({
               className={cn('min-h-10 rounded px-3 py-1 text-sm capitalize transition-all', mobileTab === tab ? 'bg-gold text-bg' : 'text-muted hover:text-ink')}
               onClick={() => setMobileTab(tab)}
             >
-              {tab === 'play' ? 'Play' : tab === 'order' ? (playerView ? 'Campaign' : 'Run order') : 'Sheet'}
+              {tab === 'play' ? t('tableHub.play') : tab === 'order' ? (playerView ? t('tableHub.campaign') : t('prep.hubTitle')) : t('sheet.tab.sheet')}
             </button>
           ))}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className={cn('border-b border-line p-3', mobileTab === 'play' || (!dm && mobileTab === 'sheet') ? 'block' : 'hidden xl:block')}>
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold">{campaignName}</p>
-          <h2 className="font-display text-xl text-gold-2">{dm ? 'The table' : 'Your character'}</h2>
+          <h2 className="font-display text-xl text-gold-2">{dm ? t('tableHub.theTable') : t('tableHub.yourCharacter')}</h2>
           <p className="mt-1 text-sm text-muted">
             {dm
-              ? 'The campaign is live. Narrate this scene, then start the next encounter when you need a fight. Finalize that fight and the next scene in your run order comes up.'
-              : 'This is the scene the DM is showing. Your sheet stays open while the party talks, travels, or waits on the next fight.'}
+              ? t('tableHub.dmLiveBlurb')
+              : t('tableHub.playerLiveBlurb')}
           </p>
           {dm && (
             <>
               {dm.onStartCampaign && parsedHub.beats.length > 0 && (
                 <Button className="mt-3 min-h-10 w-full" size="sm" disabled={dm.busy} onClick={dm.onStartCampaign}>
-                  Show opening scene
+                  {t('tableHub.showOpeningScene')}
                 </Button>
               )}
               {dm.onStepScene && parsedHub.beats.length > 1 && (
@@ -163,7 +165,7 @@ export function TableHub({
                     onClick={() => dm.onStepScene?.(-1)}
                   >
                     <ChevronLeft className="h-4 w-4" />
-                    Previous
+                    {t('tableHub.previous')}
                   </Button>
                   <Button
                     size="sm"
@@ -172,7 +174,7 @@ export function TableHub({
                     disabled={dm.busy || !nextBeat}
                     onClick={() => dm.onStepScene?.(1)}
                   >
-                    Next
+                    {t('tableHub.next')}
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
@@ -181,14 +183,14 @@ export function TableHub({
                 <div className="mt-3 rounded-lg border border-line bg-panel/50 px-3 py-2 text-sm">
                   {pointer.now && (
                     <div>
-                      <span className="text-[10px] uppercase tracking-wider text-muted">Now</span>
+                      <span className="text-[10px] uppercase tracking-wider text-muted">{t('campaignHub.now')}</span>
                       <div className="font-medium">{pointer.now.title}</div>
                     </div>
                   )}
                   {pointer.next && (
                     <div className={pointer.now ? 'mt-2' : ''}>
-                      <span className="text-[10px] uppercase tracking-wider text-muted">Next (only you see this)</span>
-                      <div>{isCombatBeat(pointer.next) ? `Encounter — ${pointer.next.title}` : pointer.next.title}</div>
+                      <span className="text-[10px] uppercase tracking-wider text-muted">{t('tableHub.nextOnlyYouSee')}</span>
+                      <div>{isCombatBeat(pointer.next) ? t('tableHub.encounterName', { name: pointer.next.title }) : pointer.next.title}</div>
                     </div>
                   )}
                 </div>
@@ -196,14 +198,14 @@ export function TableHub({
               {scenes.length > 0 && (
                 <select
                   className="mt-3 h-10 min-h-10 w-full rounded-lg border border-line bg-panel/50 px-2 text-sm"
-                  aria-label="Campaign scene"
+                  aria-label={t('tableHub.campaignScene')}
                   value={
                     scenes.find((s) => s.imageUrl === imageUrl || (!s.imageUrl && (s.caption === caption || s.title === caption) && !imageUrl))
                       ?.id ?? ''
                   }
                   onChange={(e) => dm.onSelectScene?.(e.target.value)}
                 >
-                  <option value="">Jump to a scene…</option>
+                  <option value="">{t('tableHub.jumpToScene')}</option>
                   {scenes.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.title}
@@ -213,7 +215,7 @@ export function TableHub({
               )}
               <Input
                 className="mt-3"
-                placeholder="Scene caption — a tavern, a road, a council chamber…"
+                placeholder={t('tableHub.sceneCaptionPlaceholder')}
                 value={dm.caption}
                 onChange={(e) => dm.onCaption(e.target.value)}
               />
@@ -225,35 +227,35 @@ export function TableHub({
           <div className={cn('border-b border-line p-3', mobileTab === 'play' ? 'block' : 'hidden xl:block')}>
             {dm.paused.length > 0 && (
               <section className="mb-4">
-                <h3 className="text-xs uppercase tracking-wider text-muted">Paused fights</h3>
+                <h3 className="text-xs uppercase tracking-wider text-muted">{t('tableHub.pausedFights')}</h3>
                 <ul className="mt-2 space-y-2">
                   {dm.paused.map((i) => (
                     <li key={i.id} className="flex flex-col gap-2 rounded-lg border border-line bg-panel/50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
                         <div className="truncate">{i.name}</div>
-                        <div className="text-xs text-muted">{i.roundNumber === 0 ? 'Initiative' : `Round ${i.roundNumber}`}</div>
+                        <div className="text-xs text-muted">{i.roundNumber === 0 ? t('init.title') : t('tableHub.roundNumber', { round: i.roundNumber })}</div>
                       </div>
                       <Button size="sm" className="h-8 min-h-10 shrink-0 px-3 text-xs" disabled={dm.busy} onClick={() => dm.onResume(i.id)}>
-                        <Play className="h-4 w-4" /> Resume
+                        <Play className="h-4 w-4" /> {t('tableHub.resume')}
                       </Button>
                     </li>
                   ))}
                 </ul>
               </section>
             )}
-            <h3 className="text-xs uppercase tracking-wider text-muted">Start encounter</h3>
+            <h3 className="text-xs uppercase tracking-wider text-muted">{t('tableHub.startEncounter')}</h3>
             <ul className="mt-2 space-y-2">
               {startEncounters.map((row) => {
-                const t = row.template
-                const ready = t ? templateReady(t) : false
-                const detail = t
-                  ? templateReady(t)
-                    ? [t.difficulty, t.objective, t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')
-                    : 'Draft — finish the map and monsters in Prep'
+                const template = row.template
+                const ready = template ? templateReady(template) : false
+                const detail = template
+                  ? templateReady(template)
+                    ? [template.difficulty, template.objective, template.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')].filter(Boolean).join(' · ')
+                    : t('tableHub.draftFinishInPrep')
                   : row.templateId
-                    ? 'Template missing — pick it in Prep'
-                    : 'No map linked — pick the encounter in Prep'
-                const when = row.primary ? 'Next in the run' : row.fromRun ? 'Later in the run' : 'Saved in Prep'
+                    ? t('tableHub.templateMissingPickInPrep')
+                    : t('tableHub.noMapLinkedPickInPrep')
+                const when = row.primary ? t('tableHub.nextInRun') : row.fromRun ? t('tableHub.laterInRun') : t('tableHub.savedInPrep')
                 return (
                   <li
                     key={row.key}
@@ -264,7 +266,7 @@ export function TableHub({
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 truncate">
-                        {ready && <Check className="h-4 w-4 shrink-0 text-moss" aria-label="Ready" />}
+                        {ready && <Check className="h-4 w-4 shrink-0 text-moss" aria-label={t('tableHub.ready')} />}
                         <span className="truncate">{row.title}</span>
                       </div>
                       <div className="truncate text-xs text-muted">
@@ -276,21 +278,21 @@ export function TableHub({
                       size="sm"
                       className="h-8 min-h-10 shrink-0 px-3 text-xs"
                       variant={row.primary ? 'ember' : 'outline'}
-                      disabled={dm.busy || !row.templateId || !t || !ready}
+                      disabled={dm.busy || !row.templateId || !template || !ready}
                       onClick={() => {
-                        if (t) setStartTpl(t)
+                        if (template) setStartTpl(template)
                       }}
                     >
-                      Start
+                      {t('landing.start')}
                     </Button>
                   </li>
                 )
               })}
               {startEncounters.length === 0 && dm.templates.length === 0 && (
-                <li className="text-sm text-muted">Build an encounter in prep, add it to the run order, then start it from this table.</li>
+                <li className="text-sm text-muted">{t('tableHub.buildEncounterEmpty')}</li>
               )}
               {startEncounters.length === 0 && dm.templates.length > 0 && (
-                <li className="text-sm text-muted">Every encounter in the run is done. Start another from prep if the night runs long.</li>
+                <li className="text-sm text-muted">{t('tableHub.everyEncounterDone')}</li>
               )}
             </ul>
           </div>
@@ -325,22 +327,22 @@ export function TableHub({
                 {c.name}
               </button>
             ))}
-            {characters.length === 0 && <p className="text-sm text-muted">No characters in this campaign yet.</p>}
+            {characters.length === 0 && <p className="text-sm text-muted">{t('tableHub.noCharactersYet')}</p>}
           </div>
           {selected && onShortRest && (
             <div className="mb-3 rounded-lg border border-line bg-panel/50 p-3">
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted">Short rest — {selected.name}</div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted">{t('tableHub.shortRestName', { name: selected.name })}</div>
               <p className="mt-1 text-xs text-muted">
-                Type the HP recovered from hit dice ({selected.sheet.hitDice || 'none on sheet'}). The app does not roll.
+                {t('tableHub.shortRestHint', { hitDice: selected.sheet.hitDice || t('tableHub.noneOnSheet') })}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Input
                   className="h-8 w-20"
                   inputMode="numeric"
-                  placeholder="HP"
+                  placeholder={t('player.hp')}
                   value={restHp}
                   onChange={(e) => setRestHp(e.target.value)}
-                  aria-label="Hit dice HP recovered"
+                  aria-label={t('tableHub.hitDiceHpRecovered')}
                 />
                 <Button
                   size="sm"
@@ -353,7 +355,7 @@ export function TableHub({
                     setRestHp('')
                   }}
                 >
-                  Apply HP
+                  {t('tableHub.applyHp')}
                 </Button>
               </div>
             </div>
@@ -407,6 +409,7 @@ function SetSceneDialog({
   onCancel: () => void
   onConfirm: (scene: SceneCommit) => void
 }) {
+  const { t } = useT()
   const stem = file.name.replace(/\.[^.]+$/, '')
   const [name, setName] = useState(stem)
   const [caption, setCaption] = useState(defaultCaption || stem)
@@ -417,31 +420,31 @@ function SetSceneDialog({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-bg/70 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center" role="dialog" aria-labelledby="set-scene-title">
       <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-xl border border-line bg-panel p-4 shadow-xl">
         <h2 id="set-scene-title" className="font-display text-xl text-gold-2">
-          Set scene
+          {t('tableHub.setScene')}
         </h2>
         <p className="mt-1 text-sm text-muted">
-          Show it on the table now. Save it into the run order so Live can return to it after the next fight.
+          {t('tableHub.setSceneBlurb')}
         </p>
         <p className="mt-2 truncate text-xs text-muted">{file.name}</p>
         <div className="mt-3 grid gap-2">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Scene name" />
-          <Input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Caption on the table" />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('campaignHub.sceneName')} />
+          <Input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder={t('campaignHub.captionOnTable')} />
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={saveToCampaign} onChange={(e) => setSaveToCampaign(e.target.checked)} />
-            Add to campaign run order
+            {t('tableHub.addToCampaignRunOrder')}
           </label>
           {saveToCampaign && (
             <label className="grid gap-1 text-xs text-muted">
-              Place in the run
+              {t('tableHub.placeInRun')}
               <select
                 className="h-10 rounded-md border border-line bg-bg px-2 text-sm text-ink"
                 value={insertAfterBeatId}
                 onChange={(e) => setInsertAfterBeatId(e.target.value)}
               >
-                <option value="">Start of campaign</option>
+                <option value="">{t('tableHub.startOfCampaign')}</option>
                 {beats.map((b) => (
                   <option key={b.id} value={b.id}>
-                    After {b.title}
+                    {t('tableHub.afterBeat', { title: b.title })}
                   </option>
                 ))}
               </select>
@@ -450,7 +453,7 @@ function SetSceneDialog({
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onClick={onCancel} disabled={busy}>
-            Cancel
+            {t('tableHub.cancel')}
           </Button>
           <Button
             disabled={busy}
@@ -464,7 +467,7 @@ function SetSceneDialog({
               })
             }
           >
-            {busy ? 'Saving…' : saveToCampaign ? 'Save & show' : 'Show on table'}
+            {busy ? t('tableHub.saving') : saveToCampaign ? t('tableHub.saveAndShow') : t('tableHub.showOnTable')}
           </Button>
         </div>
       </div>

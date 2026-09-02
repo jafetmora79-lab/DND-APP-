@@ -4,6 +4,7 @@ import { Circle, Group, Layer, Rect, Shape, Stage, Text, Image as KImage } from 
 import useImage from 'use-image'
 import { conditionRingColor, type BattleMap, type Combatant, type FogState, type MapToken } from '@/lib/types'
 import { tokenHiddenFromPlayers } from '@/lib/combat'
+import { useT } from '@/lib/i18n'
 import { clampMapScale, fitMapView, touchDistance, zoomAtPoint } from '@/lib/map-view'
 import { hpBarFill, initials, pixelToCell, TERRAIN, tokenOccupiedCells, tokenOccupiesBlocked } from '@/lib/utils'
 import { inkOnToken } from '@/lib/token-look'
@@ -77,6 +78,7 @@ export function MapBoard({
   viewerCharacterId = null,
   combatants = [],
 }: Props) {
+  const { t: translate } = useT()
   const wrap = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [scale, setScale] = useState(1)
@@ -493,6 +495,16 @@ export function MapBoard({
             const rings = (t.conditions ?? []).slice(0, 4)
             const showHud = Boolean(t.label) || hpMax > 0 || t.ac != null
             const downed = Boolean(t.statusLabel) || (t.conditions ?? []).includes('Unconscious')
+            const translatedStatus =
+              t.statusLabel === 'Dead'
+                ? translate('mapBoard.status.dead')
+                : t.statusLabel === 'Dying'
+                  ? translate('mapBoard.status.dying')
+                  : t.statusLabel === 'Stable'
+                    ? translate('mapBoard.status.stable')
+                    : t.statusLabel === 'Unconscious'
+                      ? translate('mapBoard.status.unconscious')
+                      : t.statusLabel
             const canDrag = Boolean(onMove) && tool === 'select' && (isDm || dragRefIds.includes(t.refId))
             return (
               <Group
@@ -539,7 +551,7 @@ export function MapBoard({
                       listening={false}
                     />
                     <Text
-                      text={[hpMax > 0 ? `${hpCurrent}/${hpMax}` : '', t.ac != null ? `AC ${t.ac}` : '']
+                      text={[hpMax > 0 ? `${hpCurrent}/${hpMax}` : '', t.ac != null ? `${translate('sheet.acShort')} ${t.ac}` : '']
                         .filter(Boolean)
                         .join('  ')}
                       y={-r - 16}
@@ -605,7 +617,7 @@ export function MapBoard({
                 />
                 {t.statusLabel && (
                   <Text
-                    text={t.statusLabel}
+                    text={translatedStatus}
                     y={r + 4}
                     width={Math.max(72, r * 3)}
                     offsetX={Math.max(72, r * 3) / 2}
@@ -630,7 +642,7 @@ export function MapBoard({
         <button
           type="button"
           className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md border border-line bg-panel/90 text-ink shadow"
-          aria-label="Zoom in"
+          aria-label={translate('mapBoard.zoomIn')}
           onClick={() => zoomBy(1.2)}
         >
           <Plus className="h-4 w-4" />
@@ -638,7 +650,7 @@ export function MapBoard({
         <button
           type="button"
           className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md border border-line bg-panel/90 text-ink shadow"
-          aria-label="Zoom out"
+          aria-label={translate('mapBoard.zoomOut')}
           onClick={() => zoomBy(1 / 1.2)}
         >
           <Minus className="h-4 w-4" />
@@ -646,7 +658,7 @@ export function MapBoard({
         <button
           type="button"
           className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md border border-line bg-panel/90 text-ink shadow"
-          aria-label="Fit map"
+          aria-label={translate('mapBoard.fitMap')}
           onClick={fitNow}
         >
           <Maximize2 className="h-4 w-4" />
