@@ -19,7 +19,7 @@ import { attacksFromMonster, canTakeAttacks, decorateTokens, effectiveRollMode, 
 import { LanguageToggle, useT } from '@/lib/i18n'
 import { useLive } from '@/lib/realtime'
 import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
-import { ABILITIES, ABILITY_LABELS, type Ability, type Attack, type EncounterInstance, type EncounterSnapshot, type EncounterTemplate, type FogState, type Monster, type RollMode } from '@/lib/types'
+import { ABILITIES, type Ability, type Attack, type EncounterInstance, type EncounterSnapshot, type EncounterTemplate, type FogState, type Monster, type RollMode } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
 import { adjacentBeat, ambianceFromBeat, emptyBeat, ensureCombatBeatForTemplate, markBeatActive, markBeatForTemplate, markOpeningActive, openingSceneBeat, parseHub, sortTemplates, tableAmbiance } from '@/lib/campaign-hub'
@@ -91,8 +91,8 @@ export function Live() {
       return ch?.sheet.attacks ?? []
     }
     if (selectedMonster) return attacksFromMonster(selectedMonster)
-    return [{ name: 'Strike', bonus: '+0', damage: '', range: '5 ft.' }]
-  }, [selectedCombatant, selectedMonster, snap?.characters])
+    return [{ name: t('live.defaultAttackName'), bonus: '+0', damage: '', range: t('live.defaultAttackRange') }]
+  }, [selectedCombatant, selectedMonster, snap?.characters, t])
   const highlightIds = useMemo(() => {
     if (!snap?.map || !pending || !selectedCombatant) return []
     return inRangeCombatantIds(snap.map, snap.tokens, snap.combatants, selectedCombatant.id, pending.attack)
@@ -127,15 +127,15 @@ export function Live() {
     const rollb = Number(d20b)
     const dmg = Number(damage)
     if (!Number.isInteger(roll) || roll < 1 || roll > 20) {
-      setAttackMsg('Enter the d20 you rolled at the table (1–20).')
+      setAttackMsg(t('playerTurn.enterTableD20Range'))
       return
     }
     if (mode !== 'normal' && (!Number.isInteger(rollb) || rollb < 1 || rollb > 20)) {
-      setAttackMsg('Enter both d20s for advantage or disadvantage.')
+      setAttackMsg(t('live.enterBothD20s'))
       return
     }
     if (!Number.isFinite(dmg) || dmg < 0) {
-      setAttackMsg('Enter the damage you rolled (0 if you missed or deal none).')
+      setAttackMsg(t('live.enterRolledDamage'))
       return
     }
     setAttackBusy(true)
@@ -159,7 +159,7 @@ export function Live() {
         setDamage('')
       }
     } catch (e) {
-      setAttackMsg(e instanceof Error ? e.message : 'Attack failed')
+      setAttackMsg(e instanceof Error ? e.message : t('playerTurn.error.attackFailed'))
     } finally {
       setAttackBusy(false)
     }
@@ -168,7 +168,7 @@ export function Live() {
   async function startFrom(templateId: string, opts?: StartFightOpts) {
     if (!campaignId) return
     if (instance && instance.status === 'active' && !showOutcome(snap?.session ?? null)) {
-      setError('Pause or Finalize this fight before starting another. Table keeps the fight; Finalize ends it.')
+      setError(t('live.pauseOrFinalizeBeforeAnother'))
       setPickerOpen(false)
       setPickerTpl(null)
       return
@@ -181,7 +181,7 @@ export function Live() {
       const hub = parseHub(snap?.campaign.hub)
       const named = templates.find((x) => x.id === templateId)
       const nextHub = markBeatForTemplate(
-        ensureCombatBeatForTemplate(hub, { id: templateId, name: named?.name ?? 'Encounter' }),
+        ensureCombatBeatForTemplate(hub, { id: templateId, name: named?.name ?? t('outcome.encounter') }),
         templateId,
         'active',
       )
@@ -193,7 +193,7 @@ export function Live() {
       setTargetId(null)
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed')
+      setError(e instanceof Error ? e.message : t('live.failed'))
     } finally {
       setBusy(false)
     }
@@ -204,7 +204,7 @@ export function Live() {
     const already = snap?.combatants.find((c) => c.source === 'character' && c.sourceId === characterId)
     if (already) {
       setSelected(already.id)
-      setError(`${name} is already in this fight.`)
+      setError(t('live.characterAlreadyInFight', { name }))
       return
     }
     setBusy(true)
@@ -213,7 +213,7 @@ export function Live() {
       await api.addCombatant(instance.id, { characterId })
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : `Could not add ${name} to the fight.`)
+      setError(e instanceof Error ? e.message : t('live.couldNotAddCharacterToFight', { name }))
     } finally {
       setBusy(false)
     }
@@ -227,7 +227,7 @@ export function Live() {
       await api.addCombatant(instance.id, { bestiaryMonsterId })
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not add that monster.')
+      setError(e instanceof Error ? e.message : t('live.couldNotAddMonster'))
     } finally {
       setBusy(false)
     }
@@ -246,7 +246,7 @@ export function Live() {
       setPickerOpen(false)
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed')
+      setError(e instanceof Error ? e.message : t('live.failed'))
     } finally {
       setBusy(false)
     }
@@ -268,7 +268,7 @@ export function Live() {
       setFinalizeOpen(false)
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed')
+      setError(e instanceof Error ? e.message : t('live.failed'))
     } finally {
       setBusy(false)
     }
@@ -283,7 +283,7 @@ export function Live() {
       setLootHolder('')
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed')
+      setError(e instanceof Error ? e.message : t('live.failed'))
     } finally {
       setBusy(false)
     }
@@ -298,7 +298,7 @@ export function Live() {
       setFinalizeOpen(false)
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed')
+      setError(e instanceof Error ? e.message : t('live.failed'))
     } finally {
       setBusy(false)
     }
@@ -320,7 +320,7 @@ export function Live() {
       await api.uploadAmbiance(campaignId, file)
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed')
+      setError(e instanceof Error ? e.message : t('campaignHub.uploadFailed'))
     } finally {
       setBusy(false)
     }
@@ -363,7 +363,7 @@ export function Live() {
       }
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed')
+      setError(e instanceof Error ? e.message : t('campaignHub.uploadFailed'))
     } finally {
       setBusy(false)
     }
@@ -411,7 +411,7 @@ export function Live() {
       }
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not set the scene')
+      setError(e instanceof Error ? e.message : t('live.couldNotSetScene'))
     } finally {
       setBusy(false)
     }
@@ -441,7 +441,7 @@ export function Live() {
       }
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not start the campaign')
+      setError(e instanceof Error ? e.message : t('live.couldNotStartCampaign'))
     } finally {
       setBusy(false)
     }
@@ -449,13 +449,13 @@ export function Live() {
 
   async function onEndCampaign() {
     if (!campaignId) return
-    if (!window.confirm('End tonight’s table? Players will be sent away and the join code will stop working. Start campaign when you want it open again.')) return
+    if (!window.confirm(t('live.endTonightTableConfirm'))) return
     setBusy(true)
     try {
       await api.endSession(campaignId)
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not end the campaign')
+      setError(e instanceof Error ? e.message : t('live.couldNotEndCampaign'))
     } finally {
       setBusy(false)
     }
@@ -485,8 +485,36 @@ export function Live() {
     onFog(fogWithLighting(instance.fogState, next))
   }
 
+  function instanceStatusLabel(status: EncounterInstance['status']) {
+    switch (status) {
+      case 'active':
+        return t('campaignHub.status.active')
+      case 'paused':
+        return t('live.paused')
+      case 'completed':
+        return t('campaignHub.status.done')
+      default:
+        return status
+    }
+  }
+
+  function deathStateLabel(state: string) {
+    switch (state) {
+      case 'dead':
+        return t('tracker.dead').toLowerCase()
+      case 'dying':
+        return t('tracker.dying').toLowerCase()
+      case 'stable':
+        return t('tracker.stable').toLowerCase()
+      case 'down':
+        return t('tracker.down').toLowerCase()
+      default:
+        return state
+    }
+  }
+
   if (!snap) {
-    return <div className="p-8 text-muted">{error || 'Loading the table…'}</div>
+    return <div className="p-8 text-muted">{error || t('live.loadingTable')}</div>
   }
 
   const stage = tableAmbiance(snap.campaign.hub, snap.session)
@@ -499,21 +527,21 @@ export function Live() {
             {snap.campaign.name}
           </Link>
           <span className="hidden text-muted sm:inline">/</span>
-          <span className="hidden truncate sm:inline">Table closed</span>
+          <span className="hidden truncate sm:inline">{t('live.tableClosed')}</span>
           <LanguageToggle />
         </header>
         {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-          <h1 className="font-display text-3xl text-gold-2">Tonight’s table is closed</h1>
+          <h1 className="font-display text-3xl text-gold-2">{t('live.tonightsTableClosed')}</h1>
           <p className="max-w-md text-sm text-muted">
-            Start the campaign when you want players to join. End campaign closes the table and tonight’s join code so it is not hosted forever.
+            {t('live.closedTableBlurb')}
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             <Button disabled={busy} onClick={() => void onStartCampaign()}>
-              Start campaign
+              {t('prep.openLive')}
             </Button>
             <Button variant="outline" asChild>
-              <Link to={`/dm/${campaignId}`}>Back to prep</Link>
+              <Link to={`/dm/${campaignId}`}>{t('live.backToPrep')}</Link>
             </Button>
           </div>
         </div>
@@ -539,17 +567,17 @@ export function Live() {
         }}
       >
         {copiedJoin ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-        {copiedJoin ? 'Copied' : 'Copy code'}
+        {copiedJoin ? t('sheet.copied') : t('live.copyCode')}
       </Button>
       <Button
         size="sm"
         variant="outline"
         onClick={() => api.openSession(campaignId!, instance?.id ?? null, { rotateJoinCode: true }).then(load)}
       >
-        New join code
+        {t('live.newJoinCode')}
       </Button>
       <Button size="sm" variant="ghost" disabled={busy} onClick={() => void onEndCampaign()}>
-        End campaign
+        {t('prep.endLive')}
       </Button>
     </>
   )
@@ -563,7 +591,7 @@ export function Live() {
               {snap.campaign.name}
             </Link>
             <span className="hidden text-muted sm:inline">/</span>
-            <span className="hidden truncate sm:inline">{stage.caption || 'At the table'}</span>
+            <span className="hidden truncate sm:inline">{stage.caption || t('campaignHub.atTheTable')}</span>
             <div className="ml-auto hidden items-center gap-2 lg:flex">{joinActions}</div>
           </div>
           <div className="flex gap-2 overflow-x-auto px-3 pb-2 lg:hidden">{joinActions}</div>
@@ -582,7 +610,7 @@ export function Live() {
             hubCharacter ? (
               <CharacterSheet character={hubCharacter} canEdit isDm onChange={(patch) => api.patchCharacter(hubCharacter.id, patch)} />
             ) : (
-              <p className="text-sm text-muted">Add characters in prep so their sheets sit on this table between fights.</p>
+              <p className="text-sm text-muted">{t('live.addCharactersInPrep')}</p>
             )
           }
           dm={{
@@ -619,32 +647,32 @@ export function Live() {
 
   const tableActions = (
     <>
-      <Button size="sm" variant="outline" disabled={busy} onClick={leaveToTable} title="Pause this fight and return to the hub. The fight stays.">
-        Table
+      <Button size="sm" variant="outline" disabled={busy} onClick={leaveToTable} title={t('live.pauseReturnHubTitle')}>
+        {t('live.table')}
       </Button>
       <Button
         size="sm"
         variant="outline"
         disabled={busy || Boolean(outcome) || (instance.status === 'active' && !outcome)}
-        title={instance.status === 'active' ? 'Pause or Finalize this fight first.' : 'Start the next template'}
+        title={instance.status === 'active' ? t('live.pauseOrFinalizeFirstTitle') : t('live.startNextTemplateTitle')}
         onClick={() => setPickerOpen(true)}
       >
-        Next encounter
+        {t('outcome.nextEncounter')}
       </Button>
       <Button size="sm" variant="ember" disabled={busy || Boolean(outcome)} onClick={() => setFinalizeOpen(true)}>
-        <Trophy className="h-4 w-4" /> Finalize
+        <Trophy className="h-4 w-4" /> {t('live.finalize')}
       </Button>
       {instance.status === 'active' ? (
         <Button size="sm" variant="outline" onClick={pause}>
-          <Pause className="h-4 w-4" /> Pause
+          <Pause className="h-4 w-4" /> {t('live.pause')}
         </Button>
       ) : (
         <Button size="sm" onClick={() => resume(instance.id)}>
-          <Play className="h-4 w-4" /> Resume
+          <Play className="h-4 w-4" /> {t('tableHub.resume')}
         </Button>
       )}
       <Button size="sm" variant="ghost" disabled={busy} onClick={() => void onEndCampaign()}>
-        End campaign
+        {t('prep.endLive')}
       </Button>
     </>
   )
@@ -659,7 +687,7 @@ export function Live() {
           <span className="hidden text-muted sm:inline">/</span>
           <span className="hidden min-w-0 truncate sm:inline text-sm">{instance.name}</span>
           <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs uppercase font-medium', setup ? 'bg-gold/20 text-gold' : instance.status === 'active' ? 'bg-moss/20 text-moss' : 'bg-gold/20 text-gold')}>
-            {setup ? 'setup' : instance.status}
+            {setup ? t('live.setup') : instanceStatusLabel(instance.status)}
           </span>
           <div className="ml-auto hidden items-center gap-2 lg:flex">
             <LanguageToggle />
@@ -676,7 +704,7 @@ export function Live() {
       {error && <p className="shrink-0 border-b border-line bg-blood/10 px-4 py-2 text-sm text-blood">{error}</p>}
       {setup && !outcome && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-gold/5 px-4 py-2.5 text-sm">
-          <span className="flex-1 text-muted">Roll initiative. The popup walks each creature; you can enter the table d20 or let the app roll. Dex is added. Attacks still use physical dice.</span>
+          <span className="flex-1 text-muted">{t('live.rollInitiativeBanner')}</span>
           <Button size="sm" variant="outline" onClick={() => setInitOpen(true)} className="h-8 px-3 text-xs">
             {t('init.open')}
           </Button>
@@ -684,9 +712,9 @@ export function Live() {
       )}
       {!setup && !outcome && standingEnemies((snap.combatants ?? []).map(asCombatantLike)).length === 0 && snap.combatants.some((c) => c.source === 'bestiary') && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-gold/5 px-4 py-2.5 text-sm">
-          <span className="text-muted">No standing enemies. Finalize when the fight is actually over — Table still pauses if someone fled.</span>
+          <span className="text-muted">{t('live.noStandingEnemies')}</span>
           <Button size="sm" variant="ember" disabled={busy} onClick={() => setFinalizeOpen(true)} className="h-8 px-3 text-xs">
-            Finalize
+            {t('live.finalize')}
           </Button>
         </div>
       )}
@@ -699,7 +727,7 @@ export function Live() {
             className={cn('min-h-9 rounded-lg px-3 py-1.5 text-xs capitalize font-medium transition-colors', hudTab === tab ? 'bg-gold text-bg' : 'text-muted hover:text-ink')}
             onClick={() => setHudTab(tab)}
           >
-            {tab}
+            {tab === 'map' ? t('player.map') : tab === 'tracker' ? t('player.tracker') : t('live.sheet')}
           </button>
         ))}
       </div>
@@ -745,19 +773,19 @@ export function Live() {
             }}
             onBeginRound={() => {
               if (!campaignId) return
-              void api.beginRound(campaignId).then(() => refreshLive()).catch((e) => setError(e instanceof Error ? e.message : 'Could not begin'))
+              void api.beginRound(campaignId).then(() => refreshLive()).catch((e) => setError(e instanceof Error ? e.message : t('live.couldNotBegin')))
             }}
             onSort={() => {
               void api.sortInit(instance.id, { keepCurrent: !setup }).then(() => refreshLive())
             }}
             onRemove={(id) => {
-              void api.removeCombatant(id).then(() => refreshLive()).catch((e) => setError(e instanceof Error ? e.message : 'Could not remove'))
+              void api.removeCombatant(id).then(() => refreshLive()).catch((e) => setError(e instanceof Error ? e.message : t('live.couldNotRemove')))
             }}
             onDeathSave={(id, d20v) => {
               void api.deathSave(id, { d20: d20v }).then((r) => {
                 setAttackMsg(r.message)
                 refreshLive()
-              }).catch((e) => setError(e instanceof Error ? e.message : 'Death save failed'))
+              }).catch((e) => setError(e instanceof Error ? e.message : t('player.deathSaveFailed')))
             }}
             onResetDeath={(id) => {
               void api.resetDeath(id).then(() => refreshLive())
@@ -784,26 +812,26 @@ export function Live() {
                   void api
                     .setPrompt(instance.id, { kind: 'reaction', combatantId: selectedCombatant.id })
                     .then(() => refreshLive())
-                    .catch((e) => setError(e instanceof Error ? e.message : 'Could not request reaction'))
+                    .catch((e) => setError(e instanceof Error ? e.message : t('live.couldNotRequestReaction')))
                 }}
                 className="h-8 px-3 text-xs"
               >
-                Request reaction
+                {t('live.requestReaction')}
               </Button>
               <div className="flex flex-wrap items-center gap-1.5">
                 <select
                   className="h-8 rounded-lg border border-line bg-bg px-2 text-xs focus:border-gold focus:outline-none"
                   value={saveAbility}
                   onChange={(e) => setSaveAbility(e.target.value as Ability)}
-                  aria-label="Save ability"
+                  aria-label={t('live.saveAbility')}
                 >
                   {ABILITIES.map((ab) => (
                     <option key={ab} value={ab}>
-                      {ABILITY_LABELS[ab]}
+                      {t(`ability.${ab}`)}
                     </option>
                   ))}
                 </select>
-                <Input className="h-8 w-16" inputMode="numeric" placeholder="DC" value={saveDc} onChange={(e) => setSaveDc(e.target.value)} aria-label="Save DC" />
+                <Input className="h-8 w-16" inputMode="numeric" placeholder={t('check.dc')} value={saveDc} onChange={(e) => setSaveDc(e.target.value)} aria-label={t('sheet.spellDc')} />
                 <Button
                   size="sm"
                   variant="outline"
@@ -811,17 +839,17 @@ export function Live() {
                   onClick={() => {
                     const dc = Number(saveDc)
                     if (!Number.isInteger(dc) || dc < 1) {
-                      setError('Enter a DC.')
+                      setError(t('live.enterDc'))
                       return
                     }
                     void api
                       .setPrompt(instance.id, { kind: 'save', combatantId: selectedCombatant.id, ability: saveAbility, dc })
                       .then(() => refreshLive())
-                      .catch((e) => setError(e instanceof Error ? e.message : 'Could not request save'))
+                      .catch((e) => setError(e instanceof Error ? e.message : t('live.couldNotRequestSave')))
                   }}
                   className="h-8 px-3 text-xs"
                 >
-                  Request save
+                  {t('live.requestSave')}
                 </Button>
               </div>
             </div>
@@ -835,7 +863,7 @@ export function Live() {
           })()}
           <div className="mt-3 flex gap-2">
             <Input
-              placeholder="Add monster…"
+              placeholder={t('live.addMonster')}
               value={addQ}
               onChange={(e) => setAddQ(e.target.value)}
               onKeyDown={(e) => {
@@ -860,7 +888,7 @@ export function Live() {
                   disabled={busy || onMap}
                   onClick={() => void addPlayer(ch.id, ch.name)}
                 >
-                  {onMap ? `${ch.name} on map` : `+ ${ch.name}`}
+                  {onMap ? t('live.characterOnMap', { name: ch.name }) : t('live.addCharacter', { name: ch.name })}
                 </Button>
               )
             })}
@@ -884,7 +912,7 @@ export function Live() {
                   return
                 }
                 if (!highlightIds.includes(id)) {
-                  setAttackMsg('That creature is out of range for this attack.')
+                  setAttackMsg(t('live.attackTargetOutOfRange'))
                   return
                 }
                 setTargetId(id)
@@ -908,7 +936,7 @@ export function Live() {
                     s ? { ...s, tokens: s.tokens.map((t) => (t.id === id ? { ...t, x: prev.x, y: prev.y } : t)) } : s,
                   )
                 }
-                const msg = e instanceof Error ? e.message : 'Could not move'
+                const msg = e instanceof Error ? e.message : t('player.couldNotMove')
                 setError(msg)
                 throw e instanceof Error ? e : new Error(msg)
               }
@@ -1030,8 +1058,11 @@ export function Live() {
             disabledReason={
               !canTakeAttacks(selectedCombatant)
                 ? selectedCombatant.deathState === 'dead'
-                  ? `${selectedCombatant.name} is dead.`
-                  : `${selectedCombatant.name} cannot take a normal attack (${selectedCombatant.deathState === 'ok' ? selectedCombatant.conditions.join(', ') || 'incapacitated' : selectedCombatant.deathState}).`
+                  ? t('live.combatantDead', { name: selectedCombatant.name })
+                  : t('live.cannotTakeNormalAttack', {
+                      name: selectedCombatant.name,
+                      reason: selectedCombatant.deathState === 'ok' ? selectedCombatant.conditions.join(', ') || t('live.incapacitated') : deathStateLabel(selectedCombatant.deathState),
+                    })
                 : undefined
             }
             rollMode={
@@ -1088,21 +1119,21 @@ export function Live() {
         />
       )}
       {finalizeOpen && !outcome && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-label="Finalize encounter">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-label={t('live.finalizeEncounter')}>
           <div className="w-full max-w-md rounded-xl border border-line bg-panel p-6 text-center">
-            <h2 className="font-display text-2xl text-gold-2">How did it go?</h2>
+            <h2 className="font-display text-2xl text-gold-2">{t('live.howDidItGo')}</h2>
             <p className="mt-2 text-sm text-muted">
-              Players see a victory or defeat on their phones, then you bring everyone back to the table — same join code. XP goes to characters who were in this fight. Table would have paused instead of ending it.
+              {t('live.finalizeBlurb')}
             </p>
             {snap.characters.length > 0 && (
               <label className="mt-4 block text-left text-sm">
-                Loot holder (optional)
+                {t('live.lootHolderOptional')}
                 <select
                   className="mt-1 h-9 w-full rounded-md border border-line bg-bg px-2"
                   value={lootHolder}
                   onChange={(e) => setLootHolder(e.target.value)}
                 >
-                  <option value="">Party / unassigned</option>
+                  <option value="">{t('live.partyUnassigned')}</option>
                   {snap.characters.map((ch) => (
                     <option key={ch.id} value={ch.name}>
                       {ch.name}
@@ -1113,34 +1144,34 @@ export function Live() {
             )}
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Button disabled={busy} onClick={() => finish('won')}>
-                <Trophy className="h-4 w-4" /> Won
+                <Trophy className="h-4 w-4" /> {t('outcome.victory')}
               </Button>
               <Button disabled={busy} variant="danger" onClick={() => finish('lost')}>
-                <Flag className="h-4 w-4" /> Lost
+                <Flag className="h-4 w-4" /> {t('outcome.defeat')}
               </Button>
               <Button disabled={busy} variant="ghost" onClick={() => setFinalizeOpen(false)}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             </div>
           </div>
         </div>
       )}
       {pickerOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-label="Next encounter">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-label={t('outcome.nextEncounter')}>
           <div className="max-h-[80dvh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-panel p-6">
-            <h2 className="font-display text-2xl text-gold-2">Next encounter</h2>
+            <h2 className="font-display text-2xl text-gold-2">{t('outcome.nextEncounter')}</h2>
             <p className="mt-2 text-sm text-muted">
-              The join code stays. Only open a new fight after this one is finalized or paused — starting here does not silently complete an active fight.
+              {t('live.nextEncounterBlurb')}
             </p>
             {paused.length > 0 && (
               <section className="mt-4">
-                <h3 className="text-xs uppercase tracking-wider text-muted">Paused</h3>
+                <h3 className="text-xs uppercase tracking-wider text-muted">{t('live.paused')}</h3>
                 <ul className="mt-2 space-y-2">
                   {paused.map((i) => (
                     <li key={i.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2">
                       <span className="truncate">{i.name}</span>
                       <Button size="sm" disabled={busy} onClick={() => resume(i.id)}>
-                        Resume
+                        {t('tableHub.resume')}
                       </Button>
                     </li>
                   ))}
@@ -1148,22 +1179,22 @@ export function Live() {
               </section>
             )}
             <ul className="mt-4 space-y-2">
-              {sortTemplates(templates).map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2">
+              {sortTemplates(templates).map((tpl) => (
+                <li key={tpl.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2">
                   <div className="min-w-0">
-                    <div className="truncate">{t.name}</div>
-                    <div className="truncate text-xs text-muted">{t.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')}</div>
+                    <div className="truncate">{tpl.name}</div>
+                    <div className="truncate text-xs text-muted">{tpl.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ')}</div>
                   </div>
-                  <Button size="sm" variant="ember" disabled={busy} onClick={() => setPickerTpl(t)}>
-                    Start
+                  <Button size="sm" variant="ember" disabled={busy} onClick={() => setPickerTpl(tpl)}>
+                    {t('landing.start')}
                   </Button>
                 </li>
               ))}
-              {templates.length === 0 && <li className="text-sm text-muted">Build a template in prep first.</li>}
+              {templates.length === 0 && <li className="text-sm text-muted">{t('live.buildTemplateInPrep')}</li>}
             </ul>
             <div className="mt-4 text-right">
               <Button variant="ghost" onClick={() => setPickerOpen(false)}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             </div>
           </div>

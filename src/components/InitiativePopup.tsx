@@ -57,7 +57,7 @@ export function InitiativePopup({
       setDraft((d) => ({ ...d, [c.id]: '' }))
       onSettled()
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not set initiative')
+      setMsg(e instanceof Error ? e.message : t('playerTurn.error.setInitiative'))
     } finally {
       setBusy(false)
     }
@@ -77,7 +77,7 @@ export function InitiativePopup({
       }
       onSettled()
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not roll monsters')
+      setMsg(e instanceof Error ? e.message : t('init.couldNotRollMonsters'))
     } finally {
       setBusy(false)
     }
@@ -91,7 +91,7 @@ export function InitiativePopup({
       }
       onSettled()
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not roll')
+      setMsg(e instanceof Error ? e.message : t('init.couldNotRoll'))
     } finally {
       setBusy(false)
     }
@@ -105,7 +105,7 @@ export function InitiativePopup({
       onSettled()
       onClose()
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not begin')
+      setMsg(e instanceof Error ? e.message : t('live.couldNotBegin'))
     } finally {
       setBusy(false)
     }

@@ -40,7 +40,7 @@ export function Campaigns() {
     <div className="mx-auto max-w-4xl px-4 py-8">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-gold">{user && 'name' in user ? user.name : 'Dungeon Master'}</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-gold">{user && 'name' in user ? user.name : t('landing.dm')}</p>
           <h1 className="font-display text-3xl text-gold-2">{t('campaigns.title')}</h1>
         </div>
         <div className="flex items-center gap-2">
@@ -54,7 +54,7 @@ export function Campaigns() {
       {error && <p className="mt-3 text-blood">{error}</p>}
       <form className="mt-6 flex gap-2" onSubmit={create}>
         <Field label={t('campaigns.new')} className="flex-1">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Phandalin Nights" />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('campaigns.namePlaceholder')} />
         </Field>
         <Button className="mt-6" type="submit">
           {t('campaigns.create')}
