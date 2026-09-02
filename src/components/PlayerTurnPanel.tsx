@@ -11,6 +11,7 @@ import { canAttemptHide, hideDcFor } from '@/lib/stealth'
 import { ABILITY_LABELS, type Ability, type Attack, type BattleMap, type CombatPrompt, type CombatSpendSlot, type Combatant, type MapToken, type Monster, type PlayerCharacter, type RollMode } from '@/lib/types'
 import { cn, proficiencyBonus } from '@/lib/utils'
 import { coverBonusBetween } from '@/lib/vision'
+import { useT } from '@/lib/i18n'
 
 export type MapPickMode = 'select' | 'attack' | 'help'
 
@@ -19,14 +20,25 @@ type AttackStep = 'pick' | 'target' | 'roll' | 'damage'
 type ModalType = null | 'initiative' | 'save' | 'hide' | 'attack-d20' | 'attack-damage'
 
 const DECLARE_KINDS = [
-  { kind: 'attack', label: 'Attack' },
-  { kind: 'dash', label: 'Dash' },
-  { kind: 'dodge', label: 'Dodge' },
-  { kind: 'help', label: 'Help' },
-  { kind: 'disengage', label: 'Disengage' },
-  { kind: 'hide', label: 'Hide' },
-  { kind: 'other', label: 'Other' },
+  { kind: 'attack', labelKey: 'battle.kind.attack' },
+  { kind: 'dash', labelKey: 'battle.kind.dash' },
+  { kind: 'dodge', labelKey: 'battle.kind.dodge' },
+  { kind: 'help', labelKey: 'battle.kind.help' },
+  { kind: 'disengage', labelKey: 'battle.kind.disengage' },
+  { kind: 'hide', labelKey: 'battle.kind.hide' },
+  { kind: 'other', labelKey: 'battle.kind.other' },
 ] as const
+
+const OTHER_ACTION_LABEL_KEYS: Record<(typeof OTHER_ACTION_LABELS)[number], string> = {
+  Jump: 'battle.otherAction.jump',
+  Climb: 'battle.otherAction.climb',
+  Interact: 'battle.otherAction.interact',
+  Search: 'battle.otherAction.search',
+  Grapple: 'battle.otherAction.grapple',
+  Shove: 'battle.otherAction.shove',
+  'Cast Spell': 'battle.otherAction.castSpell',
+  Custom: 'battle.otherAction.custom',
+}
 
 type Props = {
   instanceId: string
@@ -67,6 +79,7 @@ export function PlayerTurnPanel({
   tokens = [],
   monsters = [],
 }: Props) {
+  const { t } = useT()
   const myTurn = Boolean(combatant && whose && whose.id === combatant.id)
   const [menu, setMenu] = useState<Menu>(null)
   const [slot, setSlot] = useState<CombatSpendSlot>('action')
@@ -138,7 +151,7 @@ export function PlayerTurnPanel({
       resetMenus()
       onSettled?.()
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not declare')
+      setMsg(e instanceof Error ? e.message : t('battle.couldNotDeclare'))
     } finally {
       setBusy(false)
     }
@@ -181,8 +194,8 @@ export function PlayerTurnPanel({
     map && combatant && target
       ? coverBonusBetween(
           map,
-          tokens.find((t) => t.refId === combatant.id),
-          tokens.find((t) => t.refId === target.id),
+          tokens.find((tok) => tok.refId === combatant.id),
+          tokens.find((tok) => tok.refId === target.id),
         )
       : 0
   const previewAc = target ? target.ac + coverBonus : 0
@@ -215,7 +228,7 @@ export function PlayerTurnPanel({
       resetMenus()
       onSettled?.()
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Attack failed')
+      setMsg(e instanceof Error ? e.message : t('battle.attackFailed'))
     } finally {
       setBusy(false)
     }
@@ -223,7 +236,7 @@ export function PlayerTurnPanel({
 
   function continueFromRoll() {
     if (!preview) {
-      setMsg('Enter the d20 you rolled at the table (1–20).')
+      setMsg(t('battle.enterD20Message'))
       return
     }
     if (preview.outcome === 'miss' || preview.outcome === 'fumble') {
@@ -242,7 +255,7 @@ export function PlayerTurnPanel({
       setMsg('')
       onSettled?.()
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not end turn')
+      setMsg(e instanceof Error ? e.message : t('battle.couldNotEndTurn'))
     } finally {
       setBusy(false)
     }
@@ -256,7 +269,7 @@ export function PlayerTurnPanel({
       setModalType(null)
       onSettled?.()
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not submit save')
+      setMsg(e instanceof Error ? e.message : t('battle.couldNotSubmitSave'))
     } finally {
       setBusy(false)
     }
@@ -267,10 +280,10 @@ export function PlayerTurnPanel({
     try {
       await api.answerPrompt(instanceId, { use, other: reactionNote })
       setReactionNote('')
-      setMsg(use ? 'Reaction used.' : 'Reaction declined.')
+      setMsg(use ? t('battle.reactionUsed') : t('battle.reactionDeclined'))
       onSettled?.()
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not answer')
+      setMsg(e instanceof Error ? e.message : t('battle.couldNotAnswer'))
     } finally {
       setBusy(false)
     }
@@ -298,9 +311,9 @@ export function PlayerTurnPanel({
 
       {setup && combatant && (
         <div className="mt-2 rounded-lg border border-gold/40 bg-panel/50 px-3 py-3">
-          <div className="text-xs uppercase tracking-wider text-gold font-semibold">Your initiative</div>
+          <div className="text-xs uppercase tracking-wider text-gold font-semibold">{t('battle.yourInitiative')}</div>
           <p className="mt-1 text-sm text-muted">
-            Current total {combatant.initiative}. Enter the d20 from the table; Dex {character.sheet.initiativeBonus ?? ''} is added.
+            {t('battle.currentInitiative', { total: combatant.initiative, dex: character.sheet.initiativeBonus ?? '' })}
           </p>
           <div className="mt-3 flex justify-center">
             <Button
@@ -308,7 +321,7 @@ export function PlayerTurnPanel({
               disabled={busy}
               onClick={() => setModalType('initiative')}
             >
-              Roll Initiative
+              {t('battle.rollInitiative')}
             </Button>
           </div>
         </div>
@@ -316,13 +329,13 @@ export function PlayerTurnPanel({
 
       {minePrompt && prompt?.kind === 'save' && (
         <div className="mt-2 rounded-lg border border-gold/50 bg-panel/50 px-3 py-3">
-          <div className="text-xs uppercase tracking-wider text-gold font-semibold">Saving throw</div>
+          <div className="text-xs uppercase tracking-wider text-gold font-semibold">{t('battle.savingThrow')}</div>
           <p className="mt-1 text-sm">
-            {ABILITY_LABELS[(prompt.ability ?? 'dex') as Ability]} DC {prompt.dc ?? 13} · mod {saveMod >= 0 ? `+${saveMod}` : saveMod}
+            {t('battle.saveDcMod', { ability: ABILITY_LABELS[(prompt.ability ?? 'dex') as Ability], dc: prompt.dc ?? 13, mod: saveMod >= 0 ? `+${saveMod}` : saveMod })}
           </p>
           <div className="mt-3 flex justify-center">
             <Button size="default" disabled={busy} onClick={() => setModalType('save')}>
-              Roll Save
+              {t('battle.rollSave')}
             </Button>
           </div>
         </div>
@@ -330,14 +343,14 @@ export function PlayerTurnPanel({
 
       {minePrompt && prompt?.kind === 'reaction' && (
         <div className="mt-2 rounded-lg border border-gold/50 bg-panel/50 px-3 py-3">
-          <div className="text-xs uppercase tracking-wider text-gold font-semibold">Reaction requested</div>
-          <Input className="mt-2 h-10" placeholder="Optional note or attack name" value={reactionNote} onChange={(e) => setReactionNote(e.target.value)} />
+          <div className="text-xs uppercase tracking-wider text-gold font-semibold">{t('battle.reactionRequested')}</div>
+          <Input className="mt-2 h-10" placeholder={t('battle.optionalNote')} value={reactionNote} onChange={(e) => setReactionNote(e.target.value)} />
           <div className="mt-3 flex flex-col gap-2 sm:flex-row justify-center">
             <Button size="default" disabled={busy} onClick={() => void answerReaction(true)}>
-              Use reaction
+              {t('battle.useReaction')}
             </Button>
             <Button size="default" variant="outline" disabled={busy} onClick={() => void answerReaction(false)}>
-              Decline
+              {t('battle.decline')}
             </Button>
           </div>
         </div>
@@ -347,20 +360,20 @@ export function PlayerTurnPanel({
         <>
           <div className="mt-3 flex flex-wrap gap-2 justify-center">
             <Button variant={menu === 'action' || menu === 'attack' || menu === 'hide' || (menu === 'other' && slot === 'action') || menu === 'help' ? 'default' : 'outline'} disabled={Boolean(econ?.action)} onClick={() => openSlot('action')} size="default">
-              Action
+              {t('battle.action')}
             </Button>
             <Button variant={menu === 'bonus' || (menu === 'other' && slot === 'bonus') ? 'default' : 'outline'} disabled={Boolean(econ?.bonus)} onClick={() => openSlot('bonus')} size="default">
-              Bonus action
+              {t('battle.bonusAction')}
             </Button>
             <Button variant={menu === 'reaction' || (menu === 'other' && slot === 'reaction') ? 'default' : 'outline'} disabled={Boolean(econ?.reaction)} onClick={() => openSlot('reaction')} size="default">
-              Reaction
+              {t('battle.reaction')}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => void endTurn()} size="default">
-              End turn
+              {t('battle.endTurn')}
             </Button>
             {menu && (
               <Button variant="ghost" onClick={resetMenus} size="default">
-                Cancel
+                {t('battle.cancel')}
               </Button>
             )}
           </div>
@@ -375,7 +388,7 @@ export function PlayerTurnPanel({
                   onClick={() => onKind(k.kind)}
                   size="sm"
                 >
-                  {k.label}
+                  {t(k.labelKey)}
                 </Button>
               ))}
             </div>
@@ -397,7 +410,7 @@ export function PlayerTurnPanel({
                   }}
                   size="sm"
                 >
-                  {label}
+                  {t(OTHER_ACTION_LABEL_KEYS[label])}
                 </Button>
               ))}
             </div>
@@ -405,28 +418,28 @@ export function PlayerTurnPanel({
 
           {menu === 'custom' && (
             <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end justify-center">
-              <Input className="h-10 flex-1 min-w-[12rem]" placeholder="What do you do?" value={custom} onChange={(e) => setCustom(e.target.value)} />
+              <Input className="h-10 flex-1 min-w-[12rem]" placeholder={t('battle.whatDoYouDo')} value={custom} onChange={(e) => setCustom(e.target.value)} />
               <Button disabled={busy || !custom.trim()} onClick={() => void declare('custom', { custom })} size="default">
-                Declare action
+                {t('battle.declareAction')}
               </Button>
             </div>
           )}
 
           {menu === 'hide' && hideGate?.ok && (
             <div className="mt-2 rounded-lg border border-gold/40 bg-panel/50 px-3 py-3">
-              <div className="text-xs uppercase tracking-wider text-gold font-semibold">Hide (Stealth)</div>
+              <div className="text-xs uppercase tracking-wider text-gold font-semibold">{t('battle.hideStealth')}</div>
               <div className="mt-2 space-y-2">
                 <p className="text-sm text-muted">
                   {hideGate && hideGate.seenBy.length > 0
-                    ? 'You are in trees or stone. Enemies can still see you, but not clearly — roll Stealth vs their passive Perception.'
-                    : 'No enemy has a clear view of you. Roll Stealth vs the highest passive Perception among enemies.'}
+                    ? t('battle.hideStealthPartialCover')
+                    : t('battle.hideStealthNoCover')}
                 </p>
                 <div className="rounded-md border border-line bg-bg px-3 py-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted">Stealth DC</span>
+                    <span className="text-xs text-muted">{t('battle.stealthDC')}</span>
                     <span className="text-sm font-semibold text-gold-2">{hideDc}</span>
                   </div>
-                  <p className="mt-1 text-xs text-muted">Highest passive Perception among enemies</p>
+                  <p className="mt-1 text-xs text-muted">{t('battle.highestPassivePerception')}</p>
                 </div>
                 <div className="flex justify-center pt-2">
                   <Button
@@ -434,7 +447,7 @@ export function PlayerTurnPanel({
                     onClick={() => setModalType('hide')}
                     size="default"
                   >
-                    Roll Stealth
+                    {t('battle.rollStealth')}
                   </Button>
                 </div>
               </div>
@@ -443,12 +456,12 @@ export function PlayerTurnPanel({
 
           {menu === 'hide' && hideGate && !hideGate.ok && (
             <div className="mt-2 rounded-lg border border-gold/40 bg-panel/50 px-3 py-3">
-              <div className="text-xs uppercase tracking-wider text-gold font-semibold">Hide (Stealth)</div>
+              <div className="text-xs uppercase tracking-wider text-gold font-semibold">{t('battle.hideStealth')}</div>
               <div className="mt-2">
                 <p className="text-sm text-blood">{hideGate.error}</p>
                 {hideGate.seenBy && hideGate.seenBy.length > 0 && (
                   <div className="mt-2">
-                    <p className="text-xs text-muted">Enemies who can see you clearly:</p>
+                    <p className="text-xs text-muted">{t('battle.enemiesCanSee')}</p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {hideGate.seenBy.map((c) => (
                         <span key={c.id} className="rounded-md px-2 py-1 text-xs bg-blood/20 text-blood">
@@ -464,7 +477,7 @@ export function PlayerTurnPanel({
 
           {menu === 'help' && (
             <div className="mt-2">
-              <p className="text-xs text-muted">Tap an ally on the map or pick from the list.</p>
+              <p className="text-xs text-muted">{t('battle.tapAllyOrPick')}</p>
               <div className="mt-2 flex flex-wrap gap-2 justify-center">
                 {others.map((c) => (
                   <Button key={c.id} variant={selectedId === c.id ? 'default' : 'outline'} onClick={() => onSelectedId(c.id)} size="sm">
@@ -473,14 +486,14 @@ export function PlayerTurnPanel({
                 ))}
               </div>
               <Button className="mt-2 w-full" size="default" disabled={busy || !selectedId} onClick={() => void declare('help', { targetId: selectedId ?? undefined })}>
-                Help {target?.name ?? '…'}
+                {t('battle.help')} {target?.name ?? '…'}
               </Button>
             </div>
           )}
 
           {menu === 'attack' && step === 'pick' && (
             <div className="mt-2 flex flex-wrap gap-2 justify-center">
-              {namedAttacks.length === 0 && <p className="w-full text-xs text-muted text-center">No named attacks on your sheet.</p>}
+              {namedAttacks.length === 0 && <p className="w-full text-xs text-muted text-center">{t('battle.noNamedAttacks')}</p>}
               {namedAttacks.map(({ atk, i }) => (
                 <Button key={`${atk.name}-${i}`} variant="outline" disabled={!canAct} onClick={() => startAttack(atk, i)} size="sm">
                   {atk.name} {atk.bonus || ''}
@@ -492,7 +505,7 @@ export function PlayerTurnPanel({
           {menu === 'attack' && pending && step === 'target' && (
             <div className="mt-2">
               <p className="text-sm text-muted">
-                {pending.attack.name} — tap a creature on the map or pick a target. Range is the DM's call.
+                {t('battle.attackTargetHint', { attack: pending.attack.name })}
               </p>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {others.map((c) => {
@@ -501,8 +514,8 @@ export function PlayerTurnPanel({
                   const targetCover = map && combatant
                     ? coverBonusBetween(
                         map,
-                        tokens.find((t) => t.refId === combatant.id),
-                        tokens.find((t) => t.refId === c.id),
+                        tokens.find((tok) => tok.refId === combatant.id),
+                        tokens.find((tok) => tok.refId === c.id),
                       )
                     : 0
                   const previewAc = c.ac + targetCover
@@ -522,13 +535,13 @@ export function PlayerTurnPanel({
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-sm">{c.name}</span>
                         <div className="flex items-center gap-2">
-                          {hasAdv && <span className="text-[10px] uppercase text-gold">Adv</span>}
-                          <span className="text-xs text-muted">AC {previewAc}</span>
+                          {hasAdv && <span className="text-[10px] uppercase text-gold">{t('battle.adv')}</span>}
+                          <span className="text-xs text-muted">{t('sheet.acShort')} {previewAc}</span>
                         </div>
                       </div>
                       <div className="mt-1.5 flex items-center gap-3 text-xs text-muted">
-                        <span>HP: {c.hpCurrent}/{c.hpMax}</span>
-                        {targetCover > 0 && <span className="text-gold">+{targetCover} cover</span>}
+                        <span>{t('battle.hp')}: {c.hpCurrent}/{c.hpMax}</span>
+                        {targetCover > 0 && <span className="text-gold">+{targetCover} {t('battle.cover')}</span>}
                       </div>
                     </button>
                   )
@@ -540,25 +553,25 @@ export function PlayerTurnPanel({
                 setStep('roll')
                 setModalType('attack-d20')
               }}>
-                Target {target?.name ?? '…'}
+                {t('battle.target')} {target?.name ?? '…'}
               </Button>
             </div>
           )}
 
           {menu === 'attack' && pending && step === 'roll' && target && (
             <div className="mt-2 rounded-lg border border-gold/40 bg-panel/50 px-3 py-3">
-              <div className="text-xs uppercase tracking-wider text-gold font-semibold">Attack: {pending.attack.name}</div>
+              <div className="text-xs uppercase tracking-wider text-gold font-semibold">{t('battle.attackLabel', { name: pending.attack.name })}</div>
               <p className="mt-1 text-sm text-muted">
-                {target.name} • AC {previewAc}{coverBonus ? ` · cover +${coverBonus}` : ''}
+                {target.name} • {t('battle.vsAc', { ac: previewAc })}{coverBonus ? ` · ${t('battle.cover')} +${coverBonus}` : ''}
               </p>
               <div className="mt-3 flex flex-wrap gap-2 justify-center">
                 {(['normal', 'advantage', 'disadvantage'] as const).map((m) => (
                   <Button key={m} variant={rollMode === m ? 'default' : 'outline'} onClick={() => setRollMode(m)} size="sm">
-                    {m === 'normal' ? 'Normal' : m === 'advantage' ? 'Advantage' : 'Disadvantage'}
+                    {m === 'normal' ? t('battle.normal') : m === 'advantage' ? t('battle.advantage') : t('battle.disadvantage')}
                   </Button>
                 ))}
               </div>
-              {hasAdv && <p className="mt-2 text-xs text-gold text-center">Advantage vs this target</p>}
+              {hasAdv && <p className="mt-2 text-xs text-gold text-center">{t('battle.advVsTarget')}</p>}
               {preview && (
                 <div className="mt-3 rounded-lg bg-bg px-3 py-2 border border-gold/30">
                   <p className="text-sm text-center">
@@ -567,11 +580,11 @@ export function PlayerTurnPanel({
                     <span className="font-bold text-gold">{preview.bonus >= 0 ? '+' : ''}{preview.bonus}</span>
                     {' = '}
                     <span className="font-bold text-gold text-lg">{preview.total}</span>
-                    {' vs AC '}
-                    <span className="font-bold">{previewAc}</span>
+                    {' '}
+                    <span className="font-bold">{t('battle.vsAc', { ac: previewAc })}</span>
                   </p>
                   <p className="mt-2 text-center text-xs font-bold uppercase" style={{ color: preview.outcome === 'hit' ? '#d4af37' : preview.outcome === 'crit' ? '#e74c3c' : '#888' }}>
-                    {preview.outcome}
+                    {t(`battle.outcome.${preview.outcome}`)}
                   </p>
                 </div>
               )}
@@ -580,11 +593,11 @@ export function PlayerTurnPanel({
 
           {menu === 'attack' && pending && step === 'damage' && target && (
             <div className="mt-2 rounded-lg border border-gold/40 bg-panel/50 px-3 py-3">
-              <div className="text-xs uppercase tracking-wider text-gold font-semibold">Damage: {pending.attack.name}</div>
-              <p className="mt-1 text-sm text-muted">{target.name} took the hit</p>
+              <div className="text-xs uppercase tracking-wider text-gold font-semibold">{t('battle.damageLabel', { name: pending.attack.name })}</div>
+              <p className="mt-1 text-sm text-muted">{target.name} {t('battle.tookTheHit')}</p>
               <div className="mt-3 flex justify-center">
                 <Button disabled={busy} onClick={() => setModalType('attack-damage')} size="default">
-                  Enter Damage
+                  {t('battle.enterDamage')}
                 </Button>
               </div>
             </div>
@@ -597,9 +610,9 @@ export function PlayerTurnPanel({
       {/* Roll Input Modals */}
       <RollInputModal
         isOpen={modalType === 'initiative'}
-        title="Initiative"
-        subtitle={`Current: ${combatant?.initiative ?? 0}`}
-        description={`Enter the d20 you rolled. Your Dex ${character.sheet.initiativeBonus ?? 0} will be added.`}
+        title={t('battle.initiativeTitle')}
+        subtitle={t('battle.initiativeSubtitle', { value: combatant?.initiative ?? 0 })}
+        description={t('battle.initiativeDescription', { dex: character.sheet.initiativeBonus ?? 0 })}
         placeholder="d20"
         d20={true}
         disabled={busy}
@@ -608,11 +621,11 @@ export function PlayerTurnPanel({
           void api
             .setInitiative(combatant!.id, { d20: value })
             .then((r) => {
-              setMsg(`Initiative ${r.initiative}`)
+              setMsg(t('battle.initiativeResult', { value: r.initiative }))
               setModalType(null)
               onSettled?.()
             })
-            .catch((e) => setMsg(e instanceof Error ? e.message : 'Could not set initiative'))
+            .catch((e) => setMsg(e instanceof Error ? e.message : t('battle.couldNotSetInitiative')))
             .finally(() => setBusy(false))
         }}
         onCancel={() => setModalType(null)}
@@ -620,9 +633,9 @@ export function PlayerTurnPanel({
 
       <RollInputModal
         isOpen={modalType === 'save'}
-        title="Saving Throw"
-        subtitle={`${ABILITY_LABELS[(prompt?.ability ?? 'dex') as Ability]} DC ${prompt?.dc ?? 13}`}
-        description={`Modifier: ${saveMod >= 0 ? '+' : ''}${saveMod}`}
+        title={t('battle.savingThrowTitle')}
+        subtitle={t('battle.saveDc', { ability: ABILITY_LABELS[(prompt?.ability ?? 'dex') as Ability], dc: prompt?.dc ?? 13 })}
+        description={t('battle.savingThrowDescription', { mod: saveMod >= 0 ? `+${saveMod}` : saveMod })}
         placeholder="d20"
         d20={true}
         disabled={busy}
@@ -634,9 +647,9 @@ export function PlayerTurnPanel({
 
       <RollInputModal
         isOpen={modalType === 'hide'}
-        title="Hide (Stealth)"
+        title={t('battle.hideStealth')}
         subtitle={`DC ${hideDc}`}
-        description="Enter the d20 you rolled for Stealth."
+        description={t('battle.hideStealthDescription')}
         placeholder="d20"
         d20={true}
         disabled={busy}
@@ -649,9 +662,9 @@ export function PlayerTurnPanel({
 
       <RollInputModal
         isOpen={modalType === 'attack-d20'}
-        title={`${pending?.attack.name ?? 'Attack'} Roll`}
-        subtitle={`${target?.name ?? 'Target'} • AC ${previewAc}`}
-        description="Enter the d20 you rolled at the table."
+        title={t('battle.attackRollTitle', { attack: pending?.attack.name ?? t('battle.kind.attack') })}
+        subtitle={t('battle.attackRollSubtitle', { target: target?.name ?? t('battle.target'), ac: previewAc })}
+        description={t('battle.attackRollDescription')}
         placeholder="d20"
         d20={true}
         disabled={busy}
@@ -667,9 +680,9 @@ export function PlayerTurnPanel({
 
       <RollInputModal
         isOpen={modalType === 'attack-damage'}
-        title="Damage Roll"
-        subtitle={`${pending?.attack.name ?? 'Attack'} → ${target?.name ?? 'Target'}`}
-        description="Enter the total damage rolled."
+        title={t('battle.damageRollTitle')}
+        subtitle={t('battle.damageRollSubtitle', { attack: pending?.attack.name ?? t('battle.kind.attack'), target: target?.name ?? t('battle.target') })}
+        description={t('battle.damageRollDescription')}
         placeholder="damage"
         d20={false}
         disabled={busy}
