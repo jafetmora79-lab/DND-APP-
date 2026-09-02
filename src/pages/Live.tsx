@@ -19,7 +19,7 @@ import { attacksFromMonster, canTakeAttacks, decorateTokens, effectiveRollMode, 
 import { LanguageToggle, useT } from '@/lib/i18n'
 import { useLive } from '@/lib/realtime'
 import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
-import { ABILITIES, type Ability, type Attack, type EncounterInstance, type EncounterSnapshot, type EncounterTemplate, type FogState, type Monster, type RollMode } from '@/lib/types'
+import { ABILITIES, conditionLabelKey, type Ability, type Attack, type EncounterInstance, type EncounterSnapshot, type EncounterTemplate, type FogState, type Monster, type RollMode } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
 import { adjacentBeat, ambianceFromBeat, emptyBeat, ensureCombatBeatForTemplate, markBeatActive, markBeatForTemplate, markOpeningActive, openingSceneBeat, parseHub, sortTemplates, tableAmbiance } from '@/lib/campaign-hub'
@@ -1061,7 +1061,7 @@ export function Live() {
                   ? t('live.combatantDead', { name: selectedCombatant.name })
                   : t('live.cannotTakeNormalAttack', {
                       name: selectedCombatant.name,
-                      reason: selectedCombatant.deathState === 'ok' ? selectedCombatant.conditions.join(', ') || t('live.incapacitated') : deathStateLabel(selectedCombatant.deathState),
+                      reason: selectedCombatant.deathState === 'ok' ? selectedCombatant.conditions.map((c) => t(conditionLabelKey(c))).join(', ') || t('live.incapacitated') : deathStateLabel(selectedCombatant.deathState),
                     })
                 : undefined
             }

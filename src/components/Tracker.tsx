@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CONDITIONS, conditionRingColor, type Combatant, type TurnEconomy } from '@/lib/types'
+import { CONDITIONS, conditionLabelKey, conditionRingColor, type Combatant, type TurnEconomy } from '@/lib/types'
 import { cn, hpColor } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { emptyTurnEconomy } from '@/lib/combat'
@@ -179,7 +179,7 @@ export function Tracker({
                     className="rounded-md px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-bg font-medium"
                     style={{ background: conditionRingColor(cond) }}
                   >
-                    {cond}
+                    {t(conditionLabelKey(cond))}
                     {isDm && (
                       <button
                         type="button"
@@ -209,7 +209,7 @@ export function Tracker({
               >
                 <option value="">{t('tracker.addCondition')}</option>
                 {CONDITIONS.map((cond) => (
-                  <option key={cond}>{cond}</option>
+                  <option key={cond} value={cond}>{t(conditionLabelKey(cond))}</option>
                 ))}
               </select>
             )}
