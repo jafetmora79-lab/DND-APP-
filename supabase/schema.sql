@@ -345,7 +345,7 @@ declare
   hiding boolean;
   resolved_slot text;
   attacks_per_action int;
-  attacks_used int;
+  next_attacks_used int;
 begin
   if auth.uid() is null then
     raise exception 'Sign-in required';
@@ -517,12 +517,11 @@ begin
           where lower(x) <> 'hiding'
         ), '[]'::jsonb)
     where id in (attacker.id, target.id);
-  attacks_used := coalesce(attacker.attacks_used, 0);
+  next_attacks_used := coalesce(attacker.attacks_used, 0) + 1;
   if resolved_slot = 'action' then
-    attacks_used := attacks_used + 1;
     update public.combatants
-      set attacks_used = attacks_used,
-          turn_economy_json = case when attacks_used >= attacks_per_action
+      set attacks_used = next_attacks_used,
+          turn_economy_json = case when next_attacks_used >= attacks_per_action
             then jsonb_set(coalesce(turn_economy_json, '{}'::jsonb), '{action}', 'true'::jsonb)
             else coalesce(turn_economy_json, '{}'::jsonb)
           end
