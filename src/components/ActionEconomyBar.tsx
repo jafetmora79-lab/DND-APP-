@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Swords, Sparkles, Shield, Footprints } from 'lucide-react'
 import type { Combatant } from '@/lib/types'
+import { useT } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -8,6 +9,7 @@ type Props = {
 }
 
 export function ActionEconomyBar({ combatant }: Props) {
+  const { t } = useT()
   if (!combatant) return null
 
   const econ = combatant.turnEconomy
@@ -17,9 +19,9 @@ export function ActionEconomyBar({ combatant }: Props) {
   return (
     <div className="flex items-center gap-3">
       <div className="flex items-center gap-2">
-        <ActionIcon icon={<Swords className="h-4 w-4" />} label="Action" used={Boolean(econ?.action)} />
-        <ActionIcon icon={<Sparkles className="h-4 w-4" />} label="Bonus" used={Boolean(econ?.bonus)} />
-        <ActionIcon icon={<Shield className="h-4 w-4" />} label="Reaction" used={Boolean(econ?.reaction)} />
+        <ActionIcon icon={<Swords className="h-4 w-4" />} label={t('econ.action')} used={Boolean(econ?.action)} />
+        <ActionIcon icon={<Sparkles className="h-4 w-4" />} label={t('econ.bonus')} used={Boolean(econ?.bonus)} />
+        <ActionIcon icon={<Shield className="h-4 w-4" />} label={t('econ.reaction')} used={Boolean(econ?.reaction)} />
       </div>
       <div className="flex items-center gap-2 text-xs">
         <Footprints className="h-4 w-4 text-muted" />

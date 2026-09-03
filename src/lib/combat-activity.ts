@@ -4,6 +4,17 @@ export const ACTIVITY_CAP = 40
 
 export const OTHER_ACTION_LABELS = ['Jump', 'Climb', 'Interact', 'Search', 'Grapple', 'Shove', 'Cast Spell', 'Custom'] as const
 
+export const OTHER_ACTION_LABEL_KEYS: Record<(typeof OTHER_ACTION_LABELS)[number], string> = {
+  Jump: 'other.jump',
+  Climb: 'other.climb',
+  Interact: 'other.interact',
+  Search: 'other.search',
+  Grapple: 'other.grapple',
+  Shove: 'other.shove',
+  'Cast Spell': 'other.castSpell',
+  Custom: 'other.custom',
+}
+
 export function parseActivity(raw: unknown): CombatActivity[] {
   if (!Array.isArray(raw)) return []
   const out: CombatActivity[] = []

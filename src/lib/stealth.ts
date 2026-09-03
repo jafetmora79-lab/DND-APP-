@@ -71,12 +71,14 @@ export function canAttemptHide(
   tokens: MapToken[],
   map: Pick<BattleMap, 'gridCols' | 'gridRows' | 'gridSize' | 'blocked'>,
 ) {
-  if (!tokenFor(hider.id, tokens)) return { ok: false as const, error: 'Get on the map before you hide.' }
+  if (!tokenFor(hider.id, tokens))
+    return { ok: false as const, error: 'Get on the map before you hide.', errorCode: 'not-on-map' as const }
   const seenBy = watchersWhoSee(hider, combatants, tokens, map)
   if (seenBy.length > 0 && !coverConceals(hider, tokens, map)) {
     return {
       ok: false as const,
       error: `Enemies can see you clearly (${seenBy.map((c) => c.name).join(', ')}). Duck into trees or stone, or break line of sight first.`,
+      errorCode: 'seen' as const,
       seenBy,
     }
   }
