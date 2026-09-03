@@ -6,14 +6,17 @@ import { Field, Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth'
 import { publicAsset, usingSupabase } from '@/lib/config'
 import { LanguageToggle, useT } from '@/lib/i18n'
-import { ThemeToggle } from '@/lib/theme'
+import { PALETTE_BACKGROUND, ThemeToggle, useTheme } from '@/lib/theme'
 import { forgetPlayerSession, getRecentSessions, setPendingJoin, type RecentPlayerSession } from '@/lib/recent-sessions'
 import { cn } from '@/lib/utils'
 
 export function Landing() {
   const { user, loading, loginDm, registerDm, joinPlayer } = useAuth()
   const { t } = useT()
+  const { palette } = useTheme()
   const nav = useNavigate()
+  const themedBg = publicAsset(PALETTE_BACKGROUND[palette])
+  const [bgFailed, setBgFailed] = useState(false)
   const [mode, setMode] = useState<'dm' | 'join'>('dm')
   const [creating, setCreating] = useState(false)
   const sampleTable = !usingSupabase && !import.meta.env.PROD
@@ -29,6 +32,10 @@ export function Landing() {
   useEffect(() => {
     setRecent(getRecentSessions())
   }, [])
+
+  useEffect(() => {
+    setBgFailed(false)
+  }, [palette])
 
   useEffect(() => {
     if (mode !== 'join' || recent.length === 0) return
@@ -95,7 +102,12 @@ export function Landing() {
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-bg">
-      <img src={publicAsset('tavern-hearth.jpg')} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      <img
+        src={bgFailed ? publicAsset('tavern-hearth.jpg') : themedBg}
+        alt=""
+        className="absolute inset-0 h-full w-full object-cover"
+        onError={() => setBgFailed(true)}
+      />
       <div className="absolute inset-0 bg-[#11100E]/60" />
       <div className="relative z-10 mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4 py-10">
         <header className="text-center">
