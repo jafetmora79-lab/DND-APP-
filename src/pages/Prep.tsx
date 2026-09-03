@@ -25,6 +25,7 @@ import { cn, DEFAULT_SCRATCH_CELL, mapFeet, nearestWalkableCell, playerStartOrig
 import { monsterTokenLook, playerTokenLook, templateReady, templateReadyGap } from '@/lib/token-look'
 import { copyText } from '@/lib/copy'
 import { LanguageToggle, useT } from '@/lib/i18n'
+import { ThemeToggle } from '@/lib/theme'
 import { CampaignHubPanel } from '@/components/CampaignHubPanel'
 import { emptyHub, ensureCombatBeatForTemplate, parseHub, sortTemplates } from '@/lib/campaign-hub'
 
@@ -313,6 +314,7 @@ export function Prep() {
         </div>
         <div className="flex items-center gap-2">
           <LanguageToggle />
+          <ThemeToggle />
           <Button
             variant="outline"
             onClick={async () => {

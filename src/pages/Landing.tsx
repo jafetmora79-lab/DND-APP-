@@ -6,6 +6,7 @@ import { Field, Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth'
 import { publicAsset, usingSupabase } from '@/lib/config'
 import { LanguageToggle, useT } from '@/lib/i18n'
+import { ThemeToggle } from '@/lib/theme'
 import { forgetPlayerSession, getRecentSessions, setPendingJoin, type RecentPlayerSession } from '@/lib/recent-sessions'
 import { cn } from '@/lib/utils'
 
@@ -98,8 +99,9 @@ export function Landing() {
       <div className="absolute inset-0 bg-[#11100E]/60" />
       <div className="relative z-10 mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4 py-10">
         <header className="text-center">
-          <div className="mb-3 flex justify-center">
+          <div className="mb-3 flex justify-center gap-2">
             <LanguageToggle />
+            <ThemeToggle />
           </div>
           <p className="text-xs font-medium uppercase tracking-[0.4em] text-gold">{t('landing.kicker')}</p>
           <h1 className="title-gold mt-3 font-display text-4xl font-bold md:text-6xl">{t('landing.title')}</h1>

@@ -17,6 +17,7 @@ import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
 import { attacksFromMonster, canTakeAttacks, decorateTokens, effectiveRollMode, hasHiddenAdvantage, inRangeCombatantIds } from '@/lib/combat'
 import { LanguageToggle, useT } from '@/lib/i18n'
+import { ThemeToggle } from '@/lib/theme'
 import { useLive } from '@/lib/realtime'
 import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
 import { ABILITIES, ABILITY_LABELS, type Ability, type Attack, type EncounterInstance, type EncounterSnapshot, type EncounterTemplate, type FogState, type Monster, type RollMode } from '@/lib/types'
@@ -501,6 +502,7 @@ export function Live() {
           <span className="hidden text-muted sm:inline">/</span>
           <span className="hidden truncate sm:inline">Table closed</span>
           <LanguageToggle />
+          <ThemeToggle />
         </header>
         {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
@@ -663,12 +665,14 @@ export function Live() {
           </span>
           <div className="ml-auto hidden items-center gap-2 lg:flex">
             <LanguageToggle />
+            <ThemeToggle />
             {joinActions}
             {tableActions}
           </div>
         </div>
         <div className="flex gap-2 overflow-x-auto px-4 pb-3 lg:hidden">
           <LanguageToggle />
+          <ThemeToggle />
           {joinActions}
           {tableActions}
         </div>

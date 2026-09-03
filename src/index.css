@@ -1,24 +1,59 @@
 @import "tailwindcss";
 
 @theme {
-  --font-display: "Cinzel", ui-serif, Georgia, serif;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "MedievalSharp", ui-serif, Georgia, serif;
+  --font-sans: "Source Serif 4", ui-serif, Georgia, serif;
+  --font-body: "Source Serif 4", ui-serif, Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  --color-bg: #0a0a0a;
-  --color-hud: #141414;
-  --color-panel: #1a1a1a;
-  --color-panel-2: #242424;
-  --color-ink: #e8e8e8;
-  --color-muted: #888888;
-  --color-gold: #f59e0b;
-  --color-gold-2: #fbbf24;
-  --color-ember: #fbbf24;
+  /* Dragon's Hoard (default palette) — aged bronze into old blood */
+  --color-bg: #0c0a07;
+  --color-hud: #171310;
+  --color-panel: #1d1712;
+  --color-panel-2: #241d15;
+  --color-ink: #ecdfc8;
+  --color-muted: #9c8b6c;
+  --color-gold: #c9992f;
+  --color-gold-2: #e0b653;
+  --color-ember: #e0b653;
+  --color-accent-2: #7a1f26;
+  --color-on-accent: #1d1712;
   --color-blood: #dc2626;
   --color-moss: #22c55e;
   --color-sky: #8b5cf6;
-  --color-line: #333333;
+  --color-line: #3a2f22;
+}
+
+/* Arcane Verdigris — wizard-tower violet with a verdigris-patina glow */
+html[data-palette="verdigris"] {
+  --color-bg: #0a0912;
+  --color-hud: #14101f;
+  --color-panel: #18142a;
+  --color-panel-2: #1f1a35;
+  --color-ink: #e8e2f5;
+  --color-muted: #8c85a8;
+  --color-gold: #8a68d6;
+  --color-gold-2: #a68ce0;
+  --color-ember: #a68ce0;
+  --color-accent-2: #3fae7a;
+  --color-on-accent: #150f26;
+  --color-line: #332c50;
+}
+
+/* Blood & Iron — war-camp grit, dried blood on tempered steel */
+html[data-palette="iron"] {
+  --color-bg: #0b0b0c;
+  --color-hud: #141415;
+  --color-panel: #1c1c1e;
+  --color-panel-2: #232325;
+  --color-ink: #e6e5e1;
+  --color-muted: #8f8f89;
+  --color-gold: #b3323d;
+  --color-gold-2: #c94b56;
+  --color-ember: #c94b56;
+  --color-accent-2: #9a958a;
+  --color-on-accent: #fdf6f2;
+  --color-line: #38383a;
 }
 
 html,
@@ -51,17 +86,17 @@ select {
 }
 
 ::selection {
-  background: rgba(245, 158, 11, 0.3);
+  background: color-mix(in srgb, var(--color-gold) 30%, transparent);
 }
 
 .scroll-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(245, 158, 11, 0.3) transparent;
+  scrollbar-color: color-mix(in srgb, var(--color-gold) 30%, transparent) transparent;
 }
 
 .parchment {
   background:
-    linear-gradient(180deg, rgba(245, 158, 11, 0.04), transparent 40%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-gold) 4%, transparent), transparent 40%),
     var(--color-panel);
 }
 
@@ -70,8 +105,8 @@ select {
   min-width: 0;
   overflow-x: hidden;
   background:
-    radial-gradient(120% 70% at 50% 0%, rgba(245, 158, 11, 0.08), transparent 58%),
-    repeating-linear-gradient(-12deg, transparent, transparent 11px, rgba(245, 158, 11, 0.02) 12px),
+    radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--color-gold) 8%, transparent), transparent 58%),
+    repeating-linear-gradient(-12deg, transparent, transparent 11px, color-mix(in srgb, var(--color-gold) 2%, transparent) 12px),
     var(--color-panel);
   border: 1px solid var(--color-line);
   border-radius: 0.75rem;
@@ -91,7 +126,7 @@ select {
   border: 1px solid var(--color-line);
   border-radius: 0.5rem;
   background:
-    linear-gradient(180deg, rgba(245, 158, 11, 0.04), transparent 55%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-gold) 4%, transparent), transparent 55%),
     var(--color-bg);
   padding: 0.35rem 0.25rem 0.3rem;
 }
@@ -158,7 +193,7 @@ select {
 }
 
 .dnd-panel:hover {
-  border-color: rgba(245, 158, 11, 0.3);
+  border-color: color-mix(in srgb, var(--color-gold) 30%, transparent);
 }
 
 .dnd-panel-label {
@@ -176,19 +211,22 @@ select {
 }
 
 .title-gold {
-  color: #d6b16a;
+  background: linear-gradient(120deg, var(--color-gold-2), var(--color-accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
   letter-spacing: 0.16em;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
 }
 
 .btn-gold {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: #0a0a0a;
+  background: linear-gradient(135deg, var(--color-gold) 0%, var(--color-accent-2) 100%);
+  color: var(--color-on-accent);
   border-radius: 0.5rem;
   font-weight: 500;
 }
 .btn-gold:hover {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  background: linear-gradient(135deg, var(--color-gold-2) 0%, var(--color-gold) 100%);
 }
 
 .btn-blood {
@@ -224,7 +262,7 @@ select {
 
 .outcome-overlay-won {
   background:
-    radial-gradient(circle at 50% 40%, rgba(245, 158, 11, 0.25), transparent 55%),
+    radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--color-gold) 25%, transparent), transparent 55%),
     rgba(10, 10, 10, 0.9);
 }
 
@@ -241,7 +279,7 @@ select {
 
 .outcome-overlay-won .outcome-banner h2 {
   color: var(--color-gold-2);
-  text-shadow: 0 0 40px rgba(245, 158, 11, 0.4);
+  text-shadow: 0 0 40px color-mix(in srgb, var(--color-gold) 40%, transparent);
 }
 
 .outcome-overlay-lost .outcome-banner h2 {
@@ -252,7 +290,7 @@ select {
 .outcome-rays {
   position: absolute;
   inset: -20%;
-  background: repeating-conic-gradient(from 0deg, rgba(245, 158, 11, 0.08) 0 8deg, transparent 8deg 18deg);
+  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--color-gold) 8%, transparent) 0 8deg, transparent 8deg 18deg);
   animation: outcome-spin 28s linear infinite;
   opacity: 0.6;
 }
@@ -286,16 +324,16 @@ select {
 
 @keyframes turn-flash {
   0%, 100% {
-    box-shadow: inset 0 0 0 0px rgba(245, 158, 11, 0);
+    box-shadow: inset 0 0 0 0px transparent;
   }
   15% {
-    box-shadow: inset 0 0 0 6px rgba(245, 158, 11, 0.65);
+    box-shadow: inset 0 0 0 6px color-mix(in srgb, var(--color-gold) 65%, transparent);
   }
   35% {
-    box-shadow: inset 0 0 0 3px rgba(245, 158, 11, 0.4);
+    box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--color-gold) 40%, transparent);
   }
   60% {
-    box-shadow: inset 0 0 0 5px rgba(220, 38, 38, 0.45);
+    box-shadow: inset 0 0 0 5px color-mix(in srgb, var(--color-blood) 45%, transparent);
   }
 }
 
@@ -330,10 +368,10 @@ select {
 
 @keyframes pulse-gold {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-gold) 40%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(245, 158, 11, 0);
+    box-shadow: 0 0 0 8px transparent;
   }
 }
 

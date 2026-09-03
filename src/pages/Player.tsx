@@ -17,6 +17,7 @@ import { decorateTokens, monsterForCombatant } from '@/lib/combat'
 import { tableAmbiance } from '@/lib/campaign-hub'
 import { haptic, notifyTurn, notificationPermissionAskedBefore, requestNotificationPermission, supportsNotifications } from '@/lib/haptics'
 import { LanguageToggle, useT } from '@/lib/i18n'
+import { ThemeToggle } from '@/lib/theme'
 import { useLive } from '@/lib/realtime'
 import { consumePendingJoin, rememberPlayerSession } from '@/lib/recent-sessions'
 import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
@@ -264,6 +265,7 @@ export function Player() {
             {t('player.leave')}
           </Button>
           <LanguageToggle />
+          <ThemeToggle />
         </header>
         {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
         <TableHub
@@ -385,6 +387,7 @@ export function Player() {
           {t('player.leave')}
         </Button>
         <LanguageToggle />
+        <ThemeToggle />
       </header>
       {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
 

@@ -513,6 +513,10 @@ const en = {
   'statblock.reactions': 'Reactions',
   'statblock.legendaryActions': 'Legendary Actions',
   'statblock.lairActions': 'Lair Actions',
+  'palette.label': 'Table theme',
+  'palette.hoard': "Dragon's Hoard",
+  'palette.verdigris': 'Arcane Verdigris',
+  'palette.iron': 'Blood & Iron',
 }
 
 const es: Record<keyof typeof en, string> = {
@@ -1024,6 +1028,10 @@ const es: Record<keyof typeof en, string> = {
   'statblock.reactions': 'Reacciones',
   'statblock.legendaryActions': 'Acciones Legendarias',
   'statblock.lairActions': 'Acciones de Guarida',
+  'palette.label': 'Tema de la mesa',
+  'palette.hoard': 'Tesoro del Dragón',
+  'palette.verdigris': 'Verdín Arcano',
+  'palette.iron': 'Sangre y Hierro',
 }
 
 const dict: Record<Lang, Record<string, string>> = { en, es }

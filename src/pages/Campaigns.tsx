@@ -5,6 +5,7 @@ import { Field, Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { LanguageToggle, useT } from '@/lib/i18n'
+import { ThemeToggle } from '@/lib/theme'
 import type { Campaign } from '@/lib/types'
 
 export function Campaigns() {
@@ -45,6 +46,7 @@ export function Campaigns() {
         </div>
         <div className="flex items-center gap-2">
           <LanguageToggle />
+          <ThemeToggle />
           <Button variant="ghost" onClick={() => { logout(); nav('/') }}>
             {t('campaigns.signOut')}
           </Button>

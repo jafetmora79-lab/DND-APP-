@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/lib/auth'
 import { I18nProvider } from '@/lib/i18n'
+import { ThemeProvider } from '@/lib/theme'
 import { Campaigns } from '@/pages/Campaigns'
 import { Landing } from '@/pages/Landing'
 import { Live } from '@/pages/Live'
@@ -21,47 +22,49 @@ export default function App() {
   const basename =
     import.meta.env.VITE_HASH_ROUTER === '1' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, '') || undefined
   return (
-    <I18nProvider>
-      <AuthProvider>
-        <Router basename={basename}>
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route
-              path="/dm"
-              element={
-                <Guard role="dm">
-                  <Campaigns />
-                </Guard>
-              }
-            />
-            <Route
-              path="/dm/:campaignId"
-              element={
-                <Guard role="dm">
-                  <Prep />
-                </Guard>
-              }
-            />
-            <Route
-              path="/dm/:campaignId/live"
-              element={
-                <Guard role="dm">
-                  <Live />
-                </Guard>
-              }
-            />
-            <Route
-              path="/play/:campaignId"
-              element={
-                <Guard role="player">
-                  <Player />
-                </Guard>
-              }
-            />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Router>
-      </AuthProvider>
-    </I18nProvider>
+    <ThemeProvider>
+      <I18nProvider>
+        <AuthProvider>
+          <Router basename={basename}>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route
+                path="/dm"
+                element={
+                  <Guard role="dm">
+                    <Campaigns />
+                  </Guard>
+                }
+              />
+              <Route
+                path="/dm/:campaignId"
+                element={
+                  <Guard role="dm">
+                    <Prep />
+                  </Guard>
+                }
+              />
+              <Route
+                path="/dm/:campaignId/live"
+                element={
+                  <Guard role="dm">
+                    <Live />
+                  </Guard>
+                }
+              />
+              <Route
+                path="/play/:campaignId"
+                element={
+                  <Guard role="player">
+                    <Player />
+                  </Guard>
+                }
+              />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Router>
+        </AuthProvider>
+      </I18nProvider>
+    </ThemeProvider>
   )
 }
