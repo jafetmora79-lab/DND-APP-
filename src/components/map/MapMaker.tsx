@@ -74,9 +74,9 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
         imageUrl: current.imageUrl,
         blocked: current.blocked,
       })
-      setMsg('Map saved.')
+      setMsg(t('mapMaker.savedMsg'))
     } catch (e) {
-      const text = e instanceof Error ? e.message : 'Could not save map'
+      const text = e instanceof Error ? e.message : t('mapMaker.errSave')
       setMsg(text)
       throw e instanceof Error ? e : new Error(text)
     }
@@ -92,34 +92,34 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
         setDraft(next)
         onChange(next)
       }
-      setMsg('Background image attached. Squares still sit on top at 5 ft each.')
+      setMsg(t('mapMaker.backgroundAttachedMsg'))
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not upload background')
+      setMsg(e instanceof Error ? e.message : t('mapMaker.errUpload'))
     }
   }
 
   async function clearBackground() {
     patch({ imageUrl: '' })
-    setMsg('Background removed. The grid itself is the map.')
+    setMsg(t('mapMaker.backgroundRemovedMsg'))
   }
 
   return (
     <div className="mt-6 grid gap-4 lg:grid-cols-[20rem_1fr]">
       <div className="rounded-xl border border-line bg-panel p-4">
         <button type="button" className="text-xs uppercase tracking-[0.3em] text-gold" onClick={() => flush().then(onClose).catch(() => undefined)}>
-          All maps
+          {t('mapMaker.allMaps')}
         </button>
-        <h2 className="font-display text-xl text-gold-2">Map maker</h2>
+        <h2 className="font-display text-xl text-gold-2">{t('mapMaker.title')}</h2>
         <p className="mt-1 text-xs text-muted">{t('map.maker.blurb')}</p>
         <div className="mt-3 grid gap-3">
-          <Field label="Name">
+          <Field label={t('common.name')}>
             <Input
               value={draft.name}
               onChange={(e) => patch({ name: e.target.value })}
             />
           </Field>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Squares wide">
+            <Field label={t('field.squaresWide')}>
               <Input
                 type="number"
                 min={1}
@@ -133,7 +133,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
                 }}
               />
             </Field>
-            <Field label="Squares high">
+            <Field label={t('field.squaresHigh')}>
               <Input
                 type="number"
                 min={1}
@@ -151,7 +151,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
           <p className="text-sm text-gold">
             {mapFeet(draft.gridCols, draft.gridRows)}
           </p>
-          <Field label="Square size on screen (px)">
+          <Field label={t('mapMaker.squareSizePx')}>
             <Input
               type="number"
               min={16}
@@ -165,7 +165,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
           </Field>
           <div className="flex flex-wrap gap-1">
             <Button size="sm" variant={tool === 'select' ? 'default' : 'outline'} onClick={() => setTool('select')}>
-              <Move className="h-4 w-4" /> Pan
+              <Move className="h-4 w-4" /> {t('mapMaker.pan')}
             </Button>
             <Button size="sm" variant={tool === 'open' ? 'default' : 'outline'} onClick={() => setTool('open')}>
               <Footprints className="h-4 w-4" /> {t('map.terrain.open')}
@@ -196,16 +196,16 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
             </Button>
           </div>
           <p className="text-xs text-muted">
-            Walls block walking and sight. Holes cannot be walked but you can see across them. Difficult, ice, fire, and water cost 10 ft per square. Half cover (trees) is +2 AC and Dex saves; three-quarters (stone) is +5. Standing on trees or stone lets you attempt Hide even if enemies can still see you. Full cover is a wall in the way.
+            {t('mapMaker.terrainLegend')}
           </p>
           <div className="rounded-md border border-line p-2">
             <div className="flex items-center gap-2 text-sm">
               <ImagePlus className="h-4 w-4 text-gold" />
-              Background picture
+              {t('mapMaker.backgroundPicture')}
             </div>
-            <p className="mt-1 text-xs text-muted">Optional scenery under the 5-ft grid. The picture is not the map.</p>
+            <p className="mt-1 text-xs text-muted">{t('mapMaker.backgroundPictureHint')}</p>
             <label className="mt-2 flex h-9 cursor-pointer items-center justify-center rounded-md border border-line text-xs hover:bg-panel-2">
-              {draft.imageUrl ? 'Replace background' : 'Add background'}
+              {draft.imageUrl ? t('mapMaker.replaceBackground') : t('mapMaker.addBackground')}
               <input
                 type="file"
                 accept="image/*"
@@ -219,7 +219,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
             </label>
             {draft.imageUrl ? (
               <Button size="sm" variant="ghost" className="mt-1 w-full" onClick={clearBackground}>
-                Remove background
+                {t('mapMaker.removeBackground')}
               </Button>
             ) : null}
           </div>
@@ -229,7 +229,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
                 flush().catch(() => undefined)
               }}
             >
-              Save map
+              {t('mapMaker.saveMap')}
             </Button>
             <Button
               variant="outline"
@@ -237,16 +237,16 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
                 flush().then(onClose).catch(() => undefined)
               }}
             >
-              Done
+              {t('common.done')}
             </Button>
             <Button
               variant="ghost"
               onClick={() => {
-                if (!confirm('Delete this map? Encounters that use it will break.')) return
+                if (!confirm(t('mapMaker.confirmDelete'))) return
                 api.deleteMap(draft.id).then(onDeleted)
               }}
             >
-              Delete
+              {t('common.delete')}
             </Button>
           </div>
           {msg && <p className="text-xs text-moss">{msg}</p>}
