@@ -148,7 +148,7 @@ export function attackOutcome(d20: number, bonus: number, ac: number): 'crit' | 
 }
 
 export function emptyTurnEconomy(): TurnEconomy {
-  return { action: false, bonus: false, reaction: false, movement: false }
+  return { action: false, bonus: false, reaction: false, movement: false, interact: false }
 }
 
 export function parseTurnEconomy(raw: unknown): TurnEconomy {
@@ -160,6 +160,7 @@ export function parseTurnEconomy(raw: unknown): TurnEconomy {
     bonus: Boolean(o.bonus),
     reaction: Boolean(o.reaction),
     movement: Boolean(o.movement),
+    interact: Boolean(o.interact),
   }
 }
 
@@ -175,11 +176,37 @@ export function parseRollMode(raw: unknown): RollMode {
   return 'normal'
 }
 
-/** Stored fumble-advantage plus an explicit disadvantage cancel to a normal roll (5e). */
-export function effectiveRollMode(requested: RollMode, hadStoredAdvantage: boolean): RollMode {
-  if (hadStoredAdvantage && requested === 'disadvantage') return 'normal'
-  if (hadStoredAdvantage && requested === 'normal') return 'advantage'
-  return requested
+/**
+ * Combines a requested mode with any advantage/disadvantage already in play (stored
+ * advantage from hiding/cover, or disadvantage imposed on attackers by a Dodging target).
+ * Matching advantage and disadvantage cancel out to a normal roll (5e RAW).
+ */
+export function effectiveRollMode(requested: RollMode, hadStoredAdvantage: boolean, imposedDisadvantage = false): RollMode {
+  const adv = hadStoredAdvantage || requested === 'advantage'
+  const dis = imposedDisadvantage || requested === 'disadvantage'
+  if (adv && dis) return 'normal'
+  if (adv) return 'advantage'
+  if (dis) return 'disadvantage'
+  return 'normal'
+}
+
+export function isDodging(c: Pick<Combatant, 'conditions'>) {
+  return c.conditions.includes('Dodging')
+}
+
+/**
+ * Dash/Disengage/Hide only become Bonus Actions via a class feature (Rogue's
+ * Cunning Action; Monk's Step of the Wind covers Dash/Disengage only).
+ * Dodge and Help are never Bonus Actions, and Ready always costs the Action.
+ */
+export function bonusDeclareKindAllowed(kind: string, className: string): boolean {
+  const cls = className.toLowerCase()
+  const rogue = cls.includes('rogue')
+  const monk = cls.includes('monk')
+  if (kind === 'dodge' || kind === 'help' || kind === 'ready') return false
+  if (kind === 'hide') return rogue
+  if (kind === 'dash' || kind === 'disengage') return rogue || monk
+  return true
 }
 
 export function pickUsedD20(d20: number, d20b: number | undefined, mode: RollMode) {

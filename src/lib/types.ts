@@ -165,6 +165,7 @@ export type TurnEconomy = {
   bonus: boolean
   reaction: boolean
   movement: boolean
+  interact: boolean
 }
 
 export type CharacterSheetData = {
@@ -431,7 +432,7 @@ export type CombatPrompt = {
   dc?: number
 } | null
 
-export type CombatDeclareKind = 'dash' | 'dodge' | 'help' | 'disengage' | 'hide' | 'other' | 'custom'
+export type CombatDeclareKind = 'dash' | 'dodge' | 'help' | 'disengage' | 'hide' | 'ready' | 'interact' | 'other' | 'custom'
 export type CombatSpendSlot = 'action' | 'bonus' | 'reaction'
 
 export type EncounterInstance = {

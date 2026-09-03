@@ -15,7 +15,7 @@ import { StartFightDialog } from '@/components/StartFightDialog'
 import { TableHub } from '@/components/TableHub'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
-import { attacksFromMonster, canTakeAttacks, decorateTokens, effectiveRollMode, hasHiddenAdvantage, inRangeCombatantIds } from '@/lib/combat'
+import { attacksFromMonster, canTakeAttacks, decorateTokens, effectiveRollMode, hasHiddenAdvantage, isDodging, inRangeCombatantIds } from '@/lib/combat'
 import { LanguageToggle, useT } from '@/lib/i18n'
 import { ThemeToggle } from '@/lib/theme'
 import { useLive } from '@/lib/realtime'
@@ -109,6 +109,7 @@ export function Live() {
         )
       : 0
   const attackHasAdv = Boolean(selectedCombatant && targetId && hasHiddenAdvantage(selectedCombatant, targetId))
+  const attackTargetDodging = Boolean(attackTarget && isDodging(attackTarget))
 
   function pickAttack(attack: Attack, index: number) {
     setPending({ attack, index })
@@ -123,7 +124,7 @@ export function Live() {
   async function submitAttack() {
     if (!instance || !pending || !targetId || !selectedCombatant) return
     const hasAdv = hasHiddenAdvantage(selectedCombatant, targetId)
-    const mode = effectiveRollMode(rollMode, Boolean(hasAdv))
+    const mode = effectiveRollMode(rollMode, Boolean(hasAdv), attackTargetDodging)
     const roll = Number(d20)
     const rollb = Number(d20b)
     const dmg = Number(damage)
@@ -1030,6 +1031,7 @@ export function Live() {
             targetAc={attackTarget ? attackTarget.ac + attackCover : undefined}
             coverBonus={attackCover}
             hasAdvantage={attackHasAdv}
+            targetDodging={attackTargetDodging}
             disabled={!canTakeAttacks(selectedCombatant)}
             disabledReason={
               !canTakeAttacks(selectedCombatant)
@@ -1038,11 +1040,7 @@ export function Live() {
                   : `${selectedCombatant.name} cannot take a normal attack (${selectedCombatant.deathState === 'ok' ? selectedCombatant.conditions.join(', ') || 'incapacitated' : selectedCombatant.deathState}).`
                 : undefined
             }
-            rollMode={
-              attackHasAdv && rollMode === 'normal'
-                ? 'advantage'
-                : rollMode
-            }
+            rollMode={rollMode === 'normal' ? effectiveRollMode('normal', attackHasAdv, attackTargetDodging) : rollMode}
             onRollMode={setRollMode}
             d20={d20}
             d20b={d20b}

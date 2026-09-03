@@ -1968,7 +1968,7 @@ export const supabaseApi: TableApi = {
           : error.message,
       )
     }
-    if (body.kind === 'dash' || body.kind === 'help' || body.kind === 'other' || body.kind === 'custom') {
+    if (body.kind === 'dash' || body.kind === 'help' || body.kind === 'other' || body.kind === 'custom' || body.kind === 'interact' || body.kind === 'ready') {
       const cid = body.combatantId
       if (cid) {
         const { data: row } = await db().from('combatants').select('name, conditions_json').eq('id', cid).maybeSingle()

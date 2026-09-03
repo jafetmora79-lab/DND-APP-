@@ -2,15 +2,13 @@ import type { Ability, CombatActivity, CombatPrompt } from './types.ts'
 
 export const ACTIVITY_CAP = 40
 
-export const OTHER_ACTION_LABELS = ['Jump', 'Climb', 'Interact', 'Search', 'Grapple', 'Shove', 'Cast Spell', 'Custom'] as const
+export const OTHER_ACTION_LABELS = ['Search', 'Grapple', 'Shove', 'Use an Object', 'Cast Spell', 'Custom'] as const
 
 export const OTHER_ACTION_LABEL_KEYS: Record<(typeof OTHER_ACTION_LABELS)[number], string> = {
-  Jump: 'other.jump',
-  Climb: 'other.climb',
-  Interact: 'other.interact',
   Search: 'other.search',
   Grapple: 'other.grapple',
   Shove: 'other.shove',
+  'Use an Object': 'other.useObject',
   'Cast Spell': 'other.castSpell',
   Custom: 'other.custom',
 }

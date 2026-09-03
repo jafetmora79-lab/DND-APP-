@@ -134,7 +134,7 @@ export function sheetForHide(hider: Combatant, characters: PlayerCharacter[]) {
 
 /** Hide is broken by attacking, being attacked, or acting in the open (not Dodge/Disengage/Hide). */
 export function actionRevealsHiding(kind: string) {
-  return kind === 'dash' || kind === 'help' || kind === 'other' || kind === 'custom'
+  return kind === 'dash' || kind === 'help' || kind === 'other' || kind === 'custom' || kind === 'interact' || kind === 'ready'
 }
 
 export function hidingBrokenByWatchers(

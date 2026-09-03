@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS combatants (
   death_state TEXT NOT NULL DEFAULT 'ok',
   death_success INTEGER NOT NULL DEFAULT 0,
   death_fail INTEGER NOT NULL DEFAULT 0,
-  turn_economy_json TEXT NOT NULL DEFAULT '{"action":false,"bonus":false,"reaction":false,"movement":false}',
+  turn_economy_json TEXT NOT NULL DEFAULT '{"action":false,"bonus":false,"reaction":false,"movement":false,"interact":false}',
   stats_json TEXT,
   speed_feet INTEGER NOT NULL DEFAULT 30,
   movement_remaining INTEGER NOT NULL DEFAULT 30,
@@ -234,7 +234,7 @@ try {
   /* already present */
 }
 try {
-  db.exec(`ALTER TABLE combatants ADD COLUMN turn_economy_json TEXT NOT NULL DEFAULT '{"action":false,"bonus":false,"reaction":false,"movement":false}'`)
+  db.exec(`ALTER TABLE combatants ADD COLUMN turn_economy_json TEXT NOT NULL DEFAULT '{"action":false,"bonus":false,"reaction":false,"movement":false,"interact":false}'`)
 } catch {
   /* already present */
 }
@@ -1064,16 +1064,28 @@ export function applyDeclaredAction(opts: {
   if (Number(c.turn_order_position) !== Number(inst.current_turn_position)) throw new Error('Wait for your turn.')
   const slot: CombatSpendSlot = opts.slot === 'bonus' ? 'bonus' : opts.slot === 'reaction' ? 'reaction' : 'action'
   const econ = parseTurnEconomy(jparse((c.turn_economy_json as string) || '{}', {}))
-  if (econ[slot]) throw new Error(`Your ${slot} is already used.`)
+  const kind = String(opts.kind || '') as CombatDeclareKind
+  if (kind === 'interact') {
+    if (econ.interact) throw new Error('You already used your free object interaction this turn.')
+  } else if (econ[slot]) {
+    throw new Error(`Your ${slot} is already used.`)
+  }
   let conditions = jparse<string[]>((c.conditions_json as string) || '[]', [])
   const speed = parseSpeedFeet(c.speed_feet ?? 30)
   let remaining = Number.isFinite(Number(c.movement_remaining)) ? Math.max(0, Number(c.movement_remaining)) : speed
-  const kind = String(opts.kind || '') as CombatDeclareKind
   const name = String(c.name)
   const wasHiding = isHiding({ conditions })
   let text = ''
   let success: boolean | undefined
-  if (kind === 'dash') {
+  if (kind === 'interact') {
+    const label = String(opts.other || '').trim()
+    if (!label) throw new Error('Say what you want to interact with.')
+    text = `${name} interacts with ${label} (free object interaction).`
+  } else if (kind === 'ready') {
+    const label = String(opts.custom || opts.other || '').trim()
+    if (!label) throw new Error('Describe your trigger and response for Ready.')
+    text = `${name} readied an action: ${label}.`
+  } else if (kind === 'dash') {
     remaining += speed
     text = `${name} used Dash.`
   } else if (kind === 'dodge') {
@@ -1125,7 +1137,8 @@ export function applyDeclaredAction(opts: {
     conditions = withoutHiding(conditions)
     text += ' No longer hidden.'
   }
-  econ[slot] = true
+  if (kind === 'interact') econ.interact = true
+  else econ[slot] = true
   db.prepare('UPDATE combatants SET conditions_json = ?, turn_economy_json = ?, movement_remaining = ? WHERE id = ?').run(
     JSON.stringify(conditions),
     JSON.stringify(econ),

@@ -127,7 +127,7 @@ create table if not exists public.combatants (
   death_state text not null default 'ok',
   death_success int not null default 0,
   death_fail int not null default 0,
-  turn_economy_json jsonb not null default '{"action":false,"bonus":false,"reaction":false,"movement":false}'::jsonb,
+  turn_economy_json jsonb not null default '{"action":false,"bonus":false,"reaction":false,"movement":false,"interact":false}'::jsonb,
   stats_json jsonb,
   speed_feet int not null default 30,
   movement_remaining int not null default 30
@@ -281,7 +281,7 @@ alter table public.combatants add column if not exists advantage_against_json js
 alter table public.combatants add column if not exists death_state text not null default 'ok';
 alter table public.combatants add column if not exists death_success int not null default 0;
 alter table public.combatants add column if not exists death_fail int not null default 0;
-alter table public.combatants add column if not exists turn_economy_json jsonb not null default '{"action":false,"bonus":false,"reaction":false,"movement":false}'::jsonb;
+alter table public.combatants add column if not exists turn_economy_json jsonb not null default '{"action":false,"bonus":false,"reaction":false,"movement":false,"interact":false}'::jsonb;
 alter table public.combatants add column if not exists stats_json jsonb;
 alter table public.combatants add column if not exists speed_feet int not null default 30;
 alter table public.combatants add column if not exists movement_remaining int not null default 30;
@@ -1106,14 +1106,26 @@ begin
   end if;
   slot := case when p_slot in ('bonus', 'reaction') then p_slot else 'action' end;
   econ := coalesce(c.turn_economy_json, '{}'::jsonb);
-  if coalesce((econ->>slot)::boolean, false) then
+  kind := lower(coalesce(p_kind, ''));
+  if kind = 'interact' then
+    if coalesce((econ->>'interact')::boolean, false) then
+      raise exception 'You already used your free object interaction this turn.';
+    end if;
+  elsif coalesce((econ->>slot)::boolean, false) then
     raise exception 'Your % is already used.', slot;
   end if;
   cond := coalesce(c.conditions_json, '[]'::jsonb);
   speed := coalesce(c.speed_feet, 30);
   remaining := greatest(0, coalesce(c.movement_remaining, speed));
-  kind := lower(coalesce(p_kind, ''));
-  if kind = 'dash' then
+  if kind = 'interact' then
+    label := trim(coalesce(p_other, ''));
+    if label = '' then raise exception 'Say what you want to interact with.'; end if;
+    txt := format('%s interacts with %s (free object interaction).', c.name, label);
+  elsif kind = 'ready' then
+    label := trim(coalesce(p_custom, p_other, ''));
+    if label = '' then raise exception 'Describe your trigger and response for Ready.'; end if;
+    txt := format('%s readied an action: %s.', c.name, label);
+  elsif kind = 'dash' then
     remaining := remaining + speed;
     txt := format('%s used Dash.', c.name);
   elsif kind = 'dodge' then
@@ -1140,14 +1152,18 @@ begin
   else
     raise exception 'Unknown action';
   end if;
-  if kind in ('dash', 'help', 'other', 'custom') then
+  if kind in ('dash', 'help', 'other', 'custom', 'interact', 'ready') then
     cond := coalesce((
       select jsonb_agg(to_jsonb(x))
       from jsonb_array_elements_text(coalesce(cond, '[]'::jsonb)) x
       where lower(x) <> 'hiding'
     ), '[]'::jsonb);
   end if;
-  econ := jsonb_set(econ, array[slot], 'true'::jsonb);
+  if kind = 'interact' then
+    econ := jsonb_set(econ, '{interact}', 'true'::jsonb);
+  else
+    econ := jsonb_set(econ, array[slot], 'true'::jsonb);
+  end if;
   update public.combatants
     set conditions_json = cond, turn_economy_json = econ, movement_remaining = remaining
     where id = c.id;
@@ -1434,7 +1450,7 @@ begin
   update public.encounter_instances set current_turn_position = pos, round_number = rnd where id = inst.id;
   if nxt.id is not null and can_act then
     update public.combatants
-      set turn_economy_json = '{"action":false,"bonus":false,"reaction":false,"movement":false}'::jsonb,
+      set turn_economy_json = '{"action":false,"bonus":false,"reaction":false,"movement":false,"interact":false}'::jsonb,
           movement_remaining = coalesce(speed_feet, 30),
           attacks_used = 0
       where id = nxt.id;

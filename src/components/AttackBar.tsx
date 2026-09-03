@@ -13,6 +13,7 @@ type Props = {
   targetAc?: number
   coverBonus?: number
   hasAdvantage?: boolean
+  targetDodging?: boolean
   disabled?: boolean
   disabledReason?: string
   rollMode: RollMode
@@ -38,6 +39,7 @@ export function AttackBar({
   targetAc,
   coverBonus = 0,
   hasAdvantage,
+  targetDodging,
   disabled,
   disabledReason,
   rollMode,
@@ -92,6 +94,7 @@ export function AttackBar({
                 {coverBonus ? 'Advantage vs this target' : 'Stored advantage vs this target'}
               </span>
             )}
+            {targetDodging && <span className="self-center text-xs text-blood">Target is Dodging — disadvantage unless cancelled</span>}
           </div>
           <div className={cn('mt-2 grid gap-2 md:items-end', twoDice ? 'md:grid-cols-[1fr_4.5rem_4.5rem_4.5rem_auto]' : 'md:grid-cols-[1fr_5rem_5rem_auto]')}>
             <p className="text-sm text-muted">

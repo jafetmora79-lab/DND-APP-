@@ -6,7 +6,7 @@ import { RollInputModal, type RollOutcome } from '@/components/RollInputModal'
 import { ActionEconomyBar } from '@/components/ActionEconomyBar'
 import { TurnIndicator } from '@/components/TurnIndicator'
 import { api } from '@/lib/api'
-import { attackOutcome, canTakeAttacks, characterSaveBonus, effectiveRollMode, hasHiddenAdvantage, parseAttackBonus, pickUsedD20 } from '@/lib/combat'
+import { attackOutcome, bonusDeclareKindAllowed, canTakeAttacks, characterSaveBonus, effectiveRollMode, hasHiddenAdvantage, isDodging, parseAttackBonus, pickUsedD20 } from '@/lib/combat'
 import { OTHER_ACTION_LABEL_KEYS, OTHER_ACTION_LABELS } from '@/lib/combat-activity'
 import { useT } from '@/lib/i18n'
 import { canAttemptHide, hideDcFor } from '@/lib/stealth'
@@ -16,7 +16,7 @@ import { coverBonusBetween } from '@/lib/vision'
 
 export type MapPickMode = 'select' | 'attack' | 'help'
 
-type Menu = null | 'action' | 'bonus' | 'reaction' | 'other' | 'help' | 'attack' | 'custom' | 'hide'
+type Menu = null | 'action' | 'bonus' | 'reaction' | 'other' | 'help' | 'attack' | 'custom' | 'hide' | 'ready'
 type AttackStep = 'pick' | 'target' | 'roll' | 'damage'
 type ModalType = null | 'initiative' | 'save' | 'hide' | 'attack-d20' | 'attack-damage'
 
@@ -27,6 +27,7 @@ const DECLARE_KINDS = [
   { kind: 'help', labelKey: 'declare.help' },
   { kind: 'disengage', labelKey: 'declare.disengage' },
   { kind: 'hide', labelKey: 'declare.hide' },
+  { kind: 'ready', labelKey: 'declare.ready' },
   { kind: 'other', labelKey: 'declare.other' },
 ] as const
 
@@ -87,6 +88,7 @@ export function PlayerTurnPanel({
   const [rollMode, setRollMode] = useState<RollMode>('normal')
   const [d20, setD20] = useState('')
   const [custom, setCustom] = useState('')
+  const [interactText, setInteractText] = useState('')
   const [reactionNote, setReactionNote] = useState('')
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
@@ -118,6 +120,7 @@ export function PlayerTurnPanel({
     setPending(null)
     setD20('')
     setCustom('')
+    setInteractText('')
     setRollMode('normal')
     setModalType(null)
     setPendingResult(null)
@@ -193,11 +196,17 @@ export function PlayerTurnPanel({
       setMsg('')
       return
     }
+    if (kind === 'ready') {
+      setMenu('ready')
+      setCustom('')
+      return
+    }
     void declare(kind)
   }
 
   const hasAdv = Boolean(target && combatant && hasHiddenAdvantage(combatant, target.id))
-  const mode = effectiveRollMode(rollMode, hasAdv)
+  const targetDodging = Boolean(target && isDodging(target))
+  const mode = effectiveRollMode(rollMode, hasAdv, targetDodging)
   const coverBonus =
     map && combatant && target
       ? coverBonusBetween(
@@ -332,7 +341,12 @@ export function PlayerTurnPanel({
 
   const hideGate = combatant && map ? canAttemptHide(combatant, combatants, tokens, map) : null
   const hideDc = combatant ? hideDcFor(combatant, combatants, [character], monsters) : 10
-  const declareList = slot === 'reaction' ? REACTION_KINDS : DECLARE_KINDS
+  const declareList =
+    slot === 'reaction'
+      ? REACTION_KINDS
+      : slot === 'bonus'
+        ? DECLARE_KINDS.filter((k) => bonusDeclareKindAllowed(k.kind, character.sheet.className))
+        : DECLARE_KINDS
 
   return (
     <div className="border-t border-line bg-panel px-3 py-2">
@@ -391,7 +405,7 @@ export function PlayerTurnPanel({
       {myTurn && combatant && !setup && (
         <>
           <div className="mt-3 flex flex-wrap gap-2 justify-center">
-            <Button variant={menu === 'action' || menu === 'attack' || menu === 'hide' || (menu === 'other' && slot === 'action') || menu === 'help' ? 'default' : 'outline'} disabled={Boolean(econ?.action)} onClick={() => openSlot('action')} size="default">
+            <Button variant={menu === 'action' || menu === 'attack' || menu === 'hide' || menu === 'ready' || (menu === 'other' && slot === 'action') || menu === 'help' ? 'default' : 'outline'} disabled={Boolean(econ?.action)} onClick={() => openSlot('action')} size="default">
               <Swords className="h-4 w-4" /> {t('turn.action')}
             </Button>
             <Button variant={menu === 'bonus' || (menu === 'other' && slot === 'bonus') ? 'default' : 'outline'} disabled={Boolean(econ?.bonus)} onClick={() => openSlot('bonus')} size="default">
@@ -411,6 +425,25 @@ export function PlayerTurnPanel({
           </div>
 
           {menu === 'reaction' && <p className="mt-2 text-center text-xs text-muted">{t('turn.reactionHint')}</p>}
+
+          {!menu && !econ?.interact && (
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+              <Input
+                className="h-8 w-44 text-xs"
+                placeholder={t('turn.interactPlaceholder')}
+                value={interactText}
+                onChange={(e) => setInteractText(e.target.value)}
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy || !interactText.trim()}
+                onClick={() => void declare('interact', { other: interactText })}
+              >
+                {t('turn.interactButton')}
+              </Button>
+            </div>
+          )}
 
           {(menu === 'action' || menu === 'bonus' || menu === 'reaction') && (
             <div className="mt-2 flex flex-wrap gap-2 justify-center">
@@ -454,6 +487,15 @@ export function PlayerTurnPanel({
             <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end justify-center">
               <Input className="h-10 flex-1 min-w-[12rem]" placeholder={t('turn.customPlaceholder')} value={custom} onChange={(e) => setCustom(e.target.value)} />
               <Button disabled={busy || !custom.trim()} onClick={() => void declare('custom', { custom })} size="default">
+                {t('turn.declareAction')}
+              </Button>
+            </div>
+          )}
+
+          {menu === 'ready' && (
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end justify-center">
+              <Input className="h-10 flex-1 min-w-[12rem]" placeholder={t('turn.readyPlaceholder')} value={custom} onChange={(e) => setCustom(e.target.value)} />
+              <Button disabled={busy || !custom.trim()} onClick={() => void declare('ready', { custom })} size="default">
                 {t('turn.declareAction')}
               </Button>
             </div>
@@ -545,6 +587,7 @@ export function PlayerTurnPanel({
                 {others.map((c) => {
                   const isTarget = selectedId === c.id
                   const hasAdv = Boolean(combatant && hasHiddenAdvantage(combatant, c.id))
+                  const dodging = isDodging(c)
                   const targetCover = map && combatant
                     ? coverBonusBetween(
                         map,
@@ -570,6 +613,7 @@ export function PlayerTurnPanel({
                         <span className="font-medium text-sm">{c.name}</span>
                         <div className="flex items-center gap-2">
                           {hasAdv && <span className="text-[10px] uppercase text-gold">{t('turn.advBadge')}</span>}
+                          {dodging && <span className="text-[10px] uppercase text-blood">{t('turn.dodgeBadge')}</span>}
                           <span className="text-xs text-muted">{t('sheet.acShort')} {previewAc}</span>
                         </div>
                       </div>
@@ -583,7 +627,8 @@ export function PlayerTurnPanel({
               </div>
               <Button className="mt-2 w-full" size="default" disabled={!selectedId} onClick={() => {
                 const adv = Boolean(selectedId && combatant && hasHiddenAdvantage(combatant, selectedId))
-                setRollMode(adv ? 'advantage' : 'normal')
+                const dodge = Boolean(target && isDodging(target))
+                setRollMode(effectiveRollMode('normal', adv, dodge))
                 setStep('roll')
                 setModalType('attack-d20')
               }}>
@@ -606,6 +651,7 @@ export function PlayerTurnPanel({
                 ))}
               </div>
               {hasAdv && <p className="mt-2 text-xs text-gold text-center">{t('turn.advVsTarget')}</p>}
+              {targetDodging && <p className="mt-2 text-xs text-blood text-center">{t('turn.dodgeHint')}</p>}
               {preview && (
                 <div className="mt-3 rounded-lg bg-bg px-3 py-2 border border-gold/30">
                   <p className="text-sm text-center">
