@@ -293,7 +293,7 @@ export function PlayerTurnPanel({
 
   return (
     <div className="border-t border-line bg-panel px-3 py-2">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
         <TurnIndicator current={whose} myTurn={myTurn} combatantName={combatant?.name ?? character.name} setup={setup} />
         {combatant && <ActionEconomyBar combatant={combatant} />}
       </div>

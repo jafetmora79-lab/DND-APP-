@@ -218,54 +218,56 @@ export function Player() {
     const stage = tableAmbiance(snap.campaign.hub, snap.session)
     return (
       <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
-        <header className="flex items-center gap-3 border-b border-line bg-panel-2/30 px-4 py-3">
-          <div className="min-w-0 flex-1">
+        <header className="flex flex-wrap items-center gap-2 border-b border-line bg-panel-2/30 px-3 py-2 sm:px-4 sm:py-3">
+          <div className="w-full min-w-0">
             <div className="truncate font-display text-sm text-gold-2">{snap.campaign.name}</div>
             <div className="truncate text-xs text-muted">{stage.caption || t('player.waiting')}</div>
           </div>
-          {me && (
-            <div className="stat-num text-sm">
-              {me.sheet.hpCurrent}/{me.sheet.hpMax} {t('player.hp')}
-            </div>
-          )}
-          {supportsNotifications() && (
-            <button
-              type="button"
-              onClick={enableNotifs}
-              className={cn(
-                'shrink-0 rounded-md border p-2 text-xs transition',
-                notifOn ? 'border-ember/40 bg-ember/10 text-ember' : 'border-line text-muted hover:border-gold/40 hover:text-gold',
-              )}
-              aria-label={notifOn ? 'Turn notifications on' : 'Enable turn notifications'}
-              title={notifOn ? 'Turn notifications on' : 'Alert me when it’s my turn'}
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            {me && (
+              <div className="stat-num shrink-0 text-sm">
+                {me.sheet.hpCurrent}/{me.sheet.hpMax} {t('player.hp')}
+              </div>
+            )}
+            {supportsNotifications() && (
+              <button
+                type="button"
+                onClick={enableNotifs}
+                className={cn(
+                  'shrink-0 rounded-md border p-2 text-xs transition',
+                  notifOn ? 'border-ember/40 bg-ember/10 text-ember' : 'border-line text-muted hover:border-gold/40 hover:text-gold',
+                )}
+                aria-label={notifOn ? 'Turn notifications on' : 'Enable turn notifications'}
+                title={notifOn ? 'Turn notifications on' : 'Alert me when it’s my turn'}
+              >
+                {notifOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+              </button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 shrink-0 px-3 text-xs"
+              onClick={() => {
+                haptic('tap')
+                setDrawer(true)
+              }}
             >
-              {notifOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
-            </button>
-          )}
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 px-3 text-xs"
-            onClick={() => {
-              haptic('tap')
-              setDrawer(true)
-            }}
-          >
-            <Users className="h-4 w-4" /> Party
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 px-3 text-xs"
-            onClick={() => {
-              logout()
-              nav('/')
-            }}
-          >
-            {t('player.leave')}
-          </Button>
-          <LanguageToggle />
-          <ThemeToggle />
+              <Users className="h-4 w-4" /> {t('player.party')}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 shrink-0 px-3 text-xs"
+              onClick={() => {
+                logout()
+                nav('/')
+              }}
+            >
+              {t('player.leave')}
+            </Button>
+            <LanguageToggle />
+            <ThemeToggle />
+          </div>
         </header>
         {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
         <TableHub
@@ -334,8 +336,8 @@ export function Player() {
         </div>
       )}
 
-      <header className="flex shrink-0 items-center gap-3 border-b border-line bg-panel-2/30 px-4 py-3">
-        <div className="min-w-0 flex-1">
+      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel-2/30 px-3 py-2 sm:px-4 sm:py-3">
+        <div className="w-full min-w-0">
           <div className="truncate font-display text-sm text-gold-2">{snap.campaign.name}</div>
           <div className="truncate text-xs text-muted">
             {isFightSetup(snap.session, snap.instance)
@@ -345,49 +347,51 @@ export function Player() {
                 : t('player.noEncounter')}
           </div>
         </div>
-        {me && (
-          <div className={cn(
-            'stat-num text-sm',
-            myCombatant && myCombatant.deathState === 'dying' && 'animate-pulse text-blood',
-          )}>
-            {myCombatant ? `${myCombatant.hpCurrent}/${myCombatant.hpMax}` : `${me.sheet.hpCurrent}/${me.sheet.hpMax}`} {t('player.hp')}
-          </div>
-        )}
-        {supportsNotifications() && (
-          <button
-            type="button"
-            onClick={enableNotifs}
-            className={cn(
-              'shrink-0 rounded-md border p-2 transition',
-              notifOn ? 'border-ember/40 bg-ember/10 text-ember' : 'border-line text-muted hover:border-gold/40 hover:text-gold',
-            )}
-            aria-label={notifOn ? 'Turn notifications on' : 'Enable turn notifications'}
-            title={notifOn ? 'Turn notifications on' : 'Alert me when it’s my turn'}
-          >
-            {notifOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
-          </button>
-        )}
-        {setup && (
-          <Button size="sm" variant="outline" className="h-8 px-3 text-xs" onClick={() => { haptic('tap'); setInitOpen(true) }}>
-            {t('init.title')}
+        <div className="flex w-full flex-wrap items-center justify-end gap-2">
+          {me && (
+            <div className={cn(
+              'stat-num shrink-0 text-sm',
+              myCombatant && myCombatant.deathState === 'dying' && 'animate-pulse text-blood',
+            )}>
+              {myCombatant ? `${myCombatant.hpCurrent}/${myCombatant.hpMax}` : `${me.sheet.hpCurrent}/${me.sheet.hpMax}`} {t('player.hp')}
+            </div>
+          )}
+          {supportsNotifications() && (
+            <button
+              type="button"
+              onClick={enableNotifs}
+              className={cn(
+                'shrink-0 rounded-md border p-2 transition',
+                notifOn ? 'border-ember/40 bg-ember/10 text-ember' : 'border-line text-muted hover:border-gold/40 hover:text-gold',
+              )}
+              aria-label={notifOn ? 'Turn notifications on' : 'Enable turn notifications'}
+              title={notifOn ? 'Turn notifications on' : 'Alert me when it’s my turn'}
+            >
+              {notifOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+            </button>
+          )}
+          {setup && (
+            <Button size="sm" variant="outline" className="h-8 shrink-0 px-3 text-xs" onClick={() => { haptic('tap'); setInitOpen(true) }}>
+              {t('init.title')}
+            </Button>
+          )}
+          <Button size="sm" variant="outline" className="h-8 shrink-0 px-3 text-xs" onClick={() => { haptic('tap'); setDrawer(true) }}>
+            <Users className="h-4 w-4" /> {t('player.party')}
           </Button>
-        )}
-        <Button size="sm" variant="outline" className="h-8 px-3 text-xs" onClick={() => { haptic('tap'); setDrawer(true) }}>
-          <Users className="h-4 w-4" /> Party
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 px-3 text-xs"
-          onClick={() => {
-            logout()
-            nav('/')
-          }}
-        >
-          {t('player.leave')}
-        </Button>
-        <LanguageToggle />
-        <ThemeToggle />
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 shrink-0 px-3 text-xs"
+            onClick={() => {
+              logout()
+              nav('/')
+            }}
+          >
+            {t('player.leave')}
+          </Button>
+          <LanguageToggle />
+          <ThemeToggle />
+        </div>
       </header>
       {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
 
@@ -518,7 +522,7 @@ export function Player() {
             </div>
           )}
           {note && <p className="shrink-0 border-t border-line bg-panel px-3 py-1 text-sm text-gold">{note}</p>}
-          <div className="max-h-[40vh] shrink-0 overflow-y-auto pb-[env(safe-area-inset-bottom)] lg:max-h-[30vh]">
+          <div className="max-h-[40vh] shrink-0 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:max-h-[30vh]">
           <PlayerTurnPanel
             instanceId={snap.instance.id}
             character={me}

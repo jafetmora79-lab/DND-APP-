@@ -626,30 +626,32 @@ export function MapBoard({
           </Layer>
         )}
       </Stage>
-      <div className="pointer-events-none absolute bottom-3 right-3 z-10 flex flex-col gap-1">
+      <div className="pointer-events-none absolute bottom-2 right-2 z-10 flex flex-col overflow-hidden rounded-md border border-line bg-panel/60 shadow backdrop-blur-sm">
         <button
           type="button"
-          className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md border border-line bg-panel/90 text-ink shadow"
+          className="pointer-events-auto grid h-7 w-7 place-items-center text-ink/80 transition-colors hover:bg-panel hover:text-ink"
           aria-label="Zoom in"
           onClick={() => zoomBy(1.2)}
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3.5 w-3.5" />
         </button>
+        <div className="h-px bg-line" />
         <button
           type="button"
-          className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md border border-line bg-panel/90 text-ink shadow"
+          className="pointer-events-auto grid h-7 w-7 place-items-center text-ink/80 transition-colors hover:bg-panel hover:text-ink"
           aria-label="Zoom out"
           onClick={() => zoomBy(1 / 1.2)}
         >
-          <Minus className="h-4 w-4" />
+          <Minus className="h-3.5 w-3.5" />
         </button>
+        <div className="h-px bg-line" />
         <button
           type="button"
-          className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md border border-line bg-panel/90 text-ink shadow"
+          className="pointer-events-auto grid h-7 w-7 place-items-center text-ink/80 transition-colors hover:bg-panel hover:text-ink"
           aria-label="Fit map"
           onClick={fitNow}
         >
-          <Maximize2 className="h-4 w-4" />
+          <Maximize2 className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>

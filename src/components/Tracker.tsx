@@ -88,7 +88,9 @@ export function Tracker({
       <ul className="mt-2 flex-1 space-y-1.5 overflow-y-auto scroll-thin px-2 pb-2">
         {ordered.map((c, i) => {
           const econ = c.turnEconomy ?? emptyTurnEconomy()
-          const canEcon = isDm || c.id === economyId
+          // Only the DM gets manual override toggles here; players see their own action economy
+          // via the icon row under "Your turn" (ActionEconomyBar) instead of a second, editable copy.
+          const canEcon = isDm
           const dying = c.deathState === 'dying' || c.deathState === 'stable' || c.deathState === 'dead'
           return (
           <li
