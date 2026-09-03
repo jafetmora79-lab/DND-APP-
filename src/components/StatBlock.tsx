@@ -1,3 +1,4 @@
+import { useT } from '@/lib/i18n'
 import { abilityMod, cn, signed } from '@/lib/utils'
 import type { Monster } from '@/lib/types'
 
@@ -25,13 +26,14 @@ function Entries({ title, items }: { title: string; items?: { name: string; desc
 }
 
 export function StatBlock({ monster, className }: { monster: Monster; className?: string }) {
+  const { t } = useT()
   const scores = [
-    ['STR', monster.str],
-    ['DEX', monster.dex],
-    ['CON', monster.con],
-    ['INT', monster.int],
-    ['WIS', monster.wis],
-    ['CHA', monster.cha],
+    ['str', monster.str],
+    ['dex', monster.dex],
+    ['con', monster.con],
+    ['int', monster.int],
+    ['wis', monster.wis],
+    ['cha', monster.cha],
   ] as const
   return (
     <article className={cn('space-y-3 rounded-lg border border-line bg-panel/50 p-4 shadow-sm', className)}>
@@ -42,36 +44,36 @@ export function StatBlock({ monster, className }: { monster: Monster; className?
         </p>
       </header>
       <div className="h-px border-gold/30" />
-      <Line label="Armor Class" value={`${monster.acValue}${monster.acNote ? ` (${monster.acNote})` : ''}`} />
-      <Line label="Hit Points" value={`${monster.hpMax}${monster.hitDiceFormula ? ` (${monster.hitDiceFormula})` : ''}`} />
-      <Line label="Speed" value={monster.speed} />
+      <Line label={t('statblock.armorClass')} value={`${monster.acValue}${monster.acNote ? ` (${monster.acNote})` : ''}`} />
+      <Line label={t('statblock.hitPoints')} value={`${monster.hpMax}${monster.hitDiceFormula ? ` (${monster.hitDiceFormula})` : ''}`} />
+      <Line label={t('statblock.speed')} value={monster.speed} />
       <div className="grid grid-cols-6 gap-1 border-y border-line py-2 text-center">
         {scores.map(([k, v]) => (
           <div key={k}>
-            <div className="text-[10px] uppercase text-muted">{k}</div>
+            <div className="text-[10px] uppercase text-muted">{t(`ability.${k}`)}</div>
             <div className="stat-num text-sm">
               {v} ({signed(abilityMod(v))})
             </div>
           </div>
         ))}
       </div>
-      <Line label="Saving Throws" value={monster.savingThrows} />
-      <Line label="Skills" value={monster.skills} />
-      <Line label="Damage Vulnerabilities" value={monster.damageVulnerabilities} />
-      <Line label="Damage Resistances" value={monster.damageResistances} />
-      <Line label="Damage Immunities" value={monster.damageImmunities} />
-      <Line label="Condition Immunities" value={monster.conditionImmunities} />
-      <Line label="Senses" value={monster.senses} />
-      <Line label="Languages" value={monster.languages} />
-      <Line label="Challenge" value={`${monster.challengeRating} (${monster.xp.toLocaleString()} XP)`} />
-      <Line label="Proficiency Bonus" value={signed(monster.proficiencyBonus)} />
+      <Line label={t('statblock.savingThrows')} value={monster.savingThrows} />
+      <Line label={t('statblock.skills')} value={monster.skills} />
+      <Line label={t('statblock.damageVulnerabilities')} value={monster.damageVulnerabilities} />
+      <Line label={t('statblock.damageResistances')} value={monster.damageResistances} />
+      <Line label={t('statblock.damageImmunities')} value={monster.damageImmunities} />
+      <Line label={t('statblock.conditionImmunities')} value={monster.conditionImmunities} />
+      <Line label={t('statblock.senses')} value={monster.senses} />
+      <Line label={t('statblock.languages')} value={monster.languages} />
+      <Line label={t('statblock.challenge')} value={`${monster.challengeRating} (${monster.xp.toLocaleString()} ${t('sheet.xpShort')})`} />
+      <Line label={t('statblock.proficiencyBonus')} value={signed(monster.proficiencyBonus)} />
       <div className="h-px border-gold/30" />
-      <Entries title="Traits" items={monster.traits} />
-      <Entries title="Actions" items={monster.actions} />
-      <Entries title="Bonus Actions" items={monster.bonusActions} />
-      <Entries title="Reactions" items={monster.reactions} />
-      <Entries title="Legendary Actions" items={monster.legendaryActions} />
-      <Entries title="Lair Actions" items={monster.lairActions} />
+      <Entries title={t('statblock.traits')} items={monster.traits} />
+      <Entries title={t('statblock.actions')} items={monster.actions} />
+      <Entries title={t('statblock.bonusActions')} items={monster.bonusActions} />
+      <Entries title={t('statblock.reactions')} items={monster.reactions} />
+      <Entries title={t('statblock.legendaryActions')} items={monster.legendaryActions} />
+      <Entries title={t('statblock.lairActions')} items={monster.lairActions} />
     </article>
   )
 }
