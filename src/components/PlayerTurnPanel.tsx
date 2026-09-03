@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Shield, Sparkles, Swords } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { RollInputModal } from '@/components/RollInputModal'
+import { RollInputModal, type RollOutcome } from '@/components/RollInputModal'
 import { ActionEconomyBar } from '@/components/ActionEconomyBar'
 import { TurnIndicator } from '@/components/TurnIndicator'
 import { api } from '@/lib/api'
@@ -81,6 +82,7 @@ export function PlayerTurnPanel({
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
   const [modalType, setModalType] = useState<ModalType>(null)
+  const [pendingResult, setPendingResult] = useState<RollOutcome | null>(null)
 
   const others = combatants.filter((c) => c.id !== combatant?.id)
   const target = combatants.find((c) => c.id === selectedId)
@@ -109,6 +111,7 @@ export function PlayerTurnPanel({
     setCustom('')
     setRollMode('normal')
     setModalType(null)
+    setPendingResult(null)
     onSelectedId(null)
   }
 
@@ -137,8 +140,16 @@ export function PlayerTurnPanel({
         d20: extra?.d20,
       })
       setMsg(r.text)
-      resetMenus()
       onSettled?.()
+      if (kind === 'hide' && typeof r.success === 'boolean') {
+        setPendingResult({
+          tone: r.success ? 'success' : 'fail',
+          heading: r.success ? t('roll.success') : t('roll.fail'),
+          detail: r.text,
+        })
+      } else {
+        resetMenus()
+      }
     } catch (e) {
       setMsg(e instanceof Error ? e.message : t('turn.errDeclare'))
     } finally {
@@ -223,12 +234,27 @@ export function PlayerTurnPanel({
     }
   }
 
-  function continueFromRoll() {
-    if (!preview) {
+  function revealAttackRoll(value: number) {
+    if (!pending || !target || !Number.isInteger(value) || value < 1 || value > 20) {
       setMsg(t('turn.errEnterD20'))
       return
     }
-    if (preview.outcome === 'miss' || preview.outcome === 'fumble') {
+    setD20(String(value))
+    const bonus = parseAttackBonus(pending.attack.bonus)
+    const dice = pickUsedD20(value, undefined, mode)
+    const outcome = attackOutcome(dice.used, bonus, previewAc)
+    const total = dice.used + bonus
+    setPendingResult({
+      tone: outcome === 'hit' || outcome === 'crit' ? 'success' : 'fail',
+      heading: t(`turn.outcome.${outcome}`),
+      detail: t('roll.attackDetail', { total, ac: previewAc }),
+    })
+  }
+
+  function continueFromAttackRoll() {
+    const outcome = pendingResult?.tone
+    setPendingResult(null)
+    if (outcome === 'fail') {
       void submitAttack(0)
       return
     }
@@ -255,8 +281,16 @@ export function PlayerTurnPanel({
     try {
       const r = await api.answerPrompt(instanceId, { d20: d20Value })
       setMsg(r.message || '')
-      setModalType(null)
       onSettled?.()
+      if (typeof r.success === 'boolean') {
+        setPendingResult({
+          tone: r.success ? 'success' : 'fail',
+          heading: r.success ? t('roll.success') : t('roll.fail'),
+          detail: typeof r.total === 'number' ? t('roll.totalDetail', { total: r.total }) : r.message,
+        })
+      } else {
+        setModalType(null)
+      }
     } catch (e) {
       setMsg(e instanceof Error ? e.message : t('turn.errSave'))
     } finally {
@@ -349,13 +383,13 @@ export function PlayerTurnPanel({
         <>
           <div className="mt-3 flex flex-wrap gap-2 justify-center">
             <Button variant={menu === 'action' || menu === 'attack' || menu === 'hide' || (menu === 'other' && slot === 'action') || menu === 'help' ? 'default' : 'outline'} disabled={Boolean(econ?.action)} onClick={() => openSlot('action')} size="default">
-              {t('turn.action')}
+              <Swords className="h-4 w-4" /> {t('turn.action')}
             </Button>
             <Button variant={menu === 'bonus' || (menu === 'other' && slot === 'bonus') ? 'default' : 'outline'} disabled={Boolean(econ?.bonus)} onClick={() => openSlot('bonus')} size="default">
-              {t('turn.bonusAction')}
+              <Sparkles className="h-4 w-4" /> {t('turn.bonusAction')}
             </Button>
             <Button variant={menu === 'reaction' || (menu === 'other' && slot === 'reaction') ? 'default' : 'outline'} disabled={Boolean(econ?.reaction)} onClick={() => openSlot('reaction')} size="default">
-              {t('turn.reaction')}
+              <Shield className="h-4 w-4" /> {t('turn.reaction')}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => void endTurn()} size="default">
               {t('turn.endTurn')}
@@ -628,6 +662,11 @@ export function PlayerTurnPanel({
         placeholder={t('turn.d20Placeholder')}
         d20={true}
         disabled={busy}
+        result={pendingResult}
+        onContinue={() => {
+          setPendingResult(null)
+          setModalType(null)
+        }}
         onSubmit={(value) => {
           void answerSave(value)
         }}
@@ -642,9 +681,13 @@ export function PlayerTurnPanel({
         placeholder={t('turn.d20Placeholder')}
         d20={true}
         disabled={busy}
+        result={pendingResult}
+        onContinue={() => {
+          setPendingResult(null)
+          resetMenus()
+        }}
         onSubmit={(value) => {
           void declare('hide', { d20: value })
-          setModalType(null)
         }}
         onCancel={() => setModalType(null)}
       />
@@ -657,12 +700,12 @@ export function PlayerTurnPanel({
         placeholder={t('turn.d20Placeholder')}
         d20={true}
         disabled={busy}
-        onSubmit={(value) => {
-          setD20(String(value))
-          setTimeout(() => continueFromRoll(), 50)
-        }}
+        result={pendingResult}
+        onContinue={continueFromAttackRoll}
+        onSubmit={revealAttackRoll}
         onCancel={() => {
           setModalType(null)
+          setPendingResult(null)
           setStep('target')
         }}
       />

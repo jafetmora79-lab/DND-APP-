@@ -1049,6 +1049,7 @@ export function applyDeclaredAction(opts: {
   const name = String(c.name)
   const wasHiding = isHiding({ conditions })
   let text = ''
+  let success: boolean | undefined
   if (kind === 'dash') {
     remaining += speed
     text = `${name} used Dash.`
@@ -1080,6 +1081,7 @@ export function applyDeclaredAction(opts: {
     if (!result.ok) throw new Error(result.message)
     conditions = result.success ? withHiding(conditions) : withoutHiding(conditions)
     text = result.message
+    success = result.success
   } else if (kind === 'help') {
     const ally = opts.targetId
       ? (db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(opts.targetId, opts.instanceId) as
@@ -1108,7 +1110,7 @@ export function applyDeclaredAction(opts: {
     c.id,
   )
   appendInstanceActivity(String(inst.id), text)
-  return { text }
+  return { text, success }
 }
 
 export function resolvePromptSave(opts: { instanceId: string; combatantId: string; d20: number }) {

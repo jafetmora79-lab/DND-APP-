@@ -179,7 +179,7 @@ export const localApi = {
   declareAction: (
     instanceId: string,
     body: { kind: string; slot?: string; combatantId?: string; targetId?: string; other?: string; custom?: string; d20?: number },
-  ) => req<{ text: string }>(`/api/instances/${instanceId}/declare`, { method: 'POST', body: JSON.stringify(body) }),
+  ) => req<{ text: string; success?: boolean }>(`/api/instances/${instanceId}/declare`, { method: 'POST', body: JSON.stringify(body) }),
   applyHide: (instanceId: string, body: { combatantId: string; success: boolean; text: string }) =>
     req<{ text: string }>(`/api/instances/${instanceId}/apply-hide`, { method: 'POST', body: JSON.stringify(body) }),
   setPrompt: (

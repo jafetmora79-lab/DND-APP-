@@ -1937,11 +1937,11 @@ export const supabaseApi: TableApi = {
           econ[slot] = true
           await db().from('combatants').update({ turn_economy_json: econ }).eq('id', hider.id)
           await logFeed(instanceId, result.message)
-          return { text: result.message }
+          return { text: result.message, success: result.success }
         }
         throw new Error(error.message)
       }
-      return (data ?? { text: result.message }) as { text: string }
+      return { ...(data ?? { text: result.message }), success: result.success } as { text: string; success: boolean }
     }
     const { data, error } = await db().rpc('declare_combat_action', {
       p_instance: instanceId,
