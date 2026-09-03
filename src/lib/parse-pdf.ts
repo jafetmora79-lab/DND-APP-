@@ -134,12 +134,13 @@ function collectSpells(fields: Record<string, string>) {
       name,
       level,
       prepared: !/^[-–—]$/.test(text(fields, `spellPrepared${i}`)),
+      concentration: false,
     })
   }
   for (const [name, value] of Object.entries(fields)) {
     if (/^Spells\s*\d/.test(name) && value.trim() && !spells.some((s: { name: string }) => s.name === value.trim())) {
       const lv = Number(name.replace(/\D/g, '').slice(0, 1)) || 0
-      spells.push({ name: value.trim(), level: lv, prepared: true })
+      spells.push({ name: value.trim(), level: lv, prepared: true, concentration: false })
     }
   }
   return { spells, slots, spellRangeByName }

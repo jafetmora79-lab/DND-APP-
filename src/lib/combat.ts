@@ -437,8 +437,45 @@ export function consumeAdvantage(list: string[] | undefined, vsId: string) {
   return (list ?? []).filter((id) => id !== vsId)
 }
 
+const MULTIATTACK_NUMBER_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+}
+const MULTIATTACK_NUMBER_ALT = Object.keys(MULTIATTACK_NUMBER_WORDS).join('|')
+
+/**
+ * Best-effort read of how many attacks a Multiattack action grants, from its
+ * description text (e.g. "The owlbear makes two attacks..."). Returns 1 when
+ * there's no Multiattack entry, or 2 (the most common case) when one exists
+ * but the count can't be parsed. Always DM-editable via Monster.attacksPerAction.
+ */
+export function attacksPerActionFromActions(actions: { name: string; desc: string }[] | undefined): number {
+  const multi = (actions ?? []).find((a) => a.name.trim().toLowerCase() === 'multiattack')
+  if (!multi) return 1
+  const desc = multi.desc.toLowerCase()
+  if (/\btwice\b/.test(desc)) return 2
+  const times = desc.match(new RegExp(`\\b(${MULTIATTACK_NUMBER_ALT})\\s+times?\\b`))
+  if (times) return MULTIATTACK_NUMBER_WORDS[times[1]]
+  const attacks = desc.match(new RegExp(`makes?\\s+(?:either\\s+)?(\\d+|${MULTIATTACK_NUMBER_ALT})\\s+[a-z\\s]*?attacks?\\b`))
+  if (attacks) {
+    const raw = attacks[1]
+    const n = Number(raw)
+    return MULTIATTACK_NUMBER_WORDS[raw] ?? (Number.isFinite(n) && n > 0 ? n : 2)
+  }
+  return 2
+}
+
 export function attacksFromMonster(monster: { actions?: { name: string; desc: string }[] }): Attack[] {
   const parsed = (monster.actions ?? [])
+    .filter((a) => a.name.trim().toLowerCase() !== 'multiattack')
     .map((a) => {
       const bonus = a.desc.match(/([+-]\d+)\s*to hit/i)?.[1] ?? '+0'
       // 5e writes "range 80/320 ft." — take the normal (first) number, not melee default.

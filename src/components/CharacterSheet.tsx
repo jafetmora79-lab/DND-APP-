@@ -654,7 +654,7 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
               ))}
             </div>
             {sheet.spells.map((sp, i) => (
-              <div key={i} className="grid grid-cols-[2rem_1fr_4rem] items-center gap-2">
+              <div key={i} className="grid grid-cols-[2rem_1fr_4rem_5.5rem] items-center gap-2">
                 <Input
                   type="number"
                   disabled={!canEdit}
@@ -687,10 +687,27 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
                   />{' '}
                   {t('sheet.prepared')}
                 </label>
+                <label className="text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    disabled={!canEdit}
+                    checked={sp.concentration}
+                    onChange={(e) => {
+                      const spells = sheet.spells.slice()
+                      spells[i] = { ...sp, concentration: e.target.checked }
+                      patchSheet({ spells })
+                    }}
+                  />{' '}
+                  {t('sheet.concentration')}
+                </label>
               </div>
             ))}
             {canEdit && (
-              <Button variant="ghost" size="sm" onClick={() => patchSheet({ spells: [...sheet.spells, { name: '', level: 1, prepared: true }] })}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => patchSheet({ spells: [...sheet.spells, { name: '', level: 1, prepared: true, concentration: false }] })}
+              >
                 {t('sheet.addSpell')}
               </Button>
             )}

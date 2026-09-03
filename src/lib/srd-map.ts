@@ -1,4 +1,5 @@
 import { crXp } from './utils'
+import { attacksPerActionFromActions } from './combat'
 import type { NamedEntry } from './types'
 
 export type SrdMonster = {
@@ -120,6 +121,7 @@ export function mapSrdMonster(m: SrdMonster) {
     challengeRating: cr,
     xp: m.xp ?? crXp(cr),
     proficiencyBonus: pb,
+    attacksPerAction: attacksPerActionFromActions(m.actions),
     traits: asEntries(m.special_abilities),
     actions: asEntries(m.actions),
     legendaryActions: legendary,

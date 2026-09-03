@@ -16,9 +16,10 @@ import { coverBonusBetween } from '@/lib/vision'
 
 export type MapPickMode = 'select' | 'attack' | 'help'
 
-type Menu = null | 'action' | 'bonus' | 'reaction' | 'other' | 'help' | 'attack' | 'custom' | 'hide' | 'ready'
+type Menu = null | 'action' | 'bonus' | 'reaction' | 'other' | 'help' | 'attack' | 'custom' | 'hide' | 'ready' | 'contest-target' | 'spell-pick'
 type AttackStep = 'pick' | 'target' | 'roll' | 'damage'
-type ModalType = null | 'initiative' | 'save' | 'hide' | 'attack-d20' | 'attack-damage'
+type ModalType = null | 'initiative' | 'save' | 'hide' | 'attack-d20' | 'attack-damage' | 'contest'
+type ContestKind = 'grapple' | 'shove'
 
 const DECLARE_KINDS = [
   { kind: 'attack', labelKey: 'declare.attack' },
@@ -89,6 +90,7 @@ export function PlayerTurnPanel({
   const [d20, setD20] = useState('')
   const [custom, setCustom] = useState('')
   const [interactText, setInteractText] = useState('')
+  const [contestKind, setContestKind] = useState<ContestKind | null>(null)
   const [reactionNote, setReactionNote] = useState('')
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
@@ -121,6 +123,7 @@ export function PlayerTurnPanel({
     setD20('')
     setCustom('')
     setInteractText('')
+    setContestKind(null)
     setRollMode('normal')
     setModalType(null)
     setPendingResult(null)
@@ -152,7 +155,7 @@ export function PlayerTurnPanel({
       })
       setMsg(r.text)
       onSettled?.()
-      if (kind === 'hide' && typeof r.success === 'boolean') {
+      if ((kind === 'hide' || kind === 'grapple' || kind === 'shove') && typeof r.success === 'boolean') {
         setPendingResult({
           tone: r.success ? 'success' : 'fail',
           heading: r.success ? t('roll.success') : t('roll.fail'),
@@ -161,6 +164,30 @@ export function PlayerTurnPanel({
       } else {
         resetMenus()
       }
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : t('turn.errDeclare'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function castSpell(index: number) {
+    const spell = character.sheet.spells[index]
+    if (!spell || !spell.name.trim()) return
+    setBusy(true)
+    try {
+      if (spell.level > 0) {
+        const used = character.sheet.spellSlotsUsed[spell.level - 1] ?? 0
+        const max = character.sheet.spellSlots[spell.level - 1] ?? 0
+        if (used >= max) {
+          setMsg(t('turn.noSpellSlots', { level: spell.level }))
+          return
+        }
+        const spellSlotsUsed = character.sheet.spellSlotsUsed.slice()
+        spellSlotsUsed[spell.level - 1] = used + 1
+        await api.patchCharacter(character.id, { sheet: { spellSlotsUsed } })
+      }
+      await declare(spell.concentration ? 'concentrate' : 'castSpell', { other: spell.name })
     } catch (e) {
       setMsg(e instanceof Error ? e.message : t('turn.errDeclare'))
     } finally {
@@ -473,6 +500,16 @@ export function PlayerTurnPanel({
                       setMenu('custom')
                       return
                     }
+                    if (label === 'Grapple' || label === 'Shove') {
+                      setContestKind(label === 'Grapple' ? 'grapple' : 'shove')
+                      onSelectedId(null)
+                      setMenu('contest-target')
+                      return
+                    }
+                    if (label === 'Cast Spell') {
+                      setMenu('spell-pick')
+                      return
+                    }
                     void declare('other', { other: label })
                   }}
                   size="sm"
@@ -498,6 +535,59 @@ export function PlayerTurnPanel({
               <Button disabled={busy || !custom.trim()} onClick={() => void declare('ready', { custom })} size="default">
                 {t('turn.declareAction')}
               </Button>
+            </div>
+          )}
+
+          {menu === 'contest-target' && contestKind && (
+            <div className="mt-2">
+              <p className="text-sm text-muted">{t(contestKind === 'grapple' ? 'turn.grappleTargetHint' : 'turn.shoveTargetHint')}</p>
+              <div className="mt-2 flex flex-wrap gap-2 justify-center">
+                {others.map((c) => (
+                  <Button key={c.id} variant={selectedId === c.id ? 'default' : 'outline'} onClick={() => onSelectedId(c.id)} size="sm">
+                    {c.name}
+                  </Button>
+                ))}
+              </div>
+              <Button
+                className="mt-2 w-full"
+                size="default"
+                disabled={!selectedId}
+                onClick={() => setModalType('contest')}
+              >
+                {t(contestKind === 'grapple' ? 'turn.grappleButton' : 'turn.shoveButton', { name: target?.name ?? '…' })}
+              </Button>
+            </div>
+          )}
+
+          {menu === 'spell-pick' && (
+            <div className="mt-2">
+              {character.sheet.spells.filter((s) => s.name.trim()).length === 0 && (
+                <p className="text-xs text-muted text-center">{t('turn.noSpells')}</p>
+              )}
+              <div className="flex flex-col gap-1.5">
+                {character.sheet.spells.map((sp, i) => {
+                  if (!sp.name.trim()) return null
+                  const used = character.sheet.spellSlotsUsed[sp.level - 1] ?? 0
+                  const max = character.sheet.spellSlots[sp.level - 1] ?? 0
+                  const outOfSlots = sp.level > 0 && used >= max
+                  return (
+                    <Button
+                      key={i}
+                      variant="outline"
+                      disabled={busy || outOfSlots}
+                      onClick={() => void castSpell(i)}
+                      size="sm"
+                      className="justify-between"
+                    >
+                      <span>{sp.name}</span>
+                      <span className="text-xs text-muted">
+                        {sp.level === 0 ? t('turn.cantrip') : t('turn.spellSlotLevel', { level: sp.level, used, max })}
+                        {sp.concentration ? ` · ${t('sheet.concentration')}` : ''}
+                      </span>
+                    </Button>
+                  )
+                })}
+              </div>
             </div>
           )}
 
@@ -745,6 +835,25 @@ export function PlayerTurnPanel({
         }}
         onSubmit={(value) => {
           void declare('hide', { d20: value })
+        }}
+        onCancel={() => setModalType(null)}
+      />
+
+      <RollInputModal
+        isOpen={modalType === 'contest'}
+        title={t(contestKind === 'shove' ? 'other.shove' : 'other.grapple')}
+        subtitle={target?.name ?? '…'}
+        description={t('turn.contestDescription')}
+        placeholder={t('turn.d20Placeholder')}
+        d20={true}
+        disabled={busy}
+        result={pendingResult}
+        onContinue={() => {
+          setPendingResult(null)
+          resetMenus()
+        }}
+        onSubmit={(value) => {
+          if (contestKind) void declare(contestKind, { targetId: selectedId ?? undefined, d20: value })
         }}
         onCancel={() => setModalType(null)}
       />

@@ -397,6 +397,7 @@ app.post('/api/bestiary', requireDm, (req, res) => {
     challengeRating: Number(b.challengeRating ?? 0),
     xp: Number(b.xp ?? 0),
     proficiencyBonus: Number(b.proficiencyBonus ?? 2),
+    attacksPerAction: Math.max(1, Number(b.attacksPerAction) || 1),
     traits: (b.traits ?? []) as NamedEntry[],
     actions: (b.actions ?? []) as NamedEntry[],
     legendaryActions: (b.legendaryActions ?? []) as NamedEntry[],
@@ -422,8 +423,8 @@ app.patch('/api/bestiary/:id', requireDm, (req, res) => {
   db.prepare(
     `UPDATE bestiary_monsters SET name=?, size=?, creature_type=?, alignment=?, ac_value=?, ac_note=?, hp_max=?, hit_dice_formula=?, speed=?,
      str=?, dex=?, con=?, int=?, wis=?, cha=?, saving_throws=?, skills=?, damage_vulnerabilities=?, damage_resistances=?, damage_immunities=?,
-     condition_immunities=?, senses=?, languages=?, challenge_rating=?, xp=?, proficiency_bonus=?, traits=?, actions=?, legendary_actions=?,
-     reactions=?, bonus_actions=?, lair_actions=? WHERE id=?`,
+     condition_immunities=?, senses=?, languages=?, challenge_rating=?, xp=?, proficiency_bonus=?, attacks_per_action=?, traits=?, actions=?,
+     legendary_actions=?, reactions=?, bonus_actions=?, lair_actions=? WHERE id=?`,
   ).run(
     m.name,
     m.size,
@@ -451,6 +452,7 @@ app.patch('/api/bestiary/:id', requireDm, (req, res) => {
     m.challengeRating,
     m.xp,
     m.proficiencyBonus,
+    Math.max(1, Number(m.attacksPerAction) || 1),
     JSON.stringify(m.traits ?? []),
     JSON.stringify(m.actions ?? []),
     JSON.stringify(m.legendaryActions ?? []),

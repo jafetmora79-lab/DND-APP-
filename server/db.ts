@@ -13,6 +13,7 @@ import { ambianceFromBeat, applyEncounterRewards, emptyBrief, parseHub, sceneAft
 import { unpackTemplateJson } from '../src/lib/template-json.ts'
 import { coverBonusAlongLine, lightingFromStart, makeStartFog } from '../src/lib/vision.ts'
 import { actionRevealsHiding, hidingBrokenByWatchers, isHiding, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from '../src/lib/stealth.ts'
+import { resolveContest } from '../src/lib/contests.ts'
 import { seedMandatoryFun } from './seed-mandatory-fun.ts'
 import {
   SURPRISED,
@@ -84,6 +85,7 @@ CREATE TABLE IF NOT EXISTS bestiary_monsters (
   challenge_rating REAL,
   xp INTEGER,
   proficiency_bonus INTEGER,
+  attacks_per_action INTEGER NOT NULL DEFAULT 1,
   traits TEXT,
   actions TEXT,
   legendary_actions TEXT,
@@ -244,6 +246,11 @@ try {
   /* already present */
 }
 try {
+  db.exec(`ALTER TABLE bestiary_monsters ADD COLUMN attacks_per_action INTEGER NOT NULL DEFAULT 1`)
+} catch {
+  /* already present */
+}
+try {
   db.exec(`ALTER TABLE combatants ADD COLUMN stats_json TEXT`)
 } catch {
   /* already present */
@@ -357,6 +364,7 @@ export function monsterFromRow(row: Record<string, unknown>) {
     challengeRating: row.challenge_rating as number,
     xp: row.xp as number,
     proficiencyBonus: row.proficiency_bonus as number,
+    attacksPerAction: Math.max(1, Number(row.attacks_per_action) || 1),
     traits: jparse<NamedEntry[]>(row.traits as string, []),
     actions: jparse<NamedEntry[]>(row.actions as string, []),
     legendaryActions: jparse<NamedEntry[]>(row.legendary_actions as string, []),
@@ -492,9 +500,9 @@ export function insertMonster(
     `INSERT INTO bestiary_monsters (
       id, dm_account_id, name, size, creature_type, alignment, ac_value, ac_note, hp_max, hit_dice_formula, speed,
       str, dex, con, int, wis, cha, saving_throws, skills, damage_vulnerabilities, damage_resistances, damage_immunities,
-      condition_immunities, senses, languages, challenge_rating, xp, proficiency_bonus, traits, actions, legendary_actions,
-      reactions, bonus_actions, lair_actions, source
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      condition_immunities, senses, languages, challenge_rating, xp, proficiency_bonus, attacks_per_action, traits, actions,
+      legendary_actions, reactions, bonus_actions, lair_actions, source
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     id,
     dmId,
@@ -524,6 +532,7 @@ export function insertMonster(
     m.challengeRating,
     m.xp,
     m.proficiencyBonus,
+    m.attacksPerAction ?? 1,
     JSON.stringify(m.traits),
     JSON.stringify(m.actions),
     JSON.stringify(m.legendaryActions),
@@ -889,6 +898,18 @@ export function resolveCombatAttack(opts: {
   const next = applyDamage(prevHp, Number(target.hp_temp), damage)
   db.prepare('UPDATE combatants SET hp_current = ?, hp_temp = ? WHERE id = ?').run(next.hpCurrent, next.hpTemp, target.id)
   applyKnockout(target, prevHp, next.hpCurrent, outcome === 'crit' ? 2 : 1)
+  if (targetConditions.includes('Concentrating')) {
+    if (next.hpCurrent <= 0) {
+      const freshRow = db.prepare('SELECT conditions_json FROM combatants WHERE id = ?').get(target.id) as { conditions_json?: string } | undefined
+      const freshConditions = jparse<string[]>((freshRow?.conditions_json as string) || '[]', [])
+      writeConditions(String(target.id), freshConditions.filter((x) => x !== 'Concentrating'))
+      appendInstanceActivity(instanceId, `${tgtName} lost concentration.`)
+    } else if (damage > 0) {
+      const dc = Math.max(10, Math.floor(damage / 2))
+      setInstancePrompt(instanceId, { kind: 'save', combatantId: String(target.id), ability: 'con', dc, reason: 'concentration' })
+      appendInstanceActivity(instanceId, `${tgtName} must make a DC ${dc} Constitution save to maintain concentration.`)
+    }
+  }
   if (target.source === 'character') {
     const victim = db.prepare('SELECT sheet_json FROM player_characters WHERE id = ?').get(target.source_id) as { sheet_json: string } | undefined
     if (victim) {
@@ -1085,6 +1106,11 @@ export function applyDeclaredAction(opts: {
     const label = String(opts.custom || opts.other || '').trim()
     if (!label) throw new Error('Describe your trigger and response for Ready.')
     text = `${name} readied an action: ${label}.`
+  } else if (kind === 'castSpell' || kind === 'concentrate') {
+    const label = String(opts.other || '').trim()
+    if (!label) throw new Error('Pick a spell to cast.')
+    if (kind === 'concentrate' && !conditions.includes('Concentrating')) conditions.push('Concentrating')
+    text = `${name} casts ${label}${kind === 'concentrate' ? ' (concentrating)' : ''}.`
   } else if (kind === 'dash') {
     remaining += speed
     text = `${name} used Dash.`
@@ -1117,6 +1143,30 @@ export function applyDeclaredAction(opts: {
     conditions = result.success ? withHiding(conditions) : withoutHiding(conditions)
     text = result.message
     success = result.success
+  } else if (kind === 'grapple' || kind === 'shove') {
+    const d20 = Number(opts.d20)
+    if (!Number.isInteger(d20) || d20 < 1 || d20 > 20) throw new Error('Enter the d20 you rolled for Athletics (1–20).')
+    if (!opts.targetId) throw new Error(`Pick a target to ${kind === 'grapple' ? 'Grapple' : 'Shove'}.`)
+    const pieces = loadFightPieces(opts.instanceId)
+    const attacker = pieces.combatants.find((row) => row.id === String(c.id))
+    const target = pieces.combatants.find((row) => row.id === String(opts.targetId))
+    if (!attacker) throw new Error('Combatant not found')
+    if (!target) throw new Error('Target not found')
+    if (target.id === attacker.id) throw new Error('Pick a different creature')
+    const attackerSheet = attacker.source === 'character' ? sheetForHide(attacker, pieces.characters) : null
+    const attackerMonster = attacker.source === 'bestiary' ? pieces.monsters.find((m) => m.id === attacker.sourceId) ?? null : null
+    const targetSheet = target.source === 'character' ? sheetForHide(target, pieces.characters) : null
+    const targetMonster = target.source === 'bestiary' ? pieces.monsters.find((m) => m.id === target.sourceId) ?? null : null
+    const result = resolveContest({ kind, attacker, target, d20, attackerSheet, attackerMonster, targetSheet, targetMonster })
+    text = result.message
+    success = result.success
+    if (result.success) {
+      const label = kind === 'grapple' ? 'Grappled' : 'Prone'
+      if (!target.conditions.includes(label)) {
+        writeConditions(target.id, [...target.conditions, label])
+      }
+      text += ` ${target.name} is ${label === 'Grappled' ? 'grappled' : 'knocked prone'}.`
+    }
   } else if (kind === 'help') {
     const ally = opts.targetId
       ? (db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(opts.targetId, opts.instanceId) as
@@ -1176,7 +1226,14 @@ export function resolvePromptSave(opts: { instanceId: string; combatantId: strin
   }
   const r = resolveSavingThrow({ d20: opts.d20, modifier, dc })
   const label = ability.toUpperCase()
-  const text = `${c.name} ${label} save: ${opts.d20} ${modifier >= 0 ? '+' : ''}${modifier} = ${r.total} — ${r.success ? 'SUCCESS' : 'FAILURE'}.`
+  let text = `${c.name} ${label} save: ${opts.d20} ${modifier >= 0 ? '+' : ''}${modifier} = ${r.total} — ${r.success ? 'SUCCESS' : 'FAILURE'}.`
+  if (prompt.reason === 'concentration' && !r.success) {
+    const conditions = jparse<string[]>((c.conditions_json as string) || '[]', [])
+    if (conditions.includes('Concentrating')) {
+      writeConditions(String(c.id), conditions.filter((x) => x !== 'Concentrating'))
+      text += ' Lost concentration.'
+    }
+  }
   appendInstanceActivity(String(inst.id), text)
   db.prepare('UPDATE encounter_instances SET prompt_json = NULL WHERE id = ?').run(inst.id)
   return { ...r, message: text }
@@ -1216,7 +1273,13 @@ export function applyHpKnockout(combatantId: string, prevHp: number, nextHp: num
 }
 
 function attacksPerActionFor(attacker: Record<string, unknown>): number {
-  if (attacker.source !== 'character') return 1
+  if (attacker.source !== 'character') {
+    const beast = db.prepare('SELECT attacks_per_action FROM bestiary_monsters WHERE id = ?').get(attacker.source_id) as
+      | { attacks_per_action?: number }
+      | undefined
+    const n = Number(beast?.attacks_per_action)
+    return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1
+  }
   const ch = db.prepare('SELECT sheet_json FROM player_characters WHERE id = ?').get(attacker.source_id) as
     | { sheet_json?: string }
     | undefined
@@ -1465,10 +1528,11 @@ function seedDemo() {
   elaraSheet.spellcastingAbility = 'int'
   elaraSheet.spellSlots = [4, 2, 0, 0, 0, 0, 0, 0, 0]
   elaraSheet.spells = [
-    { name: 'Fire Bolt', level: 0, prepared: true },
-    { name: 'Mage Armor', level: 1, prepared: true },
-    { name: 'Magic Missile', level: 1, prepared: true },
-    { name: 'Misty Step', level: 2, prepared: true },
+    { name: 'Fire Bolt', level: 0, prepared: true, concentration: false },
+    { name: 'Mage Armor', level: 1, prepared: true, concentration: false },
+    { name: 'Magic Missile', level: 1, prepared: true, concentration: false },
+    { name: 'Misty Step', level: 2, prepared: true, concentration: false },
+    { name: 'Hold Person', level: 2, prepared: true, concentration: true },
   ]
   elaraSheet.attacks = [{ name: 'Fire Bolt', bonus: '+5', damage: '1d10 fire', range: '120 ft.' }]
   elaraSheet.personality = 'I speak in riddles when I am nervous, which is often.'

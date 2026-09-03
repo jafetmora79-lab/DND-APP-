@@ -50,6 +50,7 @@ export const CONDITIONS = [
   'Dodging',
   'Disengaging',
   'Hiding',
+  'Concentrating',
   'Exhaustion 1',
   'Exhaustion 2',
   'Exhaustion 3',
@@ -78,6 +79,7 @@ export const CONDITION_RING: Record<(typeof CONDITIONS)[number], string> = {
   Dodging: '#86efac',
   Disengaging: '#fdba74',
   Hiding: '#94a3b8',
+  Concentrating: '#c4b5fd',
   'Exhaustion 1': '#6b7280',
   'Exhaustion 2': '#6b7280',
   'Exhaustion 3': '#6b7280',
@@ -136,6 +138,8 @@ export type Monster = {
   challengeRating: number
   xp: number
   proficiencyBonus: number
+  /** Attacks granted by a single Action (Multiattack). 1 for a normal single attack. */
+  attacksPerAction: number
   traits: NamedEntry[]
   actions: NamedEntry[]
   legendaryActions: NamedEntry[]
@@ -194,7 +198,7 @@ export type CharacterSheetData = {
   spellcastingAbility: Ability | ''
   spellSlots: number[]
   spellSlotsUsed: number[]
-  spells: { name: string; level: number; prepared: boolean }[]
+  spells: { name: string; level: number; prepared: boolean; concentration: boolean }[]
   resources: CharacterResource[]
   personality: string
   ideals: string
@@ -430,9 +434,24 @@ export type CombatPrompt = {
   combatantId: string
   ability?: Ability
   dc?: number
+  /** Set when this save was auto-triggered by damage while Concentrating, so a failure clears the condition. */
+  reason?: 'concentration'
 } | null
 
-export type CombatDeclareKind = 'dash' | 'dodge' | 'help' | 'disengage' | 'hide' | 'ready' | 'interact' | 'other' | 'custom'
+export type CombatDeclareKind =
+  | 'dash'
+  | 'dodge'
+  | 'help'
+  | 'disengage'
+  | 'hide'
+  | 'ready'
+  | 'interact'
+  | 'grapple'
+  | 'shove'
+  | 'castSpell'
+  | 'concentrate'
+  | 'other'
+  | 'custom'
 export type CombatSpendSlot = 'action' | 'bonus' | 'reaction'
 
 export type EncounterInstance = {

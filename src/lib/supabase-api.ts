@@ -9,6 +9,7 @@ import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clamp
 import { afterHpChange, clampMovementRemaining, combatantStatsFromMonster, combatantStatsFromSheet, emptyTurnEconomy, formatDiceUsed, movementCostFeet, parseCombatantStats, parseDeathState, parseSpeedFeet, parseTurnEconomy, resolveDeathSave, snapshotForPlayer, specCopyCell, spendMovement, statsForLiveCombatant, tokenCell } from './combat'
 import { lightingFromStart, makeStartFog, coverBonusAlongLine } from './vision'
 import { hidingBrokenByWatchers, isHiding, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from './stealth'
+import { resolveContest } from './contests'
 import { attackActivityLines, parseActivity, parsePrompt } from './combat-activity'
 import { sessionFromRow } from './session'
 import { ambianceFromBeat, applyEncounterRewards, parseHub, sceneAfterEncounter, tableSceneBeat } from './campaign-hub'
@@ -147,6 +148,7 @@ function monsterFromRow(row: Record<string, unknown>): Monster {
     challengeRating: Number(row.challenge_rating ?? 0),
     xp: Number(row.xp ?? 0),
     proficiencyBonus: Number(row.proficiency_bonus ?? 2),
+    attacksPerAction: Math.max(1, Number(row.attacks_per_action) || 1),
     traits: (row.traits as NamedEntry[]) ?? [],
     actions: (row.actions as NamedEntry[]) ?? [],
     legendaryActions: (row.legendary_actions as NamedEntry[]) ?? [],
@@ -186,6 +188,7 @@ function monsterInsert(dmId: string, m: Partial<Monster> & ReturnType<typeof map
     challenge_rating: m.challengeRating,
     xp: m.xp,
     proficiency_bonus: m.proficiencyBonus,
+    attacks_per_action: m.attacksPerAction ?? 1,
     traits: m.traits ?? [],
     actions: m.actions ?? [],
     legendary_actions: m.legendaryActions ?? [],
@@ -1952,6 +1955,39 @@ export const supabaseApi: TableApi = {
       }
       return { ...(data ?? { text: result.message }), success: result.success } as { text: string; success: boolean }
     }
+    if (body.kind === 'grapple' || body.kind === 'shove') {
+      const pieces = await loadFightPieces(instanceId)
+      const attacker = body.combatantId
+        ? pieces.combatants.find((c) => c.id === body.combatantId)
+        : pieces.combatants.find((c) => c.turnOrderPosition === Number(pieces.inst.current_turn_position))
+      if (!attacker) throw new Error('Combatant not found')
+      const target = pieces.combatants.find((c) => c.id === body.targetId)
+      if (!target) throw new Error(`Pick a target to ${body.kind === 'grapple' ? 'Grapple' : 'Shove'}.`)
+      if (target.id === attacker.id) throw new Error('Pick a different creature')
+      const d20 = Number(body.d20)
+      const attackerSheet = attacker.source === 'character' ? pieces.characters.find((ch) => ch.id === attacker.sourceId)?.sheet ?? null : null
+      const attackerMonster = attacker.source === 'bestiary' ? pieces.monsters.find((m) => m.id === attacker.sourceId) ?? null : null
+      const targetSheet = target.source === 'character' ? pieces.characters.find((ch) => ch.id === target.sourceId)?.sheet ?? null : null
+      const targetMonster = target.source === 'bestiary' ? pieces.monsters.find((m) => m.id === target.sourceId) ?? null : null
+      const result = resolveContest({ kind: body.kind, attacker, target, d20, attackerSheet, attackerMonster, targetSheet, targetMonster })
+      const { data: contestData, error: contestError } = await db().rpc('apply_contest_result', {
+        p_instance: instanceId,
+        p_combatant: attacker.id,
+        p_target: target.id,
+        p_kind: body.kind,
+        p_success: result.success,
+        p_text: result.message,
+        p_slot: body.slot ?? 'action',
+      })
+      if (contestError) {
+        throw new Error(
+          missingRpc(contestError.message, 'apply_contest_result')
+            ? 'Run migrate-grapple-shove.sql in the Supabase SQL Editor, then: notify pgrst, \'reload schema\';'
+            : contestError.message,
+        )
+      }
+      return { ...(contestData ?? { text: result.message }), success: result.success } as { text: string; success: boolean }
+    }
     const { data, error } = await db().rpc('declare_combat_action', {
       p_instance: instanceId,
       p_kind: body.kind,
@@ -1968,7 +2004,16 @@ export const supabaseApi: TableApi = {
           : error.message,
       )
     }
-    if (body.kind === 'dash' || body.kind === 'help' || body.kind === 'other' || body.kind === 'custom' || body.kind === 'interact' || body.kind === 'ready') {
+    if (
+      body.kind === 'dash' ||
+      body.kind === 'help' ||
+      body.kind === 'other' ||
+      body.kind === 'custom' ||
+      body.kind === 'interact' ||
+      body.kind === 'ready' ||
+      body.kind === 'castSpell' ||
+      body.kind === 'concentrate'
+    ) {
       const cid = body.combatantId
       if (cid) {
         const { data: row } = await db().from('combatants').select('name, conditions_json').eq('id', cid).maybeSingle()
@@ -2057,6 +2102,7 @@ function mapSrdPlaceholder(m: Partial<Monster>): ReturnType<typeof mapSrdMonster
     challengeRating: m.challengeRating ?? 0,
     xp: m.xp ?? 0,
     proficiencyBonus: m.proficiencyBonus ?? 2,
+    attacksPerAction: m.attacksPerAction ?? 1,
     traits: m.traits ?? [],
     actions: m.actions ?? [],
     legendaryActions: m.legendaryActions ?? [],

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { crXp } from '../src/lib/utils.ts'
+import { attacksPerActionFromActions } from '../src/lib/combat.ts'
 import type { NamedEntry } from '../src/lib/types.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -131,6 +132,7 @@ export function loadSrdMonsters() {
       challengeRating: cr,
       xp: m.xp ?? crXp(cr),
       proficiencyBonus: pb,
+      attacksPerAction: attacksPerActionFromActions(m.actions),
       traits: asEntries(m.special_abilities),
       actions: asEntries(m.actions),
       legendaryActions: legendary,

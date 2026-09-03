@@ -130,6 +130,18 @@ export function MonsterForm({ monster, editingNew, onChange, onSave, onDelete }:
       </div>
       <EntriesField label={t('monster.traits')} items={monster.traits} onChange={(traits) => onChange(setField(monster, 'traits', traits))} />
       <EntriesField label={t('monster.actions')} items={monster.actions} onChange={(actions) => onChange(setField(monster, 'actions', actions))} />
+      <div className="max-w-[10rem]">
+        <Field label={t('monster.attacksPerAction')}>
+          <Input
+            type="number"
+            min={1}
+            max={6}
+            value={monster.attacksPerAction ?? 1}
+            onChange={(e) => onChange(setField(monster, 'attacksPerAction', Math.max(1, Number(e.target.value) || 1)))}
+          />
+        </Field>
+        <p className="mt-1 text-[10px] text-muted">{t('monster.attacksPerActionHint')}</p>
+      </div>
       <EntriesField
         label={t('monster.bonusActions')}
         items={monster.bonusActions}

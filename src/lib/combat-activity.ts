@@ -41,11 +41,13 @@ export function parsePrompt(raw: unknown): CombatPrompt {
   const ab: Ability | undefined = (['str', 'dex', 'con', 'int', 'wis', 'cha'] as const).includes(ability as Ability)
     ? (ability as Ability)
     : undefined
+  const reason = o.reason === 'concentration' ? ('concentration' as const) : undefined
   return {
     kind,
     combatantId,
     ability: ab,
     dc: Number.isFinite(dc) && dc > 0 ? Math.round(dc) : undefined,
+    reason,
   }
 }
 

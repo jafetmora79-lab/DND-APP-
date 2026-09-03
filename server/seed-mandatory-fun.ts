@@ -32,6 +32,7 @@ type InsertMonster = (
     challengeRating: number
     xp: number
     proficiencyBonus: number
+    attacksPerAction: number
     traits: NamedEntry[]
     actions: NamedEntry[]
     legendaryActions: NamedEntry[]
@@ -121,6 +122,7 @@ export function vizzStatBlock() {
     challengeRating: 2,
     xp: 450,
     proficiencyBonus: 2,
+    attacksPerAction: 1,
     traits: [
       {
         name: 'Antimagic Quiet Hours (recharge 5–6)',
