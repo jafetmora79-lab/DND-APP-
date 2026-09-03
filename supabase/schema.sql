@@ -1091,6 +1091,8 @@ declare
   inst record;
   c record;
   ally record;
+  enemy record;
+  ally_adv jsonb;
   is_dm boolean;
   slot text;
   kind text;
@@ -1169,7 +1171,17 @@ begin
     if p_target is null then raise exception 'Pick an ally to Help.'; end if;
     select * into ally from public.combatants where id = p_target and encounter_instance_id = inst.id;
     if not found or ally.id = c.id then raise exception 'Pick an ally to Help.'; end if;
-    txt := format('%s used Help on %s.', c.name, ally.name);
+    if coalesce(p_other, '') = '' then raise exception 'Pick who they should have advantage against.'; end if;
+    select * into enemy from public.combatants where id = (p_other)::uuid and encounter_instance_id = inst.id;
+    if not found or enemy.id = ally.id or enemy.id = c.id then
+      raise exception 'Pick who they should have advantage against.';
+    end if;
+    ally_adv := coalesce(ally.advantage_against_json, '[]'::jsonb);
+    if not (ally_adv @> to_jsonb(enemy.id::text)) then
+      ally_adv := ally_adv || jsonb_build_array(enemy.id::text);
+    end if;
+    update public.combatants set advantage_against_json = ally_adv where id = ally.id;
+    txt := format('%s helps %s against %s. %s has advantage on their next attack against %s.', c.name, ally.name, enemy.name, ally.name, enemy.name);
   elsif kind in ('other', 'custom') then
     if kind = 'custom' or coalesce(p_other, '') = 'Custom' then
       label := trim(coalesce(p_custom, ''));

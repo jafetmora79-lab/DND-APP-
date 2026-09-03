@@ -91,6 +91,7 @@ export function PlayerTurnPanel({
   const [custom, setCustom] = useState('')
   const [interactText, setInteractText] = useState('')
   const [contestKind, setContestKind] = useState<ContestKind | null>(null)
+  const [helpAllyId, setHelpAllyId] = useState<string | null>(null)
   const [reactionNote, setReactionNote] = useState('')
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
@@ -124,6 +125,7 @@ export function PlayerTurnPanel({
     setCustom('')
     setInteractText('')
     setContestKind(null)
+    setHelpAllyId(null)
     setRollMode('normal')
     setModalType(null)
     setPendingResult(null)
@@ -210,6 +212,7 @@ export function PlayerTurnPanel({
     }
     if (kind === 'help') {
       setMenu('help')
+      setHelpAllyId(null)
       onSelectedId(null)
       return
     }
@@ -643,7 +646,7 @@ export function PlayerTurnPanel({
             </div>
           )}
 
-          {menu === 'help' && (
+          {menu === 'help' && !helpAllyId && (
             <div className="mt-2">
               <p className="text-xs text-muted">{t('turn.helpHint')}</p>
               <div className="mt-2 flex flex-wrap gap-2 justify-center">
@@ -653,7 +656,38 @@ export function PlayerTurnPanel({
                   </Button>
                 ))}
               </div>
-              <Button className="mt-2 w-full" size="default" disabled={busy || !selectedId} onClick={() => void declare('help', { targetId: selectedId ?? undefined })}>
+              <Button
+                className="mt-2 w-full"
+                size="default"
+                disabled={!selectedId}
+                onClick={() => {
+                  setHelpAllyId(selectedId)
+                  onSelectedId(null)
+                }}
+              >
+                {t('turn.helpNextButton', { name: target?.name ?? '…' })}
+              </Button>
+            </div>
+          )}
+
+          {menu === 'help' && helpAllyId && (
+            <div className="mt-2">
+              <p className="text-xs text-muted">{t('turn.helpEnemyHint', { name: combatants.find((c) => c.id === helpAllyId)?.name ?? '…' })}</p>
+              <div className="mt-2 flex flex-wrap gap-2 justify-center">
+                {others
+                  .filter((c) => c.id !== helpAllyId)
+                  .map((c) => (
+                    <Button key={c.id} variant={selectedId === c.id ? 'default' : 'outline'} onClick={() => onSelectedId(c.id)} size="sm">
+                      {c.name}
+                    </Button>
+                  ))}
+              </div>
+              <Button
+                className="mt-2 w-full"
+                size="default"
+                disabled={busy || !selectedId}
+                onClick={() => void declare('help', { targetId: helpAllyId, other: selectedId ?? undefined })}
+              >
                 {t('turn.helpButton', { name: target?.name ?? '…' })}
               </Button>
             </div>

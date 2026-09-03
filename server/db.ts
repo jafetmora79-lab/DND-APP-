@@ -1174,7 +1174,21 @@ export function applyDeclaredAction(opts: {
           | undefined)
       : undefined
     if (!ally || String(ally.id) === String(c.id)) throw new Error('Pick an ally to Help.')
-    text = `${name} used Help on ${ally.name}.`
+    const enemyId = String(opts.other || '').trim()
+    const enemy = enemyId
+      ? (db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(enemyId, opts.instanceId) as
+          | Record<string, unknown>
+          | undefined)
+      : undefined
+    if (!enemy || String(enemy.id) === String(ally.id) || String(enemy.id) === String(c.id)) {
+      throw new Error('Pick who they should have advantage against.')
+    }
+    const allyAdv = jparse<string[]>((ally.advantage_against_json as string) || '[]', [])
+    db.prepare('UPDATE combatants SET advantage_against_json = ? WHERE id = ?').run(
+      JSON.stringify(grantAdvantage(allyAdv, String(enemy.id))),
+      ally.id,
+    )
+    text = `${name} helps ${ally.name} against ${enemy.name}. ${ally.name} has advantage on their next attack against ${enemy.name}.`
   } else if (kind === 'other' || kind === 'custom') {
     const label =
       kind === 'custom' || String(opts.other || '') === 'Custom' ? String(opts.custom || '').trim() : String(opts.other || '').trim()
