@@ -275,6 +275,7 @@ async function applyHostedHubStage(campaignId: string, afterTemplateId: string |
 function mapFromRow(row: Record<string, unknown>): BattleMap {
   const gridCols = Number(row.grid_cols)
   const gridRows = Number(row.grid_rows)
+  const bgScale = row.bg_scale == null ? null : Number(row.bg_scale)
   return {
     id: String(row.id),
     campaignId: String(row.campaign_id),
@@ -285,6 +286,9 @@ function mapFromRow(row: Record<string, unknown>): BattleMap {
     gridRows,
     gridType: 'square',
     blocked: parseBlockedCells(row.blocked_cells, gridCols, gridRows),
+    bgScale: bgScale != null && Number.isFinite(bgScale) && bgScale > 0 ? bgScale : null,
+    bgOffsetX: Number(row.bg_offset_x) || 0,
+    bgOffsetY: Number(row.bg_offset_y) || 0,
   }
 }
 
@@ -817,6 +821,9 @@ export const supabaseApi: TableApi = {
     if (body.gridCols != null) patch.grid_cols = clampGridDim(body.gridCols, oldCols)
     if (body.gridRows != null) patch.grid_rows = clampGridDim(body.gridRows, oldRows)
     if (body.imageUrl != null) patch.image_url = body.imageUrl
+    if (body.bgScale !== undefined) patch.bg_scale = body.bgScale != null && body.bgScale > 0 ? body.bgScale : null
+    if (body.bgOffsetX != null) patch.bg_offset_x = body.bgOffsetX
+    if (body.bgOffsetY != null) patch.bg_offset_y = body.bgOffsetY
     const nextCols = Number(patch.grid_cols ?? oldCols)
     const nextRows = Number(patch.grid_rows ?? oldRows)
     if (body.blocked != null) {

@@ -523,15 +523,12 @@ app.patch('/api/maps/:id', requireDm, (req, res) => {
     req.body.blocked != null
       ? parseBlockedCells(req.body.blocked, gridCols, gridRows)
       : remapBlocked(parseBlockedCells(map.blocked_cells, oldCols, oldRows), oldCols, oldRows, gridCols, gridRows)
-  db.prepare('UPDATE maps SET name=?, image_url=?, grid_size=?, grid_cols=?, grid_rows=?, blocked_cells=? WHERE id=?').run(
-    req.body.name ?? map.name,
-    imageUrl,
-    gridSize,
-    gridCols,
-    gridRows,
-    JSON.stringify(blocked),
-    map.id,
-  )
+  const bgScale = req.body.bgScale != null ? (Number(req.body.bgScale) > 0 ? Number(req.body.bgScale) : null) : (map.bg_scale ?? null)
+  const bgOffsetX = req.body.bgOffsetX != null ? Number(req.body.bgOffsetX) : Number(map.bg_offset_x ?? 0)
+  const bgOffsetY = req.body.bgOffsetY != null ? Number(req.body.bgOffsetY) : Number(map.bg_offset_y ?? 0)
+  db.prepare(
+    'UPDATE maps SET name=?, image_url=?, grid_size=?, grid_cols=?, grid_rows=?, blocked_cells=?, bg_scale=?, bg_offset_x=?, bg_offset_y=? WHERE id=?',
+  ).run(req.body.name ?? map.name, imageUrl, gridSize, gridCols, gridRows, JSON.stringify(blocked), bgScale, bgOffsetX, bgOffsetY, map.id)
   res.json({
     map: mapFromDb({
       ...map,
@@ -541,6 +538,9 @@ app.patch('/api/maps/:id', requireDm, (req, res) => {
       grid_cols: gridCols,
       grid_rows: gridRows,
       blocked_cells: JSON.stringify(blocked),
+      bg_scale: bgScale,
+      bg_offset_x: bgOffsetX,
+      bg_offset_y: bgOffsetY,
     }),
   })
 })

@@ -54,10 +54,29 @@ type Props = {
   combatants?: Combatant[]
 }
 
-function MapImage({ url, width, height }: { url: string; width: number; height: number }) {
+function MapImage({
+  url,
+  worldW,
+  worldH,
+  bgOffsetX,
+  bgOffsetY,
+  bgScale,
+}: {
+  url: string
+  worldW: number
+  worldH: number
+  bgOffsetX: number
+  bgOffsetY: number
+  bgScale: number | null
+}) {
   const [img] = useImage(url, 'anonymous')
   if (!img) return null
-  return <KImage image={img} width={width} height={height} listening={false} />
+  // bgScale === null: legacy maps and freshly-uploaded images stretch to fill
+  // the grid exactly (ignoring aspect ratio) until the DM aligns the grid.
+  if (bgScale == null) {
+    return <KImage image={img} width={worldW} height={worldH} listening={false} />
+  }
+  return <KImage image={img} x={bgOffsetX} y={bgOffsetY} width={img.width * bgScale} height={img.height * bgScale} listening={false} />
 }
 
 export function MapBoard({
@@ -338,7 +357,16 @@ export function MapBoard({
       >
         <Layer>
           <Rect x={0} y={0} width={worldW} height={worldH} fill="#16110c" listening={paintingFog || paintingTerrain} />
-          {map.imageUrl ? <MapImage url={map.imageUrl} width={worldW} height={worldH} /> : null}
+          {map.imageUrl ? (
+            <MapImage
+              url={map.imageUrl}
+              worldW={worldW}
+              worldH={worldH}
+              bgOffsetX={map.bgOffsetX ?? 0}
+              bgOffsetY={map.bgOffsetY ?? 0}
+              bgScale={map.bgScale ?? null}
+            />
+          ) : null}
           <Shape
             listening={false}
             width={worldW}

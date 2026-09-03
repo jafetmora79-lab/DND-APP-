@@ -116,6 +116,9 @@ CREATE TABLE IF NOT EXISTS maps (
   grid_rows INTEGER NOT NULL,
   grid_type TEXT NOT NULL DEFAULT 'square',
   blocked_cells TEXT NOT NULL DEFAULT '[]',
+  bg_scale REAL,
+  bg_offset_x REAL NOT NULL DEFAULT 0,
+  bg_offset_y REAL NOT NULL DEFAULT 0,
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS encounter_templates (
@@ -251,6 +254,21 @@ try {
   /* already present */
 }
 try {
+  db.exec(`ALTER TABLE maps ADD COLUMN bg_scale REAL`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE maps ADD COLUMN bg_offset_x REAL NOT NULL DEFAULT 0`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE maps ADD COLUMN bg_offset_y REAL NOT NULL DEFAULT 0`)
+} catch {
+  /* already present */
+}
+try {
   db.exec(`ALTER TABLE combatants ADD COLUMN stats_json TEXT`)
 } catch {
   /* already present */
@@ -313,6 +331,7 @@ function speedPair(raw: unknown) {
 export function mapFromDb(row: Record<string, unknown>): BattleMap {
   const gridCols = Number(row.grid_cols)
   const gridRows = Number(row.grid_rows)
+  const bgScale = row.bg_scale == null ? null : Number(row.bg_scale)
   return {
     id: String(row.id),
     campaignId: String(row.campaign_id),
@@ -323,6 +342,9 @@ export function mapFromDb(row: Record<string, unknown>): BattleMap {
     gridRows,
     gridType: 'square',
     blocked: parseBlockedCells(row.blocked_cells, gridCols, gridRows),
+    bgScale: bgScale != null && Number.isFinite(bgScale) && bgScale > 0 ? bgScale : null,
+    bgOffsetX: Number(row.bg_offset_x) || 0,
+    bgOffsetY: Number(row.bg_offset_y) || 0,
   }
 }
 

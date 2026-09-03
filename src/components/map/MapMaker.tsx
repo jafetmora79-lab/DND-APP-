@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Ban, Box, CircleDot, Droplets, Flame, Footprints, ImagePlus, Move, Snowflake, TreePine } from 'lucide-react'
+import { Ban, Box, CircleDot, Crosshair, Droplets, Flame, Footprints, ImagePlus, Move, Snowflake, TreePine } from 'lucide-react'
+import { GridAlignTool } from '@/components/map/GridAlignTool'
 import { MapBoard, type MapTool } from '@/components/map/MapBoard'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
@@ -19,22 +20,29 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
   const { t } = useT()
   const [draft, setDraft] = useState(map)
   const [tool, setTool] = useState<MapTool>('block')
+  const [aligning, setAligning] = useState(false)
   const [msg, setMsg] = useState('')
   const saveTimer = useRef<number>(0)
   const pending = useRef<BattleMap>(map)
 
+  function patchPayload(current: BattleMap) {
+    return {
+      name: current.name,
+      gridSize: current.gridSize,
+      gridCols: current.gridCols,
+      gridRows: current.gridRows,
+      imageUrl: current.imageUrl,
+      blocked: current.blocked,
+      bgScale: current.bgScale,
+      bgOffsetX: current.bgOffsetX,
+      bgOffsetY: current.bgOffsetY,
+    }
+  }
+
   useEffect(() => {
     return () => {
       window.clearTimeout(saveTimer.current)
-      const current = pending.current
-      void api.patchMap(current.id, {
-        name: current.name,
-        gridSize: current.gridSize,
-        gridCols: current.gridCols,
-        gridRows: current.gridRows,
-        imageUrl: current.imageUrl,
-        blocked: current.blocked,
-      })
+      void api.patchMap(pending.current.id, patchPayload(pending.current))
     }
   }, [])
 
@@ -45,16 +53,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
     window.clearTimeout(saveTimer.current)
     saveTimer.current = window.setTimeout(() => {
       const current = pending.current
-      api
-        .patchMap(current.id, {
-          name: current.name,
-          gridSize: current.gridSize,
-          gridCols: current.gridCols,
-          gridRows: current.gridRows,
-          imageUrl: current.imageUrl,
-          blocked: current.blocked,
-        })
-        .catch((e: Error) => setMsg(e.message))
+      api.patchMap(current.id, patchPayload(current)).catch((e: Error) => setMsg(e.message))
     }, 280)
   }
 
@@ -66,14 +65,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
     window.clearTimeout(saveTimer.current)
     const current = pending.current
     try {
-      await api.patchMap(current.id, {
-        name: current.name,
-        gridSize: current.gridSize,
-        gridCols: current.gridCols,
-        gridRows: current.gridRows,
-        imageUrl: current.imageUrl,
-        blocked: current.blocked,
-      })
+      await api.patchMap(current.id, patchPayload(current))
       setMsg(t('mapMaker.savedMsg'))
     } catch (e) {
       const text = e instanceof Error ? e.message : t('mapMaker.errSave')
@@ -218,9 +210,14 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
               />
             </label>
             {draft.imageUrl ? (
-              <Button size="sm" variant="ghost" className="mt-1 w-full" onClick={clearBackground}>
-                {t('mapMaker.removeBackground')}
-              </Button>
+              <>
+                <Button size="sm" variant="ghost" className="mt-1 w-full" onClick={clearBackground}>
+                  {t('mapMaker.removeBackground')}
+                </Button>
+                <Button size="sm" variant={aligning ? 'default' : 'outline'} className="mt-1 w-full" onClick={() => setAligning((v) => !v)}>
+                  <Crosshair className="h-4 w-4" /> {t('mapAlign.openButton')}
+                </Button>
+              </>
             ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
@@ -252,19 +249,42 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
           {msg && <p className="text-xs text-moss">{msg}</p>}
         </div>
       </div>
-      <div className="h-[32rem] overflow-hidden rounded-xl border border-line bg-bg lg:h-[40rem]">
-        <MapBoard
-          map={draft}
-          tokens={[]}
-          fog={{ cols: draft.gridCols, rows: draft.gridRows, enabled: false, revealed: [] }}
-          isDm
-          tool={tool}
-          onBlocked={(blocked) => {
-            const next = { ...pending.current, blocked }
-            apply(next)
-          }}
-        />
-      </div>
+      {aligning && draft.imageUrl ? (
+        <div className="overflow-auto rounded-xl border border-line bg-bg p-4">
+          <GridAlignTool
+            imageUrl={draft.imageUrl}
+            gridSize={draft.gridSize}
+            bgOffsetX={draft.bgOffsetX}
+            bgOffsetY={draft.bgOffsetY}
+            bgScale={draft.bgScale}
+            onApply={(next) => {
+              patch(next)
+              setAligning(false)
+              setMsg(t('mapAlign.appliedMsg'))
+            }}
+            onClearAlignment={() => {
+              patch({ bgScale: null, bgOffsetX: 0, bgOffsetY: 0 })
+              setAligning(false)
+              setMsg(t('mapAlign.clearedMsg'))
+            }}
+            onCancel={() => setAligning(false)}
+          />
+        </div>
+      ) : (
+        <div className="h-[32rem] overflow-hidden rounded-xl border border-line bg-bg lg:h-[40rem]">
+          <MapBoard
+            map={draft}
+            tokens={[]}
+            fog={{ cols: draft.gridCols, rows: draft.gridRows, enabled: false, revealed: [] }}
+            isDm
+            tool={tool}
+            onBlocked={(blocked) => {
+              const next = { ...pending.current, blocked }
+              apply(next)
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }

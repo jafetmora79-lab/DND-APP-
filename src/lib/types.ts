@@ -238,6 +238,18 @@ export type BattleMap = {
    * 4 slippery, 5 fire, 6 water. Older maps used only 0|1.
    */
   blocked: number[]
+  /**
+   * Background image alignment. bgScale null = legacy behavior: stretch the
+   * image to exactly fill the grid (gridCols*gridSize x gridRows*gridSize),
+   * ignoring its aspect ratio — this is how every map behaved before the
+   * alignment tool existed, so it stays the default for new maps too. Once
+   * calibrated (bgScale set), the image is drawn at its natural size *
+   * bgScale, positioned at (bgOffsetX, bgOffsetY) in world pixels, so a
+   * pre-gridded map image can be lined up exactly with the app's grid.
+   */
+  bgScale: number | null
+  bgOffsetX: number
+  bgOffsetY: number
 }
 
 export type GridCell = { x: number; y: number }
