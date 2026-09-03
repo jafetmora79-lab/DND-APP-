@@ -186,6 +186,8 @@ export type CharacterSheetData = {
   abilities: Record<Ability, number>
   savingThrowProf: Record<Ability, boolean>
   attacks: Attack[]
+  /** Attacks granted per Action by Extra Attack (etc). Defaults to 1. */
+  attacksPerAction: number
   skillProf: Record<string, boolean>
   skillExpertise: Record<string, boolean>
   spellcastingAbility: Ability | ''
@@ -383,6 +385,8 @@ export type Combatant = {
   speedFeet: number
   /** Feet of movement left this turn. Resets to speedFeet when this combatant's turn begins. */
   movementRemaining: number
+  /** Attacks already made against the Action slot this turn. Resets to 0 when this combatant's turn begins. */
+  attacksUsed: number
 }
 
 export type MapToken = {
@@ -496,6 +500,7 @@ export function emptySheet(): CharacterSheetData {
     abilities,
     savingThrowProf,
     attacks: [{ name: '', bonus: '', damage: '', range: '5 ft.' }],
+    attacksPerAction: 1,
     skillProf: {},
     skillExpertise: {},
     spellcastingAbility: '',

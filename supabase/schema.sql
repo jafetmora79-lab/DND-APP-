@@ -285,6 +285,7 @@ alter table public.combatants add column if not exists turn_economy_json jsonb n
 alter table public.combatants add column if not exists stats_json jsonb;
 alter table public.combatants add column if not exists speed_feet int not null default 30;
 alter table public.combatants add column if not exists movement_remaining int not null default 30;
+alter table public.combatants add column if not exists attacks_used int not null default 0;
 alter table public.encounter_instances add column if not exists activity_json jsonb not null default '[]'::jsonb;
 alter table public.encounter_instances add column if not exists prompt_json jsonb;
 
@@ -292,6 +293,7 @@ drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int);
 drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int, uuid);
 drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int, uuid, int, text);
 drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int, uuid, int, text, int);
+drop function if exists public.resolve_player_attack(uuid, uuid, int, int, int, uuid, int, text, int, text);
 
 create or replace function public.resolve_player_attack(
   p_instance uuid,
@@ -302,7 +304,8 @@ create or replace function public.resolve_player_attack(
   p_attacker uuid default null,
   p_d20_b int default null,
   p_roll_mode text default 'normal',
-  p_cover int default 0
+  p_cover int default 0,
+  p_slot text default 'action'
 )
 returns json
 language plpgsql
@@ -340,6 +343,9 @@ declare
   cover int;
   effective_ac int;
   hiding boolean;
+  resolved_slot text;
+  attacks_per_action int;
+  attacks_used int;
 begin
   if auth.uid() is null then
     raise exception 'Sign-in required';
@@ -384,6 +390,12 @@ begin
     end if;
   end if;
 
+  resolved_slot := case when p_slot in ('bonus', 'reaction') then p_slot else 'action' end;
+  if coalesce(attacker.turn_economy_json, '{}'::jsonb) ->> resolved_slot = 'true' then
+    raise exception 'Your % is already used.', resolved_slot;
+  end if;
+  attacks_per_action := 1;
+
   select * into target from public.combatants
     where id = p_target and encounter_instance_id = inst.id;
   if not found then
@@ -407,6 +419,7 @@ begin
       raise exception 'Character not found';
     end if;
     sheet := ch.sheet_json;
+    attacks_per_action := greatest(1, coalesce((sheet->>'attacksPerAction')::int, 1));
     if jsonb_typeof(sheet->'attacks') is distinct from 'array' then
       raise exception 'No attacks on the sheet';
     end if;
@@ -504,9 +517,21 @@ begin
           where lower(x) <> 'hiding'
         ), '[]'::jsonb)
     where id in (attacker.id, target.id);
-  update public.combatants
-    set turn_economy_json = jsonb_set(coalesce(turn_economy_json, '{}'::jsonb), '{action}', 'true'::jsonb)
-    where id = attacker.id;
+  attacks_used := coalesce(attacker.attacks_used, 0);
+  if resolved_slot = 'action' then
+    attacks_used := attacks_used + 1;
+    update public.combatants
+      set attacks_used = attacks_used,
+          turn_economy_json = case when attacks_used >= attacks_per_action
+            then jsonb_set(coalesce(turn_economy_json, '{}'::jsonb), '{action}', 'true'::jsonb)
+            else coalesce(turn_economy_json, '{}'::jsonb)
+          end
+      where id = attacker.id;
+  else
+    update public.combatants
+      set turn_economy_json = jsonb_set(coalesce(turn_economy_json, '{}'::jsonb), array[resolved_slot], 'true'::jsonb)
+      where id = attacker.id;
+  end if;
 
   if not hit then
     if fumble then
@@ -606,7 +631,7 @@ begin
 end;
 $$;
 
-grant execute on function public.resolve_player_attack(uuid, uuid, int, int, int, uuid, int, text, int) to authenticated;
+grant execute on function public.resolve_player_attack(uuid, uuid, int, int, int, uuid, int, text, int, text) to authenticated;
 
 create or replace function public.resolve_death_save(p_combatant uuid, p_d20 int)
 returns json
@@ -1410,7 +1435,8 @@ begin
   if nxt.id is not null and can_act then
     update public.combatants
       set turn_economy_json = '{"action":false,"bonus":false,"reaction":false,"movement":false}'::jsonb,
-          movement_remaining = coalesce(speed_feet, 30)
+          movement_remaining = coalesce(speed_feet, 30),
+          attacks_used = 0
       where id = nxt.id;
   end if;
   if wrapped then

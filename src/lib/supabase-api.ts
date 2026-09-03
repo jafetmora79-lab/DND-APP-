@@ -329,6 +329,7 @@ function combatantFromSupabase(c: Record<string, unknown>, monster?: Parameters<
     movementRemaining: Number.isFinite(Number((c as { movement_remaining?: unknown }).movement_remaining))
       ? Math.max(0, Number((c as { movement_remaining?: unknown }).movement_remaining))
       : parseSpeedFeet((c as { speed_feet?: unknown }).speed_feet ?? 30),
+    attacksUsed: Math.max(0, Number((c as { attacks_used?: unknown }).attacks_used) || 0),
   }
 }
 
@@ -1420,6 +1421,7 @@ export const supabaseApi: TableApi = {
         movementRemaining: Number.isFinite(Number((c as { movement_remaining?: unknown }).movement_remaining))
           ? Math.max(0, Number((c as { movement_remaining?: unknown }).movement_remaining))
           : parseSpeedFeet((c as { speed_feet?: unknown }).speed_feet ?? 30),
+        attacksUsed: Math.max(0, Number((c as { attacks_used?: unknown }).attacks_used) || 0),
       })),
       tokens: (tokens ?? []).map((t) => ({
         id: String(t.id),
@@ -1771,8 +1773,15 @@ export const supabaseApi: TableApi = {
       p_d20_b: body.d20b ?? null,
       p_roll_mode: body.rollMode ?? 'normal',
       p_cover: cover,
+      p_slot: body.slot ?? 'action',
     }
     let { data, error } = await db().rpc('resolve_player_attack', payload)
+    if (error && /p_slot/.test(error.message)) {
+      delete payload.p_slot
+      const retry = await db().rpc('resolve_player_attack', payload)
+      data = retry.data
+      error = retry.error
+    }
     if (error && /p_cover/.test(error.message)) {
       delete payload.p_cover
       const retry = await db().rpc('resolve_player_attack', payload)

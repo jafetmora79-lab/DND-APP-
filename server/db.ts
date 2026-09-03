@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS combatants (
   stats_json TEXT,
   speed_feet INTEGER NOT NULL DEFAULT 30,
   movement_remaining INTEGER NOT NULL DEFAULT 30,
+  attacks_used INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (encounter_instance_id) REFERENCES encounter_instances(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS tokens_on_map (
@@ -234,6 +235,11 @@ try {
 }
 try {
   db.exec(`ALTER TABLE combatants ADD COLUMN turn_economy_json TEXT NOT NULL DEFAULT '{"action":false,"bonus":false,"reaction":false,"movement":false}'`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE combatants ADD COLUMN attacks_used INTEGER NOT NULL DEFAULT 0`)
 } catch {
   /* already present */
 }
@@ -416,6 +422,7 @@ function combatantFromDb(c: Record<string, unknown>, monster?: Parameters<typeof
     movementRemaining: Number.isFinite(Number(c.movement_remaining))
       ? Math.max(0, Number(c.movement_remaining))
       : parseSpeedFeet(c.speed_feet ?? 30),
+    attacksUsed: Math.max(0, Number(c.attacks_used) || 0),
   }
 }
 
@@ -745,6 +752,7 @@ export function resolveCombatAttack(opts: {
   rollMode?: string
   damage: number
   skipRange?: boolean
+  slot?: string
 }): PlayerAttackResult {
   const { campaignId, instanceId, attackerId, targetId, attackIndex, d20, damage } = opts
   if (!Number.isInteger(d20) || d20 < 1 || d20 > 20) throw new Error('d20 must be between 1 and 20')
@@ -774,6 +782,10 @@ export function resolveCombatAttack(opts: {
   ) {
     throw new Error(`${attacker.name} cannot take a normal attack`)
   }
+  const slot: CombatSpendSlot = opts.slot === 'bonus' ? 'bonus' : opts.slot === 'reaction' ? 'reaction' : 'action'
+  const attackerEconGate = parseTurnEconomy(jparse((attacker.turn_economy_json as string) || '{}', {}))
+  if (attackerEconGate[slot]) throw new Error(`Your ${slot} is already used.`)
+  const attacksPerAction = attacksPerActionFor(attacker)
   const target = db.prepare('SELECT * FROM combatants WHERE id = ? AND encounter_instance_id = ?').get(targetId, instanceId) as
     | Record<string, unknown>
     | undefined
@@ -828,10 +840,21 @@ export function resolveCombatAttack(opts: {
   const tgtName = String(target.name)
   const atkId = String(attacker.id)
   const attackerEconRaw = String(attacker.turn_economy_json ?? '{}')
+  const attackerAttacksUsed = Math.max(0, Number(attacker.attacks_used) || 0)
   function noteAttack(hit: boolean, dmg: number) {
     const econ = parseTurnEconomy(jparse(attackerEconRaw || '{}', {}))
-    econ.action = true
-    db.prepare('UPDATE combatants SET turn_economy_json = ? WHERE id = ?').run(JSON.stringify(econ), atkId)
+    if (slot === 'action') {
+      const attacksUsed = attackerAttacksUsed + 1
+      if (attacksUsed >= attacksPerAction) econ.action = true
+      db.prepare('UPDATE combatants SET turn_economy_json = ?, attacks_used = ? WHERE id = ?').run(
+        JSON.stringify(econ),
+        attacksUsed,
+        atkId,
+      )
+    } else {
+      econ[slot] = true
+      db.prepare('UPDATE combatants SET turn_economy_json = ? WHERE id = ?').run(JSON.stringify(econ), atkId)
+    }
     appendInstanceActivity(instanceId, `${atkName} attacks ${tgtName}.`)
     appendInstanceActivity(instanceId, `Attack roll: ${diceNote} + ${bonus} = ${total}.`)
     appendInstanceActivity(instanceId, hit ? 'HIT.' : outcome === 'fumble' ? 'MISS (nat 1).' : 'MISS.')
@@ -988,7 +1011,7 @@ export function resetTurnEconomyAt(instanceId: string, turnOrderPosition: number
     .get(instanceId, turnOrderPosition) as { id: string; speed_feet?: number } | undefined
   if (!row) return
   const speed = parseSpeedFeet(row.speed_feet ?? 30)
-  db.prepare('UPDATE combatants SET turn_economy_json = ?, movement_remaining = ? WHERE id = ?').run(
+  db.prepare('UPDATE combatants SET turn_economy_json = ?, movement_remaining = ?, attacks_used = 0 WHERE id = ?').run(
     JSON.stringify(emptyTurnEconomy()),
     speed,
     row.id,
@@ -1177,6 +1200,17 @@ export function applyHpKnockout(combatantId: string, prevHp: number, nextHp: num
   const target = db.prepare('SELECT * FROM combatants WHERE id = ?').get(combatantId) as Record<string, unknown> | undefined
   if (!target) return
   applyKnockout(target, prevHp, nextHp, 1)
+}
+
+function attacksPerActionFor(attacker: Record<string, unknown>): number {
+  if (attacker.source !== 'character') return 1
+  const ch = db.prepare('SELECT sheet_json FROM player_characters WHERE id = ?').get(attacker.source_id) as
+    | { sheet_json?: string }
+    | undefined
+  if (!ch) return 1
+  const sheet = jparse<CharacterSheetData>(ch.sheet_json as string, emptySheet())
+  const n = Number(sheet.attacksPerAction)
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1
 }
 
 function lookupAttack(attacker: Record<string, unknown>, attackIndex: number) {
@@ -1374,6 +1408,7 @@ export function resolvePlayerAttack(opts: {
   d20b?: number
   rollMode?: string
   damage: number
+  slot?: string
 }): PlayerAttackResult {
   const attacker = db
     .prepare(`SELECT * FROM combatants WHERE encounter_instance_id = ? AND source = 'character' AND source_id = ?`)

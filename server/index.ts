@@ -1240,6 +1240,7 @@ app.post('/api/instances/:id/player-attack', requireUser, (req, res) => {
       d20b: req.body.d20b == null || req.body.d20b === '' ? undefined : Number(req.body.d20b),
       rollMode: req.body.rollMode,
       damage: Number(req.body.damage),
+      slot: req.body.slot,
     }
     let result
     if (user.role === 'player') {

@@ -144,6 +144,7 @@ export const localApi = {
       rollMode?: string
       damage: number
       attackerId?: string
+      slot?: string
     },
   ) =>
     req<{

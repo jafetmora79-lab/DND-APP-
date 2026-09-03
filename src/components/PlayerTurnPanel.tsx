@@ -30,6 +30,15 @@ const DECLARE_KINDS = [
   { kind: 'other', labelKey: 'declare.other' },
 ] as const
 
+// A Reaction is always triggered by something (an enemy leaving your reach, a
+// reaction spell/feature responding to a trigger) — never a free choice off a
+// menu, so it only offers an Opportunity Attack or a custom note, not the
+// full action list.
+const REACTION_KINDS = [
+  { kind: 'attack', labelKey: 'declare.opportunityAttack' },
+  { kind: 'other', labelKey: 'declare.other' },
+] as const
+
 type Props = {
   instanceId: string
   character: PlayerCharacter
@@ -116,7 +125,6 @@ export function PlayerTurnPanel({
   }
 
   function startAttack(attack: Attack, index: number) {
-    setSlot('action')
     setMenu('attack')
     setStep('target')
     setPending({ attack, index })
@@ -223,6 +231,7 @@ export function PlayerTurnPanel({
         d20b: undefined,
         rollMode: mode,
         damage: dmg,
+        slot,
       })
       setMsg(r.message)
       resetMenus()
@@ -323,7 +332,7 @@ export function PlayerTurnPanel({
 
   const hideGate = combatant && map ? canAttemptHide(combatant, combatants, tokens, map) : null
   const hideDc = combatant ? hideDcFor(combatant, combatants, [character], monsters) : 10
-  const declareList = slot === 'action' ? DECLARE_KINDS : DECLARE_KINDS.filter((k) => k.kind !== 'attack')
+  const declareList = slot === 'reaction' ? REACTION_KINDS : DECLARE_KINDS
 
   return (
     <div className="border-t border-line bg-panel px-3 py-2">
@@ -400,6 +409,8 @@ export function PlayerTurnPanel({
               </Button>
             )}
           </div>
+
+          {menu === 'reaction' && <p className="mt-2 text-center text-xs text-muted">{t('turn.reactionHint')}</p>}
 
           {(menu === 'action' || menu === 'bonus' || menu === 'reaction') && (
             <div className="mt-2 flex flex-wrap gap-2 justify-center">

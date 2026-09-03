@@ -430,6 +430,19 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
 
             <div className="dnd-panel">
               <div className="dnd-panel-label">{t('sheet.attacks')}</div>
+              <div className="mb-2 max-w-[10rem]">
+                <Field label={t('sheet.attacksPerAction')}>
+                  <Input
+                    disabled={!canEdit}
+                    type="number"
+                    min={1}
+                    max={6}
+                    value={sheet.attacksPerAction ?? 1}
+                    onChange={(e) => patchSheet({ attacksPerAction: Math.max(1, Number(e.target.value) || 1) })}
+                  />
+                </Field>
+                <p className="mt-1 text-[10px] text-muted">{t('sheet.attacksPerActionHint')}</p>
+              </div>
               <div className="mb-1 hidden text-[10px] uppercase tracking-wider text-muted @min-[32rem]:grid @min-[32rem]:grid-cols-4 @min-[32rem]:gap-2">
                 <span>{t('sheet.attackName')}</span>
                 <span>{t('sheet.attackBonus')}</span>
