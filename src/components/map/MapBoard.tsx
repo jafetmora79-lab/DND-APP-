@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Maximize2, Minus, Plus } from 'lucide-react'
-import { Circle, Group, Layer, Rect, Shape, Stage, Text, Image as KImage } from 'react-konva'
+import { Circle, Group, Layer, Rect, Shape, Stage, Text, Wedge, Image as KImage } from 'react-konva'
 import useImage from 'use-image'
+import { aoeAngleDeg, CONE_FULL_ANGLE_DEG, type AoeKind, type AoeShape } from '@/lib/aoe'
 import { conditionRingColor, type BattleMap, type Combatant, type FogState, type MapToken } from '@/lib/types'
 import { tokenHiddenFromPlayers } from '@/lib/combat'
 import { clampMapScale, fitMapView, touchDistance, zoomAtPoint } from '@/lib/map-view'
@@ -21,6 +22,10 @@ export type MapTool =
   | 'water'
   | 'half-cover'
   | 'three-quarter-cover'
+  | 'aoe-circle'
+  | 'aoe-cone'
+  | 'aoe-line'
+  | 'aoe-cube'
 
 const TERRAIN_TOOL: Partial<Record<MapTool, number>> = {
   open: TERRAIN.OPEN,
@@ -32,6 +37,13 @@ const TERRAIN_TOOL: Partial<Record<MapTool, number>> = {
   water: TERRAIN.WATER,
   'half-cover': TERRAIN.HALF_COVER,
   'three-quarter-cover': TERRAIN.THREE_QUARTER_COVER,
+}
+
+const AOE_TOOL_KIND: Partial<Record<MapTool, AoeKind>> = {
+  'aoe-circle': 'circle',
+  'aoe-cone': 'cone',
+  'aoe-line': 'line',
+  'aoe-cube': 'cube',
 }
 
 type Props = {
@@ -52,6 +64,10 @@ type Props = {
   /** Player viewing this map — their own token stays visible through fog. */
   viewerCharacterId?: string | null
   combatants?: Combatant[]
+  /** Area-of-effect template, controlled by the parent so it can compute affected creatures and offer a Clear button. */
+  aoeShape?: AoeShape | null
+  onAoeShape?: (shape: AoeShape | null) => void
+  aoeWidthFeet?: number
 }
 
 function MapImage({
@@ -79,6 +95,60 @@ function MapImage({
   return <KImage image={img} x={bgOffsetX} y={bgOffsetY} width={img.width * bgScale} height={img.height * bgScale} listening={false} />
 }
 
+function AoeOverlay({ shape, gridSize }: { shape: AoeShape; gridSize: number }) {
+  const fill = 'rgba(120, 170, 220, 0.28)'
+  const stroke = 'rgba(180, 220, 255, 0.9)'
+  const length = Math.hypot(shape.endX - shape.originX, shape.endY - shape.originY)
+  if (length < 1) return null
+  if (shape.kind === 'circle') {
+    return <Circle x={shape.originX} y={shape.originY} radius={length} fill={fill} stroke={stroke} strokeWidth={2} />
+  }
+  if (shape.kind === 'cube') {
+    const x = Math.min(shape.originX, shape.endX)
+    const y = Math.min(shape.originY, shape.endY)
+    return (
+      <Rect
+        x={x}
+        y={y}
+        width={Math.abs(shape.endX - shape.originX)}
+        height={Math.abs(shape.endY - shape.originY)}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={2}
+      />
+    )
+  }
+  const angle = aoeAngleDeg(shape)
+  if (shape.kind === 'cone') {
+    return (
+      <Wedge
+        x={shape.originX}
+        y={shape.originY}
+        radius={length}
+        angle={CONE_FULL_ANGLE_DEG}
+        rotation={angle - CONE_FULL_ANGLE_DEG / 2}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={2}
+      />
+    )
+  }
+  const widthPx = ((shape.widthFeet ?? 5) / 5) * gridSize
+  return (
+    <Rect
+      x={shape.originX}
+      y={shape.originY}
+      width={length}
+      height={widthPx}
+      offsetY={widthPx / 2}
+      rotation={angle}
+      fill={fill}
+      stroke={stroke}
+      strokeWidth={2}
+    />
+  )
+}
+
 export function MapBoard({
   map,
   tokens,
@@ -95,12 +165,16 @@ export function MapBoard({
   dragRefIds = [],
   viewerCharacterId = null,
   combatants = [],
+  aoeShape = null,
+  onAoeShape,
+  aoeWidthFeet = 5,
 }: Props) {
   const wrap = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [scale, setScale] = useState(1)
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const painting = useRef(false)
+  const drawingAoe = useRef(false)
   const lastPaint = useRef(-1)
   const dragOrigin = useRef<Record<string, { x: number; y: number }>>({})
   const pointerDown = useRef<{ x: number; y: number } | null>(null)
@@ -112,6 +186,7 @@ export function MapBoard({
   const blocked = map.blocked ?? []
   const paintingTerrain = Boolean(TERRAIN_TOOL[tool] != null || tool === 'open' || tool === 'block')
   const paintingFog = tool === 'reveal' || tool === 'hide'
+  const aoeKind = AOE_TOOL_KIND[tool] ?? null
   const hideOpts = { viewerCharacterId, combatants }
   const visibleTokens = tokens.filter((t) => !tokenHiddenFromPlayers(t, fog, map.gridSize, isDm, hideOpts))
   const tokenFogHoles = new Set<string>()
@@ -270,6 +345,12 @@ export function MapBoard({
         onMouseDown={(e) => {
           const ptr = e.target.getStage()?.getPointerPosition()
           pointerDown.current = ptr ? { x: ptr.x, y: ptr.y } : null
+          if (aoeKind) {
+            drawingAoe.current = true
+            const w = worldFromEvent(e)
+            if (w) onAoeShape?.({ kind: aoeKind, originX: w.x, originY: w.y, endX: w.x, endY: w.y, widthFeet: aoeWidthFeet })
+            return
+          }
           if (paintingFog || paintingTerrain) {
             painting.current = true
             lastPaint.current = -1
@@ -285,6 +366,7 @@ export function MapBoard({
         onTouchStart={(e) => {
           if (e.evt.touches.length >= 2) {
             painting.current = false
+            drawingAoe.current = false
             const dist = touchDistance(e.evt.touches[0], e.evt.touches[1])
             pinch.current = { dist, scale, pos: { ...pos } }
             const stage = e.target.getStage()
@@ -292,6 +374,12 @@ export function MapBoard({
             return
           }
           pinch.current = null
+          if (aoeKind) {
+            drawingAoe.current = true
+            const w = worldFromEvent(e)
+            if (w) onAoeShape?.({ kind: aoeKind, originX: w.x, originY: w.y, endX: w.x, endY: w.y, widthFeet: aoeWidthFeet })
+            return
+          }
           if (!(paintingFog || paintingTerrain)) return
           painting.current = true
           lastPaint.current = -1
@@ -314,6 +402,11 @@ export function MapBoard({
           onCellClick(col, row)
         }}
         onMouseMove={(e) => {
+          if (drawingAoe.current && aoeShape) {
+            const w = worldFromEvent(e)
+            if (w) onAoeShape?.({ ...aoeShape, endX: w.x, endY: w.y })
+            return
+          }
           if (!painting.current) return
           const w = worldFromEvent(e)
           if (w) paintAt(w.x, w.y)
@@ -337,21 +430,29 @@ export function MapBoard({
             applyView(zoomAtPoint(start.scale, next, start.pos, center))
             return
           }
+          if (drawingAoe.current && aoeShape) {
+            const w = worldFromEvent(e)
+            if (w) onAoeShape?.({ ...aoeShape, endX: w.x, endY: w.y })
+            return
+          }
           if (!painting.current) return
           const w = worldFromEvent(e)
           if (w) paintAt(w.x, w.y)
         }}
         onMouseUp={() => {
           painting.current = false
+          drawingAoe.current = false
           lastPaint.current = -1
         }}
         onTouchEnd={(e) => {
           if (e.evt.touches.length < 2) pinch.current = null
           painting.current = false
+          drawingAoe.current = false
           lastPaint.current = -1
         }}
         onMouseLeave={() => {
           painting.current = false
+          drawingAoe.current = false
           lastPaint.current = -1
         }}
       >
@@ -648,6 +749,11 @@ export function MapBoard({
             )
           })}
         </Layer>
+        {aoeShape && (
+          <Layer listening={false}>
+            <AoeOverlay shape={aoeShape} gridSize={map.gridSize} />
+          </Layer>
+        )}
         {isDm && (
           <Layer listening={false}>
             <Rect x={0} y={0} width={worldW} height={worldH} stroke="rgba(212,180,90,0.15)" />

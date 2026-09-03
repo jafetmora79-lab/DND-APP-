@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Check, Copy, Eye, EyeOff, Flag, Home, Moon, Pause, Play, Sun, Sword, Trophy } from 'lucide-react'
+import { Check, Copy, Eye, EyeOff, Flag, Home, Moon, Pause, Play, Sun, Sword, Trophy, X as XIcon } from 'lucide-react'
 import { AttackBar } from '@/components/AttackBar'
 import { CombatActivityFeed } from '@/components/CombatActivityFeed'
 import { InitiativePopup } from '@/components/InitiativePopup'
@@ -9,19 +9,20 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CharacterSheet } from '@/components/CharacterSheet'
 import { EncounterOutcomeOverlay } from '@/components/EncounterOutcome'
-import { MapBoard } from '@/components/map/MapBoard'
+import { MapBoard, type MapTool } from '@/components/map/MapBoard'
 import { StatBlock } from '@/components/StatBlock'
 import { StartFightDialog } from '@/components/StartFightDialog'
 import { TableHub } from '@/components/TableHub'
 import { Tracker } from '@/components/Tracker'
 import { api } from '@/lib/api'
+import { aoeCoveredCells, aoeLengthFeet, type AoeShape } from '@/lib/aoe'
 import { attacksFromMonster, canTakeAttacks, decorateTokens, effectiveRollMode, hasHiddenAdvantage, isDodging, inRangeCombatantIds } from '@/lib/combat'
 import { LanguageToggle, useT } from '@/lib/i18n'
 import { ThemeToggle } from '@/lib/theme'
 import { useLive } from '@/lib/realtime'
 import { isFightSetup, showCombatStage, showOutcome } from '@/lib/session'
 import { ABILITIES, ABILITY_LABELS, type Ability, type Attack, type EncounterInstance, type EncounterSnapshot, type EncounterTemplate, type FogState, type Monster, type RollMode } from '@/lib/types'
-import { cn } from '@/lib/utils'
+import { cn, tokenOccupiedCells } from '@/lib/utils'
 import { copyText } from '@/lib/copy'
 import { adjacentBeat, ambianceFromBeat, emptyBeat, ensureCombatBeatForTemplate, markBeatActive, markBeatForTemplate, markOpeningActive, openingSceneBeat, parseHub, sortTemplates, tableAmbiance } from '@/lib/campaign-hub'
 import { asCombatantLike, standingEnemies, type StartFightOpts } from '@/lib/turn-flow'
@@ -37,7 +38,8 @@ export function Live() {
   const [selected, setSelected] = useState<string | null>(null)
   const [sheetId, setSheetId] = useState<string | null>(null)
   const [panel, setPanel] = useState<'tracker' | 'sheet' | 'stat'>('tracker')
-  const [tool, setTool] = useState<'select' | 'reveal' | 'hide'>('select')
+  const [tool, setTool] = useState<MapTool>('select')
+  const [aoeShape, setAoeShape] = useState<AoeShape | null>(null)
   const [addQ, setAddQ] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -94,10 +96,38 @@ export function Live() {
     if (selectedMonster) return attacksFromMonster(selectedMonster)
     return [{ name: 'Strike', bonus: '+0', damage: '', range: '5 ft.' }]
   }, [selectedCombatant, selectedMonster, snap?.characters])
+  const aoeAffectedIds = useMemo(() => {
+    if (!aoeShape || !snap?.map) return []
+    const cells = new Set(
+      aoeCoveredCells(aoeShape, snap.map.gridSize, snap.map.gridCols, snap.map.gridRows).map((c) => `${c.col},${c.row}`),
+    )
+    const ids: string[] = []
+    for (const tok of snap.tokens) {
+      const occ = tokenOccupiedCells(tok, snap.map.gridSize, snap.map.gridCols, snap.map.gridRows)
+      if (occ.some((c) => cells.has(`${c.col},${c.row}`))) ids.push(tok.refId)
+    }
+    return ids
+  }, [aoeShape, snap?.map, snap?.tokens])
   const highlightIds = useMemo(() => {
+    if (aoeShape) return aoeAffectedIds
     if (!snap?.map || !pending || !selectedCombatant) return []
     return inRangeCombatantIds(snap.map, snap.tokens, snap.combatants, selectedCombatant.id, pending.attack)
-  }, [snap, pending, selectedCombatant])
+  }, [snap, pending, selectedCombatant, aoeShape, aoeAffectedIds])
+  const aoeAffectedNames = useMemo(() => {
+    if (!aoeShape || !snap) return []
+    return aoeAffectedIds
+      .map((id) => snap.combatants.find((c) => c.id === id)?.name)
+      .filter((n): n is string => Boolean(n))
+  }, [aoeShape, aoeAffectedIds, snap])
+  const aoeLength = useMemo(() => {
+    if (!aoeShape || !snap?.map) return 0
+    return Math.round(aoeLengthFeet(aoeShape, snap.map.gridSize) / 5) * 5
+  }, [aoeShape, snap?.map])
+
+  function selectAoeTool(kind: MapTool) {
+    setAoeShape(null)
+    setTool((cur) => (cur === kind ? 'select' : kind))
+  }
   const attackTarget = snap?.combatants.find((c) => c.id === targetId)
   const whose = snap?.combatants.find((c) => c.turnOrderPosition === instance?.currentTurnPosition)
   const attackCover =
@@ -119,6 +149,7 @@ export function Live() {
     setDamage('')
     setAttackMsg('')
     setTool('select')
+    setAoeShape(null)
   }
 
   async function submitAttack() {
@@ -919,9 +950,18 @@ export function Live() {
               }
             }}
             onFog={onFog}
+            aoeShape={aoeShape}
+            onAoeShape={setAoeShape}
           />
           <div className="absolute left-2 top-2 z-10 flex max-w-[calc(100%-3.5rem)] flex-wrap gap-1">
-            <Button size="sm" variant={tool === 'select' ? 'default' : 'outline'} onClick={() => setTool('select')}>
+            <Button
+              size="sm"
+              variant={tool === 'select' ? 'default' : 'outline'}
+              onClick={() => {
+                setTool('select')
+                setAoeShape(null)
+              }}
+            >
               <Sword className="h-4 w-4" /> {t('map.move')}
             </Button>
             <Button
@@ -977,7 +1017,33 @@ export function Live() {
             >
               {instance.fogState.enabled ? t('map.fogOn') : t('map.fogOff')}
             </Button>
+            <span className="mx-1 w-px self-stretch bg-line" />
+            <Button size="sm" variant={tool === 'aoe-circle' ? 'default' : 'outline'} onClick={() => selectAoeTool('aoe-circle')}>
+              {t('map.aoeCircle')}
+            </Button>
+            <Button size="sm" variant={tool === 'aoe-cone' ? 'default' : 'outline'} onClick={() => selectAoeTool('aoe-cone')}>
+              {t('map.aoeCone')}
+            </Button>
+            <Button size="sm" variant={tool === 'aoe-line' ? 'default' : 'outline'} onClick={() => selectAoeTool('aoe-line')}>
+              {t('map.aoeLine')}
+            </Button>
+            <Button size="sm" variant={tool === 'aoe-cube' ? 'default' : 'outline'} onClick={() => selectAoeTool('aoe-cube')}>
+              {t('map.aoeCube')}
+            </Button>
+            {aoeShape && (
+              <Button size="sm" variant="ghost" onClick={() => setAoeShape(null)}>
+                <XIcon className="h-4 w-4" /> {t('map.aoeClear')}
+              </Button>
+            )}
           </div>
+          {aoeShape && (
+            <div className="absolute bottom-2 left-2 z-10 max-w-[calc(100%-1rem)] rounded-md border border-line bg-panel/80 px-3 py-2 text-xs text-ink shadow backdrop-blur-sm">
+              <span className="text-muted">{t('map.aoeLength', { feet: String(aoeLength) })}</span>
+              {aoeAffectedNames.length > 0 && (
+                <span className="ml-2">{t('map.aoeAffected', { names: aoeAffectedNames.join(', ') })}</span>
+              )}
+            </div>
+          )}
         </main>
 
         <aside
