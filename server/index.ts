@@ -19,6 +19,7 @@ import {
     parseBlockedCells,
     pixelToCell,
     remapBlocked,
+    spreadCells,
     tokenOccupiesBlocked,
     walkablePixel,
 } from '../src/lib/utils.ts'
@@ -1204,10 +1205,25 @@ app.post('/api/instances/:id/combatants', requireDm, (req, res) => {
       m: number
     }
     const cid = ids.id()
-      const qty = Number(req.body.quantity ?? 1)
+      const qty = Math.max(1, Number(req.body.quantity ?? 1))
       const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(inst.map_id) as Record<string, unknown> | undefined
       const battle = map ? mapFromDb(map) : null
       const cell = battle?.gridSize ?? 70
+      const existingTokens = db.prepare('SELECT x, y FROM tokens_on_map WHERE encounter_instance_id = ?').all(inst.id) as {
+        x: number
+        y: number
+      }[]
+      const occupied = new Set(existingTokens.map((t) => {
+        const { col, row } = pixelToCell(t.x, t.y, cell)
+        return `${col},${row}`
+      }))
+      const hasStart = Number.isFinite(Number(req.body.startCol)) && Number.isFinite(Number(req.body.startRow))
+      const origin = hasStart
+        ? { col: Number(req.body.startCol), row: Number(req.body.startRow) }
+        : { col: battle ? Math.floor(battle.gridCols / 2) : 3, row: battle ? Math.floor(battle.gridRows / 2) : 3 }
+      const cells = battle
+        ? spreadCells(origin, qty, battle.gridCols, battle.gridRows, battle.blocked, occupied)
+        : Array.from({ length: qty }, (_, i) => ({ col: origin.col + i, row: origin.row }))
       for (let i = 0; i < qty; i++) {
         const id = i === 0 ? cid : ids.id()
         const name = qty > 1 ? `${src.name} ${i + 1}` : String(src.name)
@@ -1235,9 +1251,10 @@ app.post('/api/instances/:id/combatants', requireDm, (req, res) => {
           speedFeet,
           speedFeet,
         )
+        const target = cells[i] ?? origin
         const pos = battle
-          ? walkablePixel(battle, 3 + i, 3)
-          : { x: cell * (3 + i) + cell / 2, y: cell * 3 + cell / 2 }
+          ? walkablePixel(battle, target.col, target.row)
+          : { x: cell * target.col + cell / 2, y: cell * target.row + cell / 2 }
         db.prepare(
           `INSERT INTO tokens_on_map (id, encounter_instance_id, x, y, ref_type, ref_id, label, color, size_squares, visible_to_players)
            VALUES (?,?,?,?,?,?,?,?,?,?)`,

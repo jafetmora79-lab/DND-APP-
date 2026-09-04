@@ -41,6 +41,8 @@ export function Live() {
   const [tool, setTool] = useState<MapTool>('select')
   const [aoeShape, setAoeShape] = useState<AoeShape | null>(null)
   const [addQ, setAddQ] = useState('')
+  const [addQty, setAddQty] = useState(1)
+  const [placingMonsterId, setPlacingMonsterId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [copiedJoin, setCopiedJoin] = useState(false)
@@ -252,12 +254,16 @@ export function Live() {
     }
   }
 
-  async function addMonster(bestiaryMonsterId: string) {
+  async function addMonster(bestiaryMonsterId: string, quantity: number, at?: { col: number; row: number }) {
     if (!instance) return
     setBusy(true)
     setError('')
     try {
-      await api.addCombatant(instance.id, { bestiaryMonsterId })
+      await api.addCombatant(instance.id, {
+        bestiaryMonsterId,
+        quantity,
+        ...(at ? { startCol: at.col, startRow: at.row } : {}),
+      })
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not add that monster.')
@@ -875,7 +881,7 @@ export function Live() {
             if (!brief) return null
             return <p className="mt-2.5 text-xs text-muted">{brief}</p>
           })()}
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <Input
               placeholder="Add monster…"
               value={addQ}
@@ -884,13 +890,56 @@ export function Live() {
                 if (e.key !== 'Enter') return
                 const hit = monsters.find((m) => m.name.toLowerCase().includes(addQ.toLowerCase()))
                 if (hit) {
-                  void addMonster(hit.id)
+                  void addMonster(hit.id, addQty)
                   setAddQ('')
                 }
               }}
-              className="h-8"
+              className="h-8 min-w-[8rem] flex-1"
             />
+            <Input
+              type="number"
+              min={1}
+              max={20}
+              value={addQty}
+              onChange={(e) => setAddQty(Math.max(1, Number(e.target.value) || 1))}
+              aria-label={t('encounter.quantity')}
+              className="h-8 w-14"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || !monsters.some((m) => m.name.toLowerCase().includes(addQ.toLowerCase()))}
+              onClick={() => {
+                const hit = monsters.find((m) => m.name.toLowerCase().includes(addQ.toLowerCase()))
+                if (hit) {
+                  void addMonster(hit.id, addQty)
+                  setAddQ('')
+                }
+              }}
+            >
+              {t('common.add')}
+            </Button>
+            <Button
+              size="sm"
+              variant={placingMonsterId ? 'default' : 'outline'}
+              disabled={!placingMonsterId && !monsters.some((m) => m.name.toLowerCase().includes(addQ.toLowerCase()))}
+              onClick={() => {
+                if (placingMonsterId) {
+                  setPlacingMonsterId(null)
+                  return
+                }
+                const hit = monsters.find((m) => m.name.toLowerCase().includes(addQ.toLowerCase()))
+                if (hit) setPlacingMonsterId(hit.id)
+              }}
+            >
+              {placingMonsterId ? t('live.clickASquare') : t('live.placeOnMap')}
+            </Button>
           </div>
+          {placingMonsterId && (
+            <p className="mt-1 text-xs text-gold">
+              {t('live.placingHint', { count: addQty, name: monsters.find((m) => m.id === placingMonsterId)?.name ?? '' })}
+            </p>
+          )}
           <div className="mt-2 flex flex-wrap gap-1">
             {snap.characters.map((ch) => {
               const onMap = snap.combatants.some((c) => c.source === 'character' && c.sourceId === ch.id)
@@ -958,6 +1007,15 @@ export function Live() {
             onFog={onFog}
             aoeShape={aoeShape}
             onAoeShape={setAoeShape}
+            onCellClick={
+              placingMonsterId
+                ? (col, row) => {
+                    void addMonster(placingMonsterId, addQty, { col, row })
+                    setPlacingMonsterId(null)
+                    setAddQ('')
+                  }
+                : undefined
+            }
           />
           <div className="absolute left-2 top-2 z-10 flex max-w-[calc(100%-3.5rem)] flex-wrap gap-1">
             <Button

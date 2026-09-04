@@ -75,6 +75,9 @@ const en = {
   'live.stat': 'stat',
   'live.selectSheet': 'Select a player token or combatant to open their sheet. Every sheet is visible to the table.',
   'live.selectStat': 'Select a monster token to open its stat block.',
+  'live.placeOnMap': 'Place…',
+  'live.clickASquare': 'Click a square…',
+  'live.placingHint': 'Click a square on the map to place {count}× {name}.',
   'live.trackerHint':
     'HP, conditions, and turn order persist with this encounter instance. Pause whenever you want — next session resumes the same fight. Condition colors on the tracker match the rings around tokens. Attacks must roll higher than Armor Class; a natural 1 gives the target advantage against the attacker next turn.',
   'map.day': 'Day',
@@ -673,6 +676,9 @@ const es: Record<keyof typeof en, string> = {
   'live.stat': 'bloque',
   'live.selectSheet': 'Elige un token o combatiente de jugador para abrir su hoja. Toda la mesa puede ver cada hoja.',
   'live.selectStat': 'Elige un token de monstruo para abrir su bloque de estadísticas.',
+  'live.placeOnMap': 'Colocar…',
+  'live.clickASquare': 'Toca una casilla…',
+  'live.placingHint': 'Toca una casilla del mapa para colocar {count}× {name}.',
   'live.trackerHint':
     'Los PG, las condiciones y el orden de turnos se guardan con esta instancia. Pausa cuando quieras: la próxima sesión retoma el mismo combate. Los colores de condición del rastreador coinciden con los anillos de los tokens. Los ataques deben superar la Clase de Armadura; un 1 natural da ventaja al objetivo contra el atacante en el siguiente turno.',
   'map.day': 'Día',

@@ -1557,7 +1557,21 @@ export const supabaseApi: TableApi = {
     if (body.bestiaryMonsterId) {
       const { data: src, error } = await db().from('bestiary_monsters').select('*').eq('id', body.bestiaryMonsterId).single()
       throwIf(error)
-      const qty = Number(body.quantity ?? 1)
+      const qty = Math.max(1, Number(body.quantity ?? 1))
+      const { data: existingTokens } = await db().from('tokens_on_map').select('x, y').eq('encounter_instance_id', instanceId)
+      const occupied = new Set(
+        (existingTokens ?? []).map((t) => {
+          const { col, row } = pixelToCell(Number(t.x), Number(t.y), cell)
+          return `${col},${row}`
+        }),
+      )
+      const hasStart = typeof body.startCol === 'number' && typeof body.startRow === 'number'
+      const origin = hasStart
+        ? { col: Number(body.startCol), row: Number(body.startRow) }
+        : { col: battle ? Math.floor(battle.gridCols / 2) : 3, row: battle ? Math.floor(battle.gridRows / 2) : 3 }
+      const cells = battle
+        ? spreadCells(origin, qty, battle.gridCols, battle.gridRows, battle.blocked, occupied)
+        : Array.from({ length: qty }, (_, i) => ({ col: origin.col + i, row: origin.row }))
       for (let i = 0; i < qty; i++) {
         const label = qty > 1 ? `${src.name} ${i + 1}` : String(src.name)
         const comb = await insertCombatantRow({
@@ -1579,7 +1593,8 @@ export const supabaseApi: TableApi = {
           speed_feet: parseSpeedFeet(src.speed),
           movement_remaining: parseSpeedFeet(src.speed),
         })
-        const pos = battle ? walkablePixel(battle, 3 + i, 3) : { x: cell * (3 + i) + cell / 2, y: cell * 3 + cell / 2 }
+        const target = cells[i] ?? origin
+        const pos = battle ? walkablePixel(battle, target.col, target.row) : { x: cell * target.col + cell / 2, y: cell * target.row + cell / 2 }
         await db().from('tokens_on_map').insert({
           encounter_instance_id: instanceId,
           x: pos.x,
