@@ -10,6 +10,7 @@ import { MapBoard } from '@/components/map/MapBoard'
 import { MapMaker } from '@/components/map/MapMaker'
 import { api } from '@/lib/api'
 import { monsterCopyCells } from '@/lib/combat'
+import { computeEncounterBudget } from '@/lib/encounter-budget'
 import {
   emptySheet,
   TOKEN_PALETTE,
@@ -215,6 +216,18 @@ export function Prep() {
     if (!s) return monsters
     return monsters.filter((m) => m.name.toLowerCase().includes(s) || m.creatureType.toLowerCase().includes(s))
   }, [monsters, beastFilter])
+
+  const monsterById = useMemo(() => new Map(monsters.map((m) => [m.id, m])), [monsters])
+  const partyLevels = useMemo(() => {
+    const placed = tpl.characters ?? []
+    const ids = placed.length > 0 ? new Set(placed.map((c) => c.characterId)) : null
+    const pool = ids ? characters.filter((c) => ids.has(c.id)) : characters
+    return pool.map((c) => c.sheet.level || 1)
+  }, [tpl.characters, characters])
+  const encounterBudget = useMemo(
+    () => computeEncounterBudget(tpl.monsters ?? [], monsterById, partyLevels),
+    [tpl.monsters, monsterById, partyLevels],
+  )
 
   async function uploadMap(file: File) {
     if (!campaignId) return
@@ -742,6 +755,60 @@ export function Prep() {
                   ))}
                 </ul>
               </div>
+              {(tpl.monsters ?? []).length > 0 && (
+                <div className="rounded-lg border border-line/70 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs uppercase tracking-wider text-muted">{t('encounter.budgetTitle')}</div>
+                    <span
+                      className={cn(
+                        'rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wider',
+                        encounterBudget.difficulty === 'trivial' || encounterBudget.difficulty === 'easy'
+                          ? 'bg-moss/20 text-moss'
+                          : encounterBudget.difficulty === 'medium'
+                            ? 'bg-gold/20 text-gold'
+                            : 'bg-blood/20 text-blood',
+                      )}
+                    >
+                      {t(`encounter.difficulty.${encounterBudget.difficulty}`)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted">
+                    {encounterBudget.partySize > 0
+                      ? t('encounter.budgetParty', {
+                          count: encounterBudget.partySize,
+                          level: Math.round((partyLevels.reduce((a, b) => a + b, 0) / Math.max(1, partyLevels.length)) * 10) / 10,
+                        })
+                      : t('encounter.budgetPartyEmpty')}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">
+                    {t('encounter.budgetBaseXp')}: {encounterBudget.baseXp} — {t('encounter.budgetMultiplier', { mult: encounterBudget.multiplier, count: encounterBudget.monsterCount })} ={' '}
+                    <span className="text-ink">{t('encounter.budgetAdjustedXp')}: {encounterBudget.adjustedXp}</span>
+                  </p>
+                  <p className="mt-1 text-xs text-muted">
+                    {t('encounter.budgetThresholds', {
+                      easy: encounterBudget.thresholds.easy,
+                      medium: encounterBudget.thresholds.medium,
+                      hard: encounterBudget.thresholds.hard,
+                      deadly: encounterBudget.thresholds.deadly,
+                    })}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2"
+                    onClick={() => {
+                      setTpl({
+                        ...tpl,
+                        difficulty: t(`encounter.difficulty.${encounterBudget.difficulty}`),
+                        xpAward: encounterBudget.baseXp,
+                      })
+                      setMsg(t('encounter.budgetAppliedMsg'))
+                    }}
+                  >
+                    {t('encounter.budgetApply')}
+                  </Button>
+                </div>
+              )}
               <div className="rounded-lg border border-line/70 p-3">
                 <div className="text-xs uppercase tracking-wider text-muted">{t('encounter.playerStartingSquares')}</div>
                 <p className="mt-1 text-xs text-muted">
