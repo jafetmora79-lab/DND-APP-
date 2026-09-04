@@ -292,6 +292,7 @@ export type EncounterTemplate = {
   xpAward?: number
   lootNotes?: string
   sortOrder?: number
+  chapter?: string
 }
 
 export type SessionBeatKind = 'combat' | 'social' | 'travel' | 'other'
@@ -361,6 +362,8 @@ export type EncounterBrief = {
   xpAward: number
   lootNotes: string
   sortOrder: number
+  /** Free-text grouping label (e.g. "Act 1", "The Mines") for organizing a long encounter list. */
+  chapter: string
 }
 
 export type Campaign = {

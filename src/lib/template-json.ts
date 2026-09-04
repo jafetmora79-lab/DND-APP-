@@ -79,6 +79,7 @@ export function templateFromRow(row: Record<string, unknown>): EncounterTemplate
     xpAward: packed.brief.xpAward,
     lootNotes: packed.brief.lootNotes,
     sortOrder: packed.brief.sortOrder,
+    chapter: packed.brief.chapter,
   }
 }
 

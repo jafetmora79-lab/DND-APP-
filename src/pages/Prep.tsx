@@ -187,6 +187,8 @@ export function Prep() {
   const [beastTypeFilter, setBeastTypeFilter] = useState('')
   const [beastSort, setBeastSort] = useState<'name' | 'cr'>('name')
   const [expandedMonsterIdx, setExpandedMonsterIdx] = useState<number | null>(null)
+  const [chapterFilter, setChapterFilter] = useState('')
+  const [dragTemplateId, setDragTemplateId] = useState<string | null>(null)
   const [copied, setCopied] = useState('')
   const [placingCharacterId, setPlacingCharacterId] = useState<string | null>(null)
   const [hub, setHub] = useState(emptyHub())
@@ -221,6 +223,36 @@ export function Prep() {
   const monsterTypes = useMemo(() => {
     return Array.from(new Set(monsters.map((m) => m.creatureType).filter(Boolean))).sort()
   }, [monsters])
+
+  const chapters = useMemo(() => {
+    return Array.from(new Set(templates.map((tp) => tp.chapter).filter((c): c is string => Boolean(c)))).sort()
+  }, [templates])
+
+  const visibleTemplates = useMemo(() => {
+    const sorted = sortTemplates(templates)
+    return chapterFilter ? sorted.filter((tp) => (tp.chapter || '') === chapterFilter) : sorted
+  }, [templates, chapterFilter])
+
+  async function reorderTemplate(draggedId: string, dropOnId: string) {
+    if (draggedId === dropOnId) return
+    const list = visibleTemplates.slice()
+    const from = list.findIndex((tp) => tp.id === draggedId)
+    const to = list.findIndex((tp) => tp.id === dropOnId)
+    if (from < 0 || to < 0) return
+    const [moved] = list.splice(from, 1)
+    list.splice(to, 0, moved)
+    const changed = list
+      .map((tp, i) => ({ tp, sortOrder: i }))
+      .filter(({ tp, sortOrder }) => (tp.sortOrder ?? 0) !== sortOrder)
+    setTemplates((cur) =>
+      cur.map((tp) => {
+        const hit = changed.find((c) => c.tp.id === tp.id)
+        return hit ? { ...tp, sortOrder: hit.sortOrder } : tp
+      }),
+    )
+    await Promise.all(changed.map(({ tp, sortOrder }) => api.saveTemplate(campaignId!, { ...tp, sortOrder })))
+    await reload()
+  }
 
   const encounterMonsters = useMemo(() => {
     const s = beastFilter.trim().toLowerCase()
@@ -624,9 +656,24 @@ export function Prep() {
               <Field label={t('encounter.loot')}>
                 <Input value={tpl.lootNotes ?? ''} onChange={(e) => setTpl({ ...tpl, lootNotes: e.target.value })} placeholder={t('encounter.lootPlaceholder')} />
               </Field>
-              <Field label={t('encounter.playOrder')}>
-                <Input type="number" value={tpl.sortOrder ?? 0} onChange={(e) => setTpl({ ...tpl, sortOrder: Number(e.target.value) || 0 })} />
-              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label={t('encounter.chapter')}>
+                  <Input
+                    list="encounter-chapters"
+                    value={tpl.chapter ?? ''}
+                    onChange={(e) => setTpl({ ...tpl, chapter: e.target.value })}
+                    placeholder={t('encounter.chapterPlaceholder')}
+                  />
+                  <datalist id="encounter-chapters">
+                    {chapters.map((c) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
+                </Field>
+                <Field label={t('encounter.playOrder')}>
+                  <Input type="number" value={tpl.sortOrder ?? 0} onChange={(e) => setTpl({ ...tpl, sortOrder: Number(e.target.value) || 0 })} />
+                </Field>
+              </div>
               <Field label={t('player.map')}>
                 <select
                   className="h-10 rounded-md border border-line bg-bg px-3 text-sm"
@@ -1126,11 +1173,53 @@ export function Prep() {
             ) : (
               <p className="rounded-xl border border-dashed border-line p-6 text-sm text-muted">{t('encounter.chooseMapHint')}</p>
             )}
+            {chapters.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs uppercase tracking-wider text-muted">{t('encounter.chapterFilter')}</span>
+                <select
+                  className="h-8 rounded-md border border-line bg-bg px-2 text-xs"
+                  value={chapterFilter}
+                  onChange={(e) => setChapterFilter(e.target.value)}
+                >
+                  <option value="">{t('encounter.allChapters')}</option>
+                  {chapters.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <ul className="space-y-3">
-              {sortTemplates(templates).map((tp) => (
-                <li key={tp.id} className="rounded-xl border border-line bg-panel p-4">
+              {visibleTemplates.map((tp) => (
+                <li
+                  key={tp.id}
+                  draggable
+                  onDragStart={() => setDragTemplateId(tp.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    if (dragTemplateId) void reorderTemplate(dragTemplateId, tp.id)
+                    setDragTemplateId(null)
+                  }}
+                  onDragEnd={() => setDragTemplateId(null)}
+                  className={cn(
+                    'cursor-grab rounded-xl border border-line bg-panel p-4 active:cursor-grabbing',
+                    dragTemplateId === tp.id && 'opacity-50',
+                  )}
+                >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="font-display text-lg text-gold">{tp.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted" aria-hidden="true">
+                        ⠿
+                      </span>
+                      <div className="font-display text-lg text-gold">{tp.name}</div>
+                      {tp.chapter && (
+                        <span className="rounded-full bg-panel-2 px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted">
+                          {tp.chapter}
+                        </span>
+                      )}
+                    </div>
                     {templateReady(tp) ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-moss/20 px-2 py-0.5 text-xs uppercase tracking-wider text-moss">
                         <Check className="h-3.5 w-3.5" /> {t('encounter.ready')}
@@ -1169,7 +1258,14 @@ export function Prep() {
                     >
                       {t('encounter.editPlacement')}
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => api.deleteTemplate(tp.id).then(reload)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        if (!confirm(t('encounter.confirmDelete', { name: tp.name }))) return
+                        api.deleteTemplate(tp.id).then(reload)
+                      }}
+                    >
                       {t('common.delete')}
                     </Button>
                   </div>

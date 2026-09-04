@@ -804,6 +804,7 @@ app.patch('/api/templates/:id', requireDm, (req, res) => {
     xpAward: req.body.xpAward ?? existing.xpAward,
     lootNotes: req.body.lootNotes ?? existing.lootNotes,
     sortOrder: req.body.sortOrder ?? existing.sortOrder,
+    chapter: req.body.chapter ?? existing.chapter,
     monsters: req.body.monsters ?? existing.monsters,
     characters: req.body.characters ?? existing.characters,
   }

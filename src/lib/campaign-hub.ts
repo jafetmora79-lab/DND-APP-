@@ -13,7 +13,7 @@ import type {
 } from './types.ts'
 
 export function emptyBrief(): EncounterBrief {
-  return { notes: '', objective: '', difficulty: '', xpAward: 0, lootNotes: '', sortOrder: 0 }
+  return { notes: '', objective: '', difficulty: '', xpAward: 0, lootNotes: '', sortOrder: 0, chapter: '' }
 }
 
 export function parseBrief(raw: unknown): EncounterBrief {
@@ -27,6 +27,7 @@ export function parseBrief(raw: unknown): EncounterBrief {
     xpAward: Number.isFinite(Number(o.xpAward)) ? Math.max(0, Math.round(Number(o.xpAward))) : 0,
     lootNotes: String(o.lootNotes ?? ''),
     sortOrder: Number.isFinite(Number(o.sortOrder)) ? Number(o.sortOrder) : 0,
+    chapter: String(o.chapter ?? ''),
   }
 }
 
@@ -38,6 +39,7 @@ export function briefFromTemplate(t: Partial<EncounterTemplate>): EncounterBrief
     xpAward: t.xpAward,
     lootNotes: t.lootNotes,
     sortOrder: t.sortOrder,
+    chapter: t.chapter,
   })
 }
 
