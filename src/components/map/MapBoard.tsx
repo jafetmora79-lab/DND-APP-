@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Maximize2, Minus, Plus } from 'lucide-react'
-import { Circle, Group, Layer, Rect, Shape, Stage, Text, Wedge, Image as KImage } from 'react-konva'
+import { Circle, Group, Layer, Line, Rect, Shape, Stage, Text, Wedge, Image as KImage } from 'react-konva'
 import useImage from 'use-image'
 import { aoeAngleDeg, CONE_FULL_ANGLE_DEG, type AoeKind, type AoeShape } from '@/lib/aoe'
 import { conditionRingColor, type BattleMap, type Combatant, type FogState, type MapToken } from '@/lib/types'
@@ -26,6 +26,7 @@ export type MapTool =
   | 'aoe-cone'
   | 'aoe-line'
   | 'aoe-cube'
+  | 'ruler'
 
 const TERRAIN_TOOL: Partial<Record<MapTool, number>> = {
   open: TERRAIN.OPEN,
@@ -149,6 +150,23 @@ function AoeOverlay({ shape, gridSize }: { shape: AoeShape; gridSize: number }) 
   )
 }
 
+function RulerOverlay({ x1, y1, x2, y2, gridSize }: { x1: number; y1: number; x2: number; y2: number; gridSize: number }) {
+  const feet = Math.round((Math.hypot(x2 - x1, y2 - y1) / gridSize) * 5)
+  const midX = (x1 + x2) / 2
+  const midY = (y1 + y2) / 2
+  return (
+    <>
+      <Line points={[x1, y1, x2, y2]} stroke="#facc15" strokeWidth={2} dash={[8, 6]} listening={false} />
+      <Circle x={x1} y={y1} radius={4} fill="#facc15" listening={false} />
+      <Circle x={x2} y={y2} radius={4} fill="#facc15" listening={false} />
+      <Group x={midX} y={midY} listening={false}>
+        <Rect x={-26} y={-11} width={52} height={20} cornerRadius={4} fill="rgba(10,8,6,0.85)" stroke="#facc15" strokeWidth={1} />
+        <Text text={`${feet} ft`} width={52} offsetX={26} y={-6} align="center" fontSize={11} fontFamily="Inter" fontStyle="bold" fill="#facc15" />
+      </Group>
+    </>
+  )
+}
+
 export function MapBoard({
   map,
   tokens,
@@ -175,6 +193,8 @@ export function MapBoard({
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const painting = useRef(false)
   const drawingAoe = useRef(false)
+  const drawingRuler = useRef(false)
+  const [ruler, setRuler] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
   const lastPaint = useRef(-1)
   const dragOrigin = useRef<Record<string, { x: number; y: number }>>({})
   const pointerDown = useRef<{ x: number; y: number } | null>(null)
@@ -233,6 +253,10 @@ export function MapBoard({
     }
     return { x: x / n, y: y / n }
   }
+
+  useEffect(() => {
+    if (tool !== 'ruler') setRuler(null)
+  }, [tool])
 
   useEffect(() => {
     userZoomed.current = false
@@ -351,6 +375,12 @@ export function MapBoard({
             if (w) onAoeShape?.({ kind: aoeKind, originX: w.x, originY: w.y, endX: w.x, endY: w.y, widthFeet: aoeWidthFeet })
             return
           }
+          if (tool === 'ruler') {
+            drawingRuler.current = true
+            const w = worldFromEvent(e)
+            if (w) setRuler({ x1: w.x, y1: w.y, x2: w.x, y2: w.y })
+            return
+          }
           if (paintingFog || paintingTerrain) {
             painting.current = true
             lastPaint.current = -1
@@ -367,6 +397,7 @@ export function MapBoard({
           if (e.evt.touches.length >= 2) {
             painting.current = false
             drawingAoe.current = false
+            drawingRuler.current = false
             const dist = touchDistance(e.evt.touches[0], e.evt.touches[1])
             pinch.current = { dist, scale, pos: { ...pos } }
             const stage = e.target.getStage()
@@ -378,6 +409,12 @@ export function MapBoard({
             drawingAoe.current = true
             const w = worldFromEvent(e)
             if (w) onAoeShape?.({ kind: aoeKind, originX: w.x, originY: w.y, endX: w.x, endY: w.y, widthFeet: aoeWidthFeet })
+            return
+          }
+          if (tool === 'ruler') {
+            drawingRuler.current = true
+            const w = worldFromEvent(e)
+            if (w) setRuler({ x1: w.x, y1: w.y, x2: w.x, y2: w.y })
             return
           }
           if (!(paintingFog || paintingTerrain)) return
@@ -405,6 +442,11 @@ export function MapBoard({
           if (drawingAoe.current && aoeShape) {
             const w = worldFromEvent(e)
             if (w) onAoeShape?.({ ...aoeShape, endX: w.x, endY: w.y })
+            return
+          }
+          if (drawingRuler.current) {
+            const w = worldFromEvent(e)
+            if (w) setRuler((r) => (r ? { ...r, x2: w.x, y2: w.y } : r))
             return
           }
           if (!painting.current) return
@@ -435,6 +477,11 @@ export function MapBoard({
             if (w) onAoeShape?.({ ...aoeShape, endX: w.x, endY: w.y })
             return
           }
+          if (drawingRuler.current) {
+            const w = worldFromEvent(e)
+            if (w) setRuler((r) => (r ? { ...r, x2: w.x, y2: w.y } : r))
+            return
+          }
           if (!painting.current) return
           const w = worldFromEvent(e)
           if (w) paintAt(w.x, w.y)
@@ -442,17 +489,20 @@ export function MapBoard({
         onMouseUp={() => {
           painting.current = false
           drawingAoe.current = false
+          drawingRuler.current = false
           lastPaint.current = -1
         }}
         onTouchEnd={(e) => {
           if (e.evt.touches.length < 2) pinch.current = null
           painting.current = false
           drawingAoe.current = false
+          drawingRuler.current = false
           lastPaint.current = -1
         }}
         onMouseLeave={() => {
           painting.current = false
           drawingAoe.current = false
+          drawingRuler.current = false
           lastPaint.current = -1
         }}
       >
@@ -752,6 +802,11 @@ export function MapBoard({
         {aoeShape && (
           <Layer listening={false}>
             <AoeOverlay shape={aoeShape} gridSize={map.gridSize} />
+          </Layer>
+        )}
+        {ruler && (
+          <Layer listening={false}>
+            <RulerOverlay x1={ruler.x1} y1={ruler.y1} x2={ruler.x2} y2={ruler.y2} gridSize={map.gridSize} />
           </Layer>
         )}
         {isDm && (

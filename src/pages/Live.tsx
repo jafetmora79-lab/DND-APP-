@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Check, Copy, Eye, EyeOff, Flag, Home, Moon, Pause, Play, Sun, Sword, Trophy, X as XIcon } from 'lucide-react'
+import { Check, Copy, Eye, EyeOff, Flag, Home, Moon, Pause, Play, Ruler, Sun, Sword, Trophy, X as XIcon } from 'lucide-react'
 import { AttackBar } from '@/components/AttackBar'
 import { CombatActivityFeed } from '@/components/CombatActivityFeed'
 import { InitiativePopup } from '@/components/InitiativePopup'
@@ -1035,6 +1035,17 @@ export function Live() {
                 <XIcon className="h-4 w-4" /> {t('map.aoeClear')}
               </Button>
             )}
+            <span className="mx-1 w-px self-stretch bg-line" />
+            <Button
+              size="sm"
+              variant={tool === 'ruler' ? 'default' : 'outline'}
+              onClick={() => {
+                setAoeShape(null)
+                setTool((cur) => (cur === 'ruler' ? 'select' : 'ruler'))
+              }}
+            >
+              <Ruler className="h-4 w-4" /> {t('map.ruler')}
+            </Button>
           </div>
           {aoeShape && (
             <div className="absolute bottom-2 left-2 z-10 max-w-[calc(100%-1rem)] rounded-md border border-line bg-panel/80 px-3 py-2 text-xs text-ink shadow backdrop-blur-sm">
