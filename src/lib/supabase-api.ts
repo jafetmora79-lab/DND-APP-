@@ -57,13 +57,51 @@ async function logFeed(instanceId: string, text: string) {
   if (error && !missingRpc(error.message, 'append_combat_activity')) throwIf(error)
 }
 
+// Maps a column PostgREST can't find to the migration file that adds it, so the
+// error below can point at the right SQL file instead of guessing. Keep in sync
+// with the `add column if not exists` lines across supabase/migrate-*.sql.
+const MIGRATION_FOR_COLUMN: Record<string, string> = {
+  attacks_used: 'migrate-action-economy.sql',
+  attacks_per_action: 'migrate-action-economy.sql',
+  hub_json: 'migrate-campaign-mvp.sql',
+  stats_json: 'migrate-campaign-mvp.sql',
+  table_phase: 'migrate-campaign-table.sql',
+  ambiance_image_url: 'migrate-campaign-table.sql',
+  ambiance_caption: 'migrate-campaign-table.sql',
+  last_outcome: 'migrate-campaign-table.sql',
+  death_state: 'migrate-combat-completeness.sql',
+  death_success: 'migrate-combat-completeness.sql',
+  death_fail: 'migrate-combat-completeness.sql',
+  turn_economy_json: 'migrate-combat-completeness.sql',
+  characters_json: 'migrate-encounter-play.sql',
+  constitution: 'migrate-encounter-play.sql',
+  advantage_against_json: 'migrate-encounter-play.sql',
+  bg_scale: 'migrate-map-alignment.sql',
+  bg_offset_x: 'migrate-map-alignment.sql',
+  bg_offset_y: 'migrate-map-alignment.sql',
+  blocked_cells: 'migrate-map-maker.sql',
+  speed_feet: 'migrate-per-turn-movement.sql',
+  movement_remaining: 'migrate-per-turn-movement.sql',
+  activity_json: 'migrate-player-combat.sql',
+  prompt_json: 'migrate-player-combat.sql',
+  portrait_url: 'migrate-token-portraits.sql',
+}
+
+function schemaTable(message: string) {
+  return message.match(/column of '([^']+)'/i)?.[1] ?? null
+}
+
 function throwIf(error: { message: string } | null) {
   if (!error) return
   if (/schema cache/i.test(error.message)) {
-    const col = error.message.match(/'([^']+)' column/i)?.[1]
-    if (col) omittedSessionCols.add(col)
+    const col = schemaColumn(error.message)
+    const table = schemaTable(error.message)
+    // Only the live_sessions degrade-and-retry path (insertLiveSession/updateLiveSession)
+    // reads this set, so only pollute it with columns that are actually missing there.
+    if (col && (!table || table === 'live_sessions')) omittedSessionCols.add(col)
+    const migrationFile = (col && MIGRATION_FOR_COLUMN[col]) || 'the migration that adds it'
     throw new Error(
-      `Could not find ${col ? `'${col}'` : 'a column'} on live_sessions. In the Supabase SQL Editor run migrate-campaign-table.sql, then: notify pgrst, 'reload schema';`,
+      `Could not find ${col ? `'${col}'` : 'a column'} on ${table ?? 'a table'}. In the Supabase SQL Editor run ${migrationFile}, then: notify pgrst, 'reload schema';`,
     )
   }
   throw new Error(error.message)
