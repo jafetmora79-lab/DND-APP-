@@ -180,6 +180,10 @@ export function Prep() {
   const [beastPick, setBeastPick] = useState('')
   const [beastQty, setBeastQty] = useState(1)
   const [beastFilter, setBeastFilter] = useState('')
+  const [beastCrMin, setBeastCrMin] = useState('')
+  const [beastCrMax, setBeastCrMax] = useState('')
+  const [beastTypeFilter, setBeastTypeFilter] = useState('')
+  const [beastSort, setBeastSort] = useState<'name' | 'cr'>('name')
   const [copied, setCopied] = useState('')
   const [placingCharacterId, setPlacingCharacterId] = useState<string | null>(null)
   const [hub, setHub] = useState(emptyHub())
@@ -211,11 +215,25 @@ export function Prep() {
     return monsters.filter((m) => m.name.toLowerCase().includes(s) || m.creatureType.toLowerCase().includes(s))
   }, [monsters, q])
 
+  const monsterTypes = useMemo(() => {
+    return Array.from(new Set(monsters.map((m) => m.creatureType).filter(Boolean))).sort()
+  }, [monsters])
+
   const encounterMonsters = useMemo(() => {
     const s = beastFilter.trim().toLowerCase()
-    if (!s) return monsters
-    return monsters.filter((m) => m.name.toLowerCase().includes(s) || m.creatureType.toLowerCase().includes(s))
-  }, [monsters, beastFilter])
+    const crMin = beastCrMin.trim() === '' ? null : Number(beastCrMin)
+    const crMax = beastCrMax.trim() === '' ? null : Number(beastCrMax)
+    const list = monsters.filter((m) => {
+      if (s && !m.name.toLowerCase().includes(s) && !m.creatureType.toLowerCase().includes(s)) return false
+      if (beastTypeFilter && m.creatureType !== beastTypeFilter) return false
+      if (crMin != null && !Number.isNaN(crMin) && m.challengeRating < crMin) return false
+      if (crMax != null && !Number.isNaN(crMax) && m.challengeRating > crMax) return false
+      return true
+    })
+    return list.sort((a, b) =>
+      beastSort === 'cr' ? a.challengeRating - b.challengeRating || a.name.localeCompare(b.name) : a.name.localeCompare(b.name),
+    )
+  }, [monsters, beastFilter, beastCrMin, beastCrMax, beastTypeFilter, beastSort])
 
   const monsterById = useMemo(() => new Map(monsters.map((m) => [m.id, m])), [monsters])
   const partyLevels = useMemo(() => {
@@ -618,6 +636,52 @@ export function Prep() {
                     onChange={(e) => setBeastFilter(e.target.value)}
                   />
                 </Field>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Field label={t('encounter.crMin')}>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.125}
+                      placeholder={t('encounter.crAny')}
+                      value={beastCrMin}
+                      onChange={(e) => setBeastCrMin(e.target.value)}
+                    />
+                  </Field>
+                  <Field label={t('encounter.crMax')}>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.125}
+                      placeholder={t('encounter.crAny')}
+                      value={beastCrMax}
+                      onChange={(e) => setBeastCrMax(e.target.value)}
+                    />
+                  </Field>
+                </div>
+                <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+                  <select
+                    className="h-10 rounded-md border border-line bg-bg px-2 text-sm"
+                    value={beastTypeFilter}
+                    onChange={(e) => setBeastTypeFilter(e.target.value)}
+                    aria-label={t('encounter.typeFilter')}
+                  >
+                    <option value="">{t('encounter.allTypes')}</option>
+                    {monsterTypes.map((ty) => (
+                      <option key={ty} value={ty}>
+                        {ty}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setBeastSort((s) => (s === 'cr' ? 'name' : 'cr'))}
+                  >
+                    {beastSort === 'cr' ? t('encounter.sortByName') : t('encounter.sortByCr')}
+                  </Button>
+                </div>
+                <p className="mt-1 text-xs text-muted">{t('encounter.matchCount', { count: encounterMonsters.length })}</p>
                 <div className="mt-2 grid grid-cols-[1fr_4.5rem_auto] gap-2">
                   <select
                     className="h-10 rounded-md border border-line bg-bg px-2 text-sm"
