@@ -267,6 +267,8 @@ export type TemplateMonster = {
   color: string
   /** One map cell per copy. When missing, copies cluster from startX/startY. */
   positions?: GridCell[]
+  /** Per-copy name/color overrides, indexed like `positions`. An empty/missing entry falls back to the auto "Name N" label and the shared color. */
+  copies?: { name?: string; color?: string }[]
 }
 
 export type TemplateCharacter = {

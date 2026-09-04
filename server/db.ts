@@ -641,7 +641,9 @@ export function spawnFromTemplate(campaignId: string, templateId: string, nameOr
     if (!src) continue
     for (let i = 0; i < spec.quantity; i++) {
       const cid = ids.id()
-      const label = spec.quantity > 1 ? `${spec.name} ${i + 1}` : spec.name
+      const override = spec.copies?.[i]
+      const label = override?.name?.trim() || (spec.quantity > 1 ? `${spec.name} ${i + 1}` : spec.name)
+      const color = override?.color || spec.color
       const stats = combatantStatsFromMonster(src)
       const speed = speedPair(src.speed)
       db.prepare(
@@ -660,7 +662,7 @@ export function spawnFromTemplate(campaignId: string, templateId: string, nameOr
         src.ac_value,
         '[]',
         order++,
-        spec.color,
+        color,
         '',
         Number(src.con ?? 10),
         JSON.stringify(stats),
@@ -691,7 +693,7 @@ export function spawnFromTemplate(campaignId: string, templateId: string, nameOr
         'combatant',
         cid,
         label,
-        spec.color || '#c4453c',
+        color || '#c4453c',
         size,
         1,
       )

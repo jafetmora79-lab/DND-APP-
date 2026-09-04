@@ -1100,7 +1100,9 @@ export const supabaseApi: TableApi = {
       const { data: src } = await db().from('bestiary_monsters').select('*').eq('id', spec.bestiaryMonsterId).maybeSingle()
       if (!src) continue
       for (let i = 0; i < spec.quantity; i++) {
-        const label = spec.quantity > 1 ? `${spec.name} ${i + 1}` : spec.name
+        const override = spec.copies?.[i]
+        const label = override?.name?.trim() || (spec.quantity > 1 ? `${spec.name} ${i + 1}` : spec.name)
+        const color = override?.color || spec.color
         const comb = await insertCombatantRow({
           encounter_instance_id: inst.id,
           name: label,
@@ -1113,7 +1115,7 @@ export const supabaseApi: TableApi = {
           ac: src.ac_value,
           conditions_json: [],
           turn_order_position: order++,
-          color: spec.color,
+          color,
           notes: '',
           constitution: Number(src.con ?? 10),
           stats_json: combatantStatsFromMonster(src as Record<string, unknown>),
@@ -1130,7 +1132,7 @@ export const supabaseApi: TableApi = {
           ref_type: 'combatant',
           ref_id: comb.id,
           label,
-          color: spec.color || '#c4453c',
+          color: color || '#c4453c',
           size_squares: size,
           visible_to_players: true,
         })

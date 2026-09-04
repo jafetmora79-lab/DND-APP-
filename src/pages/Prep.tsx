@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { CharacterSheet } from '@/components/CharacterSheet'
 import { MonsterForm } from '@/components/MonsterForm'
+import { TokenColorPicker } from '@/components/TokenColorPicker'
 import { StatBlock } from '@/components/StatBlock'
 import { MapBoard } from '@/components/map/MapBoard'
 import { MapMaker } from '@/components/map/MapMaker'
@@ -95,6 +96,7 @@ function placementTokens(
     const src = bestiary.find((m) => m.id === spec.bestiaryMonsterId)
     const copies = monsterCopyCells(spec, map, occupied)
     copies.forEach((pos, copyIndex) => {
+      const override = spec.copies?.[copyIndex]
       const look = monsterTokenLook(spec.name, src?.creatureType)
       tokens.push({
         id: `tpl:${specIndex}:${copyIndex}`,
@@ -103,9 +105,9 @@ function placementTokens(
         y: pos.row * cell + cell / 2,
         refType: 'combatant',
         refId: `tpl:${specIndex}:${copyIndex}`,
-        label: spec.quantity > 1 ? `${spec.name} ${copyIndex + 1}` : spec.name,
-        color: look.from,
-        color2: look.to,
+        label: override?.name?.trim() || (spec.quantity > 1 ? `${spec.name} ${copyIndex + 1}` : spec.name),
+        color: override?.color || look.from,
+        color2: override?.color ? undefined : look.to,
         sizeSquares: tokenSizeSquares(src?.size ?? 'Medium'),
         visibleToPlayers: true,
         hpCurrent: src?.hpMax,
@@ -184,6 +186,7 @@ export function Prep() {
   const [beastCrMax, setBeastCrMax] = useState('')
   const [beastTypeFilter, setBeastTypeFilter] = useState('')
   const [beastSort, setBeastSort] = useState<'name' | 'cr'>('name')
+  const [expandedMonsterIdx, setExpandedMonsterIdx] = useState<number | null>(null)
   const [copied, setCopied] = useState('')
   const [placingCharacterId, setPlacingCharacterId] = useState<string | null>(null)
   const [hub, setHub] = useState(emptyHub())
@@ -280,6 +283,17 @@ export function Prep() {
     setEditingNew(false)
     setMsg(t('prep.monsterSavedMsg'))
     await reload()
+  }
+
+  function updateMonsterCopy(monsterIndex: number, copyIndex: number, patch: { name?: string; color?: string }) {
+    const list = (tpl.monsters ?? []).slice()
+    const spec = list[monsterIndex]
+    if (!spec) return
+    const copies = (spec.copies ?? []).slice()
+    while (copies.length <= copyIndex) copies.push({})
+    copies[copyIndex] = { ...copies[copyIndex], ...patch }
+    list[monsterIndex] = { ...spec, copies }
+    setTpl({ ...tpl, monsters: list })
   }
 
   async function saveTemplate() {
@@ -767,7 +781,8 @@ export function Prep() {
                 </div>
                 <ul className="mt-3 space-y-2">
                   {(tpl.monsters ?? []).map((m, i) => (
-                    <li key={`${m.bestiaryMonsterId}-${i}`} className="flex flex-wrap items-center gap-2 text-sm">
+                    <li key={`${m.bestiaryMonsterId}-${i}`}>
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="h-3 w-3 rounded-full" style={{ background: m.color }} />
                       <span className="flex-1">{m.name}</span>
                       <Input
@@ -804,10 +819,24 @@ export function Prep() {
                           } else {
                             positions = positions.slice(0, qty)
                           }
-                          list[i] = { ...m, quantity: qty, startX: positions[0].x, startY: positions[0].y, positions }
+                          list[i] = {
+                            ...m,
+                            quantity: qty,
+                            startX: positions[0].x,
+                            startY: positions[0].y,
+                            positions,
+                            copies: m.copies ? m.copies.slice(0, qty) : m.copies,
+                          }
                           setTpl({ ...tpl, monsters: list })
                         }}
                       />
+                      <button
+                        type="button"
+                        className="text-xs text-muted underline-offset-2 hover:text-gold hover:underline"
+                        onClick={() => setExpandedMonsterIdx(expandedMonsterIdx === i ? null : i)}
+                      >
+                        {expandedMonsterIdx === i ? t('encounter.hideCopies') : t('encounter.editCopies')}
+                      </button>
                       <button
                         type="button"
                         className="text-blood"
@@ -815,6 +844,40 @@ export function Prep() {
                       >
                         ×
                       </button>
+                    </div>
+                    {expandedMonsterIdx === i && (
+                      <ul className="ml-5 mt-1 space-y-1 border-l border-line/50 pl-3">
+                        {Array.from({ length: m.quantity }, (_, copyIndex) => {
+                          const copy = m.copies?.[copyIndex]
+                          const autoName = m.quantity > 1 ? `${m.name} ${copyIndex + 1}` : m.name
+                          return (
+                            <li key={copyIndex} className="flex items-center gap-2">
+                              <TokenColorPicker
+                                value={copy?.color || m.color}
+                                onChange={(color) => updateMonsterCopy(i, copyIndex, { color })}
+                                label=""
+                                title={t('encounter.copyColorTitle', { name: autoName })}
+                              />
+                              <Input
+                                className="h-8 flex-1 text-xs"
+                                placeholder={autoName}
+                                value={copy?.name ?? ''}
+                                onChange={(e) => updateMonsterCopy(i, copyIndex, { name: e.target.value })}
+                              />
+                              {(copy?.name || copy?.color) && (
+                                <button
+                                  type="button"
+                                  className="text-xs text-muted hover:text-blood"
+                                  onClick={() => updateMonsterCopy(i, copyIndex, { name: undefined, color: undefined })}
+                                >
+                                  {t('common.reset')}
+                                </button>
+                              )}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
                     </li>
                   ))}
                 </ul>
