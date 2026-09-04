@@ -187,6 +187,7 @@ export function Prep() {
   const [beastTypeFilter, setBeastTypeFilter] = useState('')
   const [beastSort, setBeastSort] = useState<'name' | 'cr'>('name')
   const [expandedMonsterIdx, setExpandedMonsterIdx] = useState<number | null>(null)
+  const [placingMonsterIdx, setPlacingMonsterIdx] = useState<number | null>(null)
   const [chapterFilter, setChapterFilter] = useState('')
   const [dragTemplateId, setDragTemplateId] = useState<string | null>(null)
   const [copied, setCopied] = useState('')
@@ -721,6 +722,11 @@ export function Prep() {
               </Field>
               <div className="rounded-lg border border-line/70 p-3">
                 <div className="text-xs uppercase tracking-wider text-muted">{t('encounter.monsters')}</div>
+                {placingMonsterIdx != null && (tpl.monsters ?? [])[placingMonsterIdx] && (
+                  <p className="mt-1 text-xs text-gold">
+                    {t('encounter.clickToSetStart', { name: (tpl.monsters ?? [])[placingMonsterIdx].name })}
+                  </p>
+                )}
                 <Field label={t('common.filter')}>
                   <Input
                     placeholder={t('encounter.searchBestiary')}
@@ -908,6 +914,18 @@ export function Prep() {
                           setTpl({ ...tpl, monsters: list })
                         }}
                       />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={placingMonsterIdx === i ? 'default' : 'outline'}
+                        disabled={!tpl.mapId}
+                        onClick={() => {
+                          setPlacingCharacterId(null)
+                          setPlacingMonsterIdx(placingMonsterIdx === i ? null : i)
+                        }}
+                      >
+                        {placingMonsterIdx === i ? t('encounter.clickASquare') : t('encounter.placeOnMap')}
+                      </Button>
                       <button
                         type="button"
                         className="text-xs text-muted underline-offset-2 hover:text-gold hover:underline"
@@ -1050,7 +1068,10 @@ export function Prep() {
                             <Button
                               size="sm"
                               variant={placing ? 'default' : 'ghost'}
-                              onClick={() => setPlacingCharacterId(placing ? null : ch.id)}
+                              onClick={() => {
+                                setPlacingMonsterIdx(null)
+                                setPlacingCharacterId(placing ? null : ch.id)
+                              }}
                             >
                               {placing ? t('encounter.clickASquare') : t('map.move')}
                             </Button>
@@ -1077,6 +1098,7 @@ export function Prep() {
                               const origin = playerStartOrigin(map.gridCols, map.gridRows)
                               const cell = spreadCells(origin, 1, map.gridCols, map.gridRows, map.blocked, occupied)[0]
                               setTpl(placeCharacterOnTemplate(tpl, ch, cell))
+                              setPlacingMonsterIdx(null)
                               setPlacingCharacterId(ch.id)
                               setMsg(t('encounter.placedMsg', { name: ch.name }))
                             }}
@@ -1162,6 +1184,30 @@ export function Prep() {
                     if (!map) return
                     if (tokenOccupiesBlocked(map.blocked, col, row, map.gridCols, map.gridRows)) {
                       setMsg(t('encounter.blockedSquare'))
+                      return
+                    }
+                    if (placingMonsterIdx != null) {
+                      const list = (tpl.monsters ?? []).slice()
+                      const spec = list[placingMonsterIdx]
+                      if (!spec) {
+                        setPlacingMonsterIdx(null)
+                        return
+                      }
+                      const occupied = occupiedKeys(
+                        list.filter((_, j) => j !== placingMonsterIdx),
+                        tpl.characters ?? [],
+                        map,
+                      )
+                      const cells = spreadCells({ col, row }, spec.quantity, map.gridCols, map.gridRows, map.blocked, occupied)
+                      list[placingMonsterIdx] = {
+                        ...spec,
+                        startX: cells[0].col,
+                        startY: cells[0].row,
+                        positions: cells.map((c) => ({ x: c.col, y: c.row })),
+                      }
+                      setTpl({ ...tpl, monsters: list })
+                      setMsg(t('encounter.setSquareMsg', { name: spec.name, col: col + 1, row: row + 1 }))
+                      setPlacingMonsterIdx(null)
                       return
                     }
                     const ch =
