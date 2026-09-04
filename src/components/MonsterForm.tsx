@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/input'
 import { useT } from '@/lib/i18n'
@@ -11,6 +12,7 @@ type Props = {
   onChange: (next: Monster | Partial<Monster>) => void
   onSave: () => void
   onDelete?: () => void
+  onUploadPortrait?: (file: File) => void
 }
 
 function setField<K extends keyof Monster>(monster: Monster | Partial<Monster>, key: K, value: Monster[K]) {
@@ -34,13 +36,47 @@ function EntriesField({
   )
 }
 
-export function MonsterForm({ monster, editingNew, onChange, onSave, onDelete }: Props) {
+export function MonsterForm({ monster, editingNew, onChange, onSave, onDelete, onUploadPortrait }: Props) {
   const { t } = useT()
+  const portraitRef = useRef<HTMLInputElement>(null)
   return (
     <div className="space-y-3 rounded-xl border border-line bg-panel p-4">
       <div className="grid grid-cols-2 gap-2">
         <Field label={t('common.name')}>
-          <Input value={monster.name ?? ''} onChange={(e) => onChange(setField(monster, 'name', e.target.value))} />
+          <div className="flex items-center gap-2">
+            {onUploadPortrait && monster.id && (
+              <>
+                <input
+                  ref={portraitRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) onUploadPortrait(f)
+                    e.target.value = ''
+                  }}
+                />
+                <button
+                  type="button"
+                  title={t('sheet.tokenPortraitTitle')}
+                  onClick={() => portraitRef.current?.click()}
+                  className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-line bg-panel-2 text-[10px] text-muted hover:border-gold/50"
+                >
+                  {monster.portraitUrl ? (
+                    <img src={monster.portraitUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    t('sheet.tokenPortrait')
+                  )}
+                </button>
+              </>
+            )}
+            <Input
+              className="min-w-0 flex-1"
+              value={monster.name ?? ''}
+              onChange={(e) => onChange(setField(monster, 'name', e.target.value))}
+            />
+          </div>
         </Field>
         <Field label={t('monster.size')}>
           <Input value={monster.size ?? ''} onChange={(e) => onChange(setField(monster, 'size', e.target.value))} />

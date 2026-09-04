@@ -49,7 +49,8 @@ create table if not exists public.bestiary_monsters (
   reactions jsonb not null default '[]'::jsonb,
   bonus_actions jsonb not null default '[]'::jsonb,
   lair_actions jsonb not null default '[]'::jsonb,
-  source text
+  source text,
+  portrait_url text
 );
 
 create table if not exists public.player_characters (
@@ -60,6 +61,7 @@ create table if not exists public.player_characters (
   name text,
   token_color text,
   source_pdf_url text,
+  portrait_url text,
   sheet_json jsonb not null
 );
 

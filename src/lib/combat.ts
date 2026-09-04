@@ -11,6 +11,7 @@ import {
   type FogState,
   type MapToken,
   type Monster,
+  type PlayerCharacter,
   type RollMode,
   type TemplateMonster,
   type TurnEconomy,
@@ -597,16 +598,26 @@ export function monsterCopyCells(
   return out
 }
 
-export function decorateTokens(tokens: MapToken[], combatants: Combatant[]): MapToken[] {
+export function decorateTokens(
+  tokens: MapToken[],
+  combatants: Combatant[],
+  characters: PlayerCharacter[] = [],
+  monsters: Monster[] = [],
+): MapToken[] {
   return tokens.map((t) => {
     const c = combatants.find((x) => x.id === t.refId)
     if (!c) return t
     const look = c.source === 'character' ? playerTokenLook(c.color) : monsterTokenLook(c.name)
+    const portraitUrl =
+      c.source === 'character'
+        ? (characters.find((ch) => ch.id === c.sourceId)?.portraitUrl ?? null)
+        : (monsters.find((m) => m.id === c.sourceId)?.portraitUrl ?? null)
     return {
       ...t,
       label: c.name || t.label,
       color: look.from,
       color2: look.to,
+      portraitUrl,
       hpCurrent: c.hpCurrent,
       hpMax: c.hpMax,
       hpTemp: c.hpTemp,

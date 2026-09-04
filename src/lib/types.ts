@@ -147,6 +147,8 @@ export type Monster = {
   bonusActions: NamedEntry[]
   lairActions: NamedEntry[]
   source: 'srd' | 'custom'
+  /** Custom art for this monster's map token. Null uses the default color+initials token. */
+  portraitUrl: string | null
 }
 
 export type Attack = { name: string; bonus: string; damage: string; range?: string }
@@ -221,6 +223,8 @@ export type PlayerCharacter = {
   name: string
   tokenColor: string
   sourcePdfUrl: string | null
+  /** Custom art for this character's map token. Null uses the default color+initials token. */
+  portraitUrl: string | null
   sheet: CharacterSheetData
 }
 
@@ -424,6 +428,8 @@ export type MapToken = {
   color2?: string
   conditions?: string[]
   statusLabel?: string
+  /** Resolved from the source character's/monster's portraitUrl by decorateTokens(). */
+  portraitUrl?: string | null
 }
 
 export type FogState = {

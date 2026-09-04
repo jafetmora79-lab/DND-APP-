@@ -531,6 +531,15 @@ export function Prep() {
                   onChange={setSelectedMonster}
                   onSave={saveMonster}
                   onDelete={selectedMonster.id ? () => api.deleteMonster(selectedMonster.id!).then(reload) : undefined}
+                  onUploadPortrait={
+                    selectedMonster.id
+                      ? async (file) => {
+                          const r = await api.uploadMonsterPortrait(selectedMonster.id!, file)
+                          setSelectedMonster(r.monster)
+                          await reload()
+                        }
+                      : undefined
+                  }
                 />
                 {'id' in selectedMonster && selectedMonster.id ? (
                   <StatBlock monster={selectedMonster as Monster} />
@@ -1040,6 +1049,11 @@ export function Prep() {
                       ? t('characters.pdfRead', { count: r.fieldCount })
                       : t('characters.pdfNoFields'),
                   )
+                  await reload()
+                }}
+                onUploadPortrait={async (file) => {
+                  const r = await api.uploadCharacterPortrait(selectedChar.id, file)
+                  setSelectedChar(r.character)
                   await reload()
                 }}
               />

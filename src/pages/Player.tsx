@@ -143,7 +143,7 @@ export function Player() {
     if (!myCombatant || (mapPick !== 'attack' && mapPick !== 'help')) return []
     return snap?.combatants.filter((c) => c.id !== myCombatant.id).map((c) => c.id) ?? []
   }, [snap, myCombatant, mapPick])
-  const tokens = snap ? decorateTokens(snap.tokens, snap.combatants) : []
+  const tokens = snap ? decorateTokens(snap.tokens, snap.combatants, snap.characters, snap.monsters) : []
   const combat = showCombatStage(snap?.session ?? null, snap?.instance ?? null, snap?.map ?? null)
   const outcome = showOutcome(snap?.session ?? null)
   const setup = isFightSetup(snap?.session ?? null, snap?.instance ?? null)
@@ -208,6 +208,9 @@ export function Player() {
       character={viewing}
       canEdit={user?.role === 'player' && viewing.id === user.characterId}
       onChange={(patch) => api.patchCharacter(viewing.id, patch)}
+      onUploadPortrait={
+        user?.role === 'player' && viewing.id === user.characterId ? (file) => api.uploadCharacterPortrait(viewing.id, file) : undefined
+      }
       onUseAttack={user?.role === 'player' && viewing.id === user.characterId ? onUseAttack : undefined}
     />
   ) : (

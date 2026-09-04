@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS bestiary_monsters (
   bonus_actions TEXT,
   lair_actions TEXT,
   source TEXT,
+  portrait_url TEXT,
   FOREIGN KEY (dm_account_id) REFERENCES dm_accounts(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS player_characters (
@@ -103,6 +104,7 @@ CREATE TABLE IF NOT EXISTS player_characters (
   name TEXT,
   token_color TEXT,
   source_pdf_url TEXT,
+  portrait_url TEXT,
   sheet_json TEXT NOT NULL,
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
 );
@@ -318,6 +320,16 @@ try {
 } catch {
   /* ignore */
 }
+try {
+  db.exec(`ALTER TABLE bestiary_monsters ADD COLUMN portrait_url TEXT`)
+} catch {
+  /* already present */
+}
+try {
+  db.exec(`ALTER TABLE player_characters ADD COLUMN portrait_url TEXT`)
+} catch {
+  /* already present */
+}
 
 export function now() {
   return Date.now()
@@ -394,6 +406,7 @@ export function monsterFromRow(row: Record<string, unknown>) {
     bonusActions: jparse<NamedEntry[]>(row.bonus_actions as string, []),
     lairActions: jparse<NamedEntry[]>(row.lair_actions as string, []),
     source: row.source as 'srd' | 'custom',
+    portraitUrl: (row.portrait_url as string) || null,
   }
 }
 
@@ -406,6 +419,7 @@ export function characterFromRow(row: Record<string, unknown>) {
     name: row.name as string,
     tokenColor: row.token_color as string,
     sourcePdfUrl: (row.source_pdf_url as string) || null,
+    portraitUrl: (row.portrait_url as string) || null,
     sheet: { ...emptySheet(), ...jparse<CharacterSheetData>(row.sheet_json as string, emptySheet()) },
   }
 }

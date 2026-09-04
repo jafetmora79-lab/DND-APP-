@@ -51,6 +51,11 @@ export const localApi = {
       ? req(`/api/bestiary/${m.id}`, { method: 'PATCH', body: JSON.stringify(m) })
       : req<{ monster: Monster }>('/api/bestiary', { method: 'POST', body: JSON.stringify(m) }),
   deleteMonster: (id: string) => req(`/api/bestiary/${id}`, { method: 'DELETE' }),
+  uploadMonsterPortrait: (id: string, file: File) => {
+    const form = new FormData()
+    form.append('image', file)
+    return req<{ monster: Monster }>(`/api/bestiary/${id}/portrait`, { method: 'POST', body: form })
+  },
   maps: (campaignId: string) => req<{ maps: BattleMap[] }>(`/api/campaigns/${campaignId}/maps`),
   createMap: (campaignId: string, body: { name: string; gridSize?: number; gridCols: number; gridRows: number; imageUrl?: string }) =>
     req<{ map: BattleMap }>(`/api/campaigns/${campaignId}/maps`, { method: 'POST', body: JSON.stringify(body) }),
@@ -68,6 +73,11 @@ export const localApi = {
   patchCharacter: (id: string, body: Record<string, unknown>) =>
     req<{ character: PlayerCharacter }>(`/api/characters/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   regenCode: (id: string) => req<{ personalCode: string }>(`/api/characters/${id}/regenerate-code`, { method: 'POST' }),
+  uploadCharacterPortrait: (id: string, file: File) => {
+    const form = new FormData()
+    form.append('image', file)
+    return req<{ character: PlayerCharacter }>(`/api/characters/${id}/portrait`, { method: 'POST', body: form })
+  },
   importPdf: (id: string, file: File) => {
     const form = new FormData()
     form.append('pdf', file)

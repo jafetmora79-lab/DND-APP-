@@ -96,6 +96,16 @@ function MapImage({
   return <KImage image={img} x={bgOffsetX} y={bgOffsetY} width={img.width * bgScale} height={img.height * bgScale} listening={false} />
 }
 
+function TokenPortrait({ url, r }: { url: string; r: number }) {
+  const [img] = useImage(url, 'anonymous')
+  if (!img) return null
+  return (
+    <Group clipFunc={(ctx) => ctx.arc(0, 0, r, 0, Math.PI * 2, false)} listening={false}>
+      <KImage image={img} x={-r} y={-r} width={r * 2} height={r * 2} listening={false} />
+    </Group>
+  )
+}
+
 function AoeOverlay({ shape, gridSize }: { shape: AoeShape; gridSize: number }) {
   const fill = 'rgba(120, 170, 220, 0.28)'
   const stroke = 'rgba(180, 220, 255, 0.9)'
@@ -768,20 +778,24 @@ export function MapBoard({
                   stroke="#11100E"
                   strokeWidth={2}
                 />
-                <Text
-                  text={initials(t.label || '?')}
-                  width={r * 2}
-                  height={r * 2}
-                  offsetX={r}
-                  offsetY={r}
-                  align="center"
-                  verticalAlign="middle"
-                  fontSize={Math.max(11, r * 0.52)}
-                  fontFamily="Cinzel"
-                  fontStyle="bold"
-                  fill={inkOnToken(t.color)}
-                  listening={false}
-                />
+                {t.portraitUrl ? (
+                  <TokenPortrait url={t.portraitUrl} r={r} />
+                ) : (
+                  <Text
+                    text={initials(t.label || '?')}
+                    width={r * 2}
+                    height={r * 2}
+                    offsetX={r}
+                    offsetY={r}
+                    align="center"
+                    verticalAlign="middle"
+                    fontSize={Math.max(11, r * 0.52)}
+                    fontFamily="Cinzel"
+                    fontStyle="bold"
+                    fill={inkOnToken(t.color)}
+                    listening={false}
+                  />
+                )}
                 {t.statusLabel && (
                   <Text
                     text={t.statusLabel}

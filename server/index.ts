@@ -469,6 +469,23 @@ app.delete('/api/bestiary/:id', requireDm, (req, res) => {
   res.json({ ok: true })
 })
 
+app.post('/api/bestiary/:id/portrait', requireDm, upload.single('image'), (req, res) => {
+  const row = db.prepare('SELECT * FROM bestiary_monsters WHERE id = ? AND dm_account_id = ?').get(param(req, 'id'), userOf(req).id) as
+    | Record<string, unknown>
+    | undefined
+  if (!row) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  if (!req.file) {
+    res.status(400).json({ error: 'Image required' })
+    return
+  }
+  const portraitUrl = `/uploads/${req.file.filename}`
+  db.prepare('UPDATE bestiary_monsters SET portrait_url = ? WHERE id = ?').run(portraitUrl, row.id)
+  res.json({ monster: monsterFromRow({ ...row, portrait_url: portraitUrl }) })
+})
+
 app.get('/api/campaigns/:id/maps', requireDm, (req, res) => {
   if (!campaignOwned(param(req, 'id'), userOf(req).id)) {
     res.status(404).json({ error: 'Not found' })
@@ -707,6 +724,31 @@ app.post('/api/characters/:id/import-pdf', requireUser, upload.single('pdf'), as
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'Could not read that PDF' })
   }
+})
+
+app.post('/api/characters/:id/portrait', requireUser, upload.single('image'), (req, res) => {
+  const row = db.prepare('SELECT * FROM player_characters WHERE id = ?').get(param(req, 'id')) as Record<string, unknown> | undefined
+  if (!row) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  const user = userOf(req)
+  const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(row.campaign_id) as Record<string, unknown>
+  const isDm = user.role === 'dm' && user.id === campaign.dm_account_id
+  const isOwner = user.role === 'player' && user.characterId === row.id
+  if (!isDm && !isOwner) {
+    res.status(403).json({ error: 'Only the owner or the DM can set this portrait' })
+    return
+  }
+  if (!req.file) {
+    res.status(400).json({ error: 'Image required' })
+    return
+  }
+  const portraitUrl = `/uploads/${req.file.filename}`
+  db.prepare('UPDATE player_characters SET portrait_url = ? WHERE id = ?').run(portraitUrl, row.id)
+  const cur = characterFromRow({ ...row, portrait_url: portraitUrl })
+  pushCampaign(cur.campaignId)
+  res.json({ character: cur })
 })
 
 app.get('/api/campaigns/:id/templates', requireDm, (req, res) => {

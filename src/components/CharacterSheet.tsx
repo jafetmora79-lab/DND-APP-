@@ -14,6 +14,7 @@ type Props = {
   isDm?: boolean
   onChange: (patch: Partial<PlayerCharacter> & { sheet?: PlayerCharacter['sheet'] }) => void
   onImportPdf?: (file: File) => void
+  onUploadPortrait?: (file: File) => void
   onUseAttack?: (attack: Attack, index: number) => void
 }
 
@@ -90,11 +91,12 @@ function TinyNum({
   )
 }
 
-export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf, onUseAttack }: Props) {
+export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf, onUploadPortrait, onUseAttack }: Props) {
   const { t } = useT()
   const sheet = character.sheet
   const [tab, setTab] = useState<Tab>('sheet')
   const fileRef = useRef<HTMLInputElement>(null)
+  const portraitRef = useRef<HTMLInputElement>(null)
   const [copied, setCopied] = useState(false)
   const pb = proficiencyBonus(sheet.level)
   const tabs: { id: Tab; show: boolean }[] = [
@@ -129,7 +131,34 @@ export function CharacterSheet({ character, canEdit, isDm, onChange, onImportPdf
           </button>
         ))}
         {canEdit && (
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            {onUploadPortrait && (
+              <>
+                <input
+                  ref={portraitRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) onUploadPortrait(f)
+                    e.target.value = ''
+                  }}
+                />
+                <button
+                  type="button"
+                  title={t('sheet.tokenPortraitTitle')}
+                  onClick={() => portraitRef.current?.click()}
+                  className="h-8 w-8 shrink-0 overflow-hidden rounded-full border border-line bg-panel-2 text-[10px] text-muted hover:border-gold/50"
+                >
+                  {character.portraitUrl ? (
+                    <img src={character.portraitUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    t('sheet.tokenPortrait')
+                  )}
+                </button>
+              </>
+            )}
             <TokenColorPicker
               value={character.tokenColor}
               onChange={(tokenColor) => onChange({ tokenColor })}

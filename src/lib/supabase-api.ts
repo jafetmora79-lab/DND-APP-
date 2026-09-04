@@ -156,6 +156,7 @@ function monsterFromRow(row: Record<string, unknown>): Monster {
     bonusActions: (row.bonus_actions as NamedEntry[]) ?? [],
     lairActions: (row.lair_actions as NamedEntry[]) ?? [],
     source: row.source === 'custom' ? 'custom' : 'srd',
+    portraitUrl: (row.portrait_url as string) || null,
   }
 }
 
@@ -208,6 +209,7 @@ function characterFromRow(row: Record<string, unknown>): PlayerCharacter {
     name: String(row.name ?? ''),
     tokenColor: String(row.token_color ?? '#6ea8c9'),
     sourcePdfUrl: (row.source_pdf_url as string) || null,
+    portraitUrl: (row.portrait_url as string) || null,
     sheet: { ...emptySheet(), ...((row.sheet_json as object) || {}) },
   }
 }
@@ -731,6 +733,24 @@ export const supabaseApi: TableApi = {
     return {}
   },
 
+  async uploadMonsterPortrait(id, file) {
+    const { data: row, error: loadErr } = await db().from('bestiary_monsters').select('*').eq('id', id).single()
+    throwIf(loadErr)
+    const path = storageObjectPath(`monsters/${row.dm_account_id}`, file.name)
+    const { error: upErr } = await db().storage.from('maps').upload(path, file, { upsert: true })
+    if (upErr) {
+      throw new Error(
+        upErr.message.includes('Bucket not found') || upErr.message.includes('not found')
+          ? 'Create a public Storage bucket named "maps" in Supabase, then try the upload again.'
+          : upErr.message,
+      )
+    }
+    const { data: pub } = db().storage.from('maps').getPublicUrl(path)
+    const { data, error } = await db().from('bestiary_monsters').update({ portrait_url: pub.publicUrl }).eq('id', id).select().single()
+    throwIf(error)
+    return { monster: monsterFromRow(data as Record<string, unknown>) }
+  },
+
   async maps(campaignId) {
     const { data, error } = await db().from('maps').select('*').eq('campaign_id', campaignId)
     throwIf(error)
@@ -901,6 +921,24 @@ export const supabaseApi: TableApi = {
     const { error } = await db().from('player_characters').update({ personal_code: code }).eq('id', id)
     throwIf(error)
     return { personalCode: code }
+  },
+
+  async uploadCharacterPortrait(id, file) {
+    const { data: row, error: loadErr } = await db().from('player_characters').select('*').eq('id', id).single()
+    throwIf(loadErr)
+    const path = storageObjectPath(`${row.campaign_id}/characters`, file.name)
+    const { error: upErr } = await db().storage.from('maps').upload(path, file, { upsert: true })
+    if (upErr) {
+      throw new Error(
+        upErr.message.includes('Bucket not found') || upErr.message.includes('not found')
+          ? 'Create a public Storage bucket named "maps" in Supabase, then try the upload again.'
+          : upErr.message,
+      )
+    }
+    const { data: pub } = db().storage.from('maps').getPublicUrl(path)
+    const { data, error } = await db().from('player_characters').update({ portrait_url: pub.publicUrl }).eq('id', id).select().single()
+    throwIf(error)
+    return { character: characterFromRow(data as Record<string, unknown>) }
   },
 
   async importPdf(id, file) {

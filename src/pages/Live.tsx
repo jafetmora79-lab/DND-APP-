@@ -614,7 +614,13 @@ export function Live() {
           onSelectCharacter={setSheetId}
           sheet={
             hubCharacter ? (
-              <CharacterSheet character={hubCharacter} canEdit isDm onChange={(patch) => api.patchCharacter(hubCharacter.id, patch)} />
+              <CharacterSheet
+                character={hubCharacter}
+                canEdit
+                isDm
+                onChange={(patch) => api.patchCharacter(hubCharacter.id, patch)}
+                onUploadPortrait={(file) => api.uploadCharacterPortrait(hubCharacter.id, file)}
+              />
             ) : (
               <p className="text-sm text-muted">Add characters in prep so their sheets sit on this table between fights.</p>
             )
@@ -907,7 +913,7 @@ export function Live() {
         <main className={cn('relative min-h-0 flex-1', hudTab === 'map' ? 'block' : 'hidden lg:block')}>
           <MapBoard
             map={snap.map}
-            tokens={decorateTokens(snap.tokens, snap.combatants)}
+            tokens={decorateTokens(snap.tokens, snap.combatants, snap.characters, snap.monsters)}
             fog={displayFog ?? instance.fogState}
             isDm
             selectedId={targetId ?? selected}
@@ -1081,6 +1087,7 @@ export function Live() {
               canEdit
               isDm
               onChange={(patch) => api.patchCharacter(selectedCharacter.id, patch)}
+              onUploadPortrait={(file) => api.uploadCharacterPortrait(selectedCharacter.id, file)}
             />
           )}
           {panel === 'sheet' && !selectedCharacter && (
