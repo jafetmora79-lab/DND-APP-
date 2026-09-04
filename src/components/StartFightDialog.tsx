@@ -17,8 +17,8 @@ type Props = {
 export function StartFightDialog({ template, characters, busy, warnActiveFight, onCancel, onConfirm }: Props) {
   const { t } = useT()
   const [lighting, setLighting] = useState<Lighting>('day')
-  const [surpriseParty, setSurpriseParty] = useState(false)
-  const [surpriseMonsters, setSurpriseMonsters] = useState(false)
+  const [surpriseParty, setSurpriseParty] = useState(Boolean(template.surpriseParty))
+  const [surpriseMonsters, setSurpriseMonsters] = useState(Boolean(template.surpriseMonsters))
   const placed = new Set((template.characters ?? []).map((c) => c.characterId))
   const missing = characters.filter((c) => !placed.has(c.id))
   const onMap = (template.characters ?? []).filter((c) => characters.some((ch) => ch.id === c.characterId))
@@ -28,6 +28,11 @@ export function StartFightDialog({ template, characters, busy, warnActiveFight, 
       <div className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-panel p-6">
         <h2 className="font-display text-2xl text-gold-2">{template.name}</h2>
         <p className="mt-1 text-sm text-muted">Check the board, then roll initiative. The fight does not start until you begin round 1.</p>
+        {template.readAloud && (
+          <blockquote className="mt-3 rounded-md border border-gold/30 bg-gold/5 p-3 text-sm italic text-ink">
+            {template.readAloud}
+          </blockquote>
+        )}
         {(template.objective || template.notes || template.difficulty) && (
           <p className="mt-3 text-sm">
             {[template.difficulty, template.objective, template.notes].filter(Boolean).join(' · ')}
@@ -49,6 +54,17 @@ export function StartFightDialog({ template, characters, busy, warnActiveFight, 
           <p className="mt-2 text-xs text-muted">
             {template.monsters.map((m) => `${m.quantity}× ${m.name}`).join(', ') || 'No monsters'}
           </p>
+          {template.monsters.some((m) => m.notes) && (
+            <ul className="mt-1 space-y-0.5 text-xs text-muted">
+              {template.monsters
+                .filter((m) => m.notes)
+                .map((m) => (
+                  <li key={m.bestiaryMonsterId}>
+                    <span className="text-gold">{m.name}:</span> {m.notes}
+                  </li>
+                ))}
+            </ul>
+          )}
         </section>
         <section className="mt-4">
           <h3 className="text-xs uppercase tracking-wider text-muted">{t('start.lighting')}</h3>

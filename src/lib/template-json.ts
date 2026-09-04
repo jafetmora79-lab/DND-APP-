@@ -80,6 +80,9 @@ export function templateFromRow(row: Record<string, unknown>): EncounterTemplate
     lootNotes: packed.brief.lootNotes,
     sortOrder: packed.brief.sortOrder,
     chapter: packed.brief.chapter,
+    readAloud: packed.brief.readAloud,
+    surpriseParty: packed.brief.surpriseParty,
+    surpriseMonsters: packed.brief.surpriseMonsters,
   }
 }
 

@@ -269,6 +269,8 @@ export type TemplateMonster = {
   positions?: GridCell[]
   /** Per-copy name/color overrides, indexed like `positions`. An empty/missing entry falls back to the auto "Name N" label and the shared color. */
   copies?: { name?: string; color?: string }[]
+  /** Tactics/behavior note for this monster group (e.g. "flees below 10 HP"). Not shown to players. */
+  notes?: string
 }
 
 export type TemplateCharacter = {
@@ -293,6 +295,9 @@ export type EncounterTemplate = {
   lootNotes?: string
   sortOrder?: number
   chapter?: string
+  readAloud?: string
+  surpriseParty?: boolean
+  surpriseMonsters?: boolean
 }
 
 export type SessionBeatKind = 'combat' | 'social' | 'travel' | 'other'
@@ -364,6 +369,10 @@ export type EncounterBrief = {
   sortOrder: number
   /** Free-text grouping label (e.g. "Act 1", "The Mines") for organizing a long encounter list. */
   chapter: string
+  /** Boxed/read-aloud text the DM reads to players when the encounter begins. */
+  readAloud: string
+  surpriseParty: boolean
+  surpriseMonsters: boolean
 }
 
 export type Campaign = {

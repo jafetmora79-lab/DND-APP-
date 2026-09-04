@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Check, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Field, Input } from '@/components/ui/input'
+import { Field, Input, Textarea } from '@/components/ui/input'
 import { CharacterSheet } from '@/components/CharacterSheet'
 import { MonsterForm } from '@/components/MonsterForm'
 import { TokenColorPicker } from '@/components/TokenColorPicker'
@@ -642,6 +642,14 @@ export function Prep() {
               <Field label={t('encounter.objective')}>
                 <Input value={tpl.objective ?? ''} onChange={(e) => setTpl({ ...tpl, objective: e.target.value })} placeholder={t('encounter.objectivePlaceholder')} />
               </Field>
+              <Field label={t('encounter.readAloud')}>
+                <Textarea
+                  value={tpl.readAloud ?? ''}
+                  onChange={(e) => setTpl({ ...tpl, readAloud: e.target.value })}
+                  placeholder={t('encounter.readAloudPlaceholder')}
+                  rows={3}
+                />
+              </Field>
               <div className="grid grid-cols-2 gap-2">
                 <Field label={t('encounter.difficulty')}>
                   <Input value={tpl.difficulty ?? ''} onChange={(e) => setTpl({ ...tpl, difficulty: e.target.value })} placeholder={t('encounter.difficultyPlaceholder')} />
@@ -651,11 +659,34 @@ export function Prep() {
                 </Field>
               </div>
               <Field label={t('sheet.notes')}>
-                <Input value={tpl.notes ?? ''} onChange={(e) => setTpl({ ...tpl, notes: e.target.value })} placeholder={t('encounter.notesPlaceholder')} />
+                <Textarea
+                  value={tpl.notes ?? ''}
+                  onChange={(e) => setTpl({ ...tpl, notes: e.target.value })}
+                  placeholder={t('encounter.notesPlaceholder')}
+                  rows={2}
+                />
               </Field>
               <Field label={t('encounter.loot')}>
                 <Input value={tpl.lootNotes ?? ''} onChange={(e) => setTpl({ ...tpl, lootNotes: e.target.value })} placeholder={t('encounter.lootPlaceholder')} />
               </Field>
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={tpl.surpriseParty ?? false}
+                    onChange={(e) => setTpl({ ...tpl, surpriseParty: e.target.checked })}
+                  />
+                  {t('encounter.surpriseParty')}
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={tpl.surpriseMonsters ?? false}
+                    onChange={(e) => setTpl({ ...tpl, surpriseMonsters: e.target.checked })}
+                  />
+                  {t('encounter.surpriseMonsters')}
+                </label>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <Field label={t('encounter.chapter')}>
                   <Input
@@ -893,7 +924,19 @@ export function Prep() {
                       </button>
                     </div>
                     {expandedMonsterIdx === i && (
-                      <ul className="ml-5 mt-1 space-y-1 border-l border-line/50 pl-3">
+                      <div className="ml-5 mt-1 border-l border-line/50 pl-3">
+                        <Textarea
+                          className="text-xs"
+                          rows={2}
+                          placeholder={t('encounter.monsterNotesPlaceholder', { name: m.name })}
+                          value={m.notes ?? ''}
+                          onChange={(e) => {
+                            const list = (tpl.monsters ?? []).slice()
+                            list[i] = { ...m, notes: e.target.value }
+                            setTpl({ ...tpl, monsters: list })
+                          }}
+                        />
+                      <ul className="mt-2 space-y-1">
                         {Array.from({ length: m.quantity }, (_, copyIndex) => {
                           const copy = m.copies?.[copyIndex]
                           const autoName = m.quantity > 1 ? `${m.name} ${copyIndex + 1}` : m.name
@@ -924,6 +967,7 @@ export function Prep() {
                           )
                         })}
                       </ul>
+                      </div>
                     )}
                     </li>
                   ))}
