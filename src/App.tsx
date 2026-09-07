@@ -3,6 +3,7 @@ import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router
 import { AuthProvider, useAuth } from '@/lib/auth'
 import { I18nProvider } from '@/lib/i18n'
 import { ThemeProvider } from '@/lib/theme'
+import { ThemedBackdrop } from '@/components/ThemedBackdrop'
 import { Campaigns } from '@/pages/Campaigns'
 import { Landing } from '@/pages/Landing'
 import { Live } from '@/pages/Live'
@@ -23,6 +24,7 @@ export default function App() {
     import.meta.env.VITE_HASH_ROUTER === '1' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, '') || undefined
   return (
     <ThemeProvider>
+      <ThemedBackdrop />
       <I18nProvider>
         <AuthProvider>
           <Router basename={basename}>

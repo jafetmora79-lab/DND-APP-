@@ -45,11 +45,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [palette])
   const value = useMemo(() => {
     function setPalette(next: Palette) {
-      setPaletteState(next)
-      try {
-        localStorage.setItem(STORAGE_KEY, next)
-      } catch {
-        /* ignore */
+      function commit() {
+        document.documentElement.setAttribute('data-palette', next)
+        setPaletteState(next)
+        try {
+          localStorage.setItem(STORAGE_KEY, next)
+        } catch {
+          /* ignore */
+        }
+      }
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      if (!reduceMotion && 'startViewTransition' in document) {
+        document.startViewTransition(commit)
+      } else {
+        commit()
       }
     }
     return { palette, setPalette }

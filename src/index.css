@@ -61,13 +61,12 @@ body,
 #root {
   min-height: 100%;
   margin: 0;
-  background: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);
 }
 
-body {
-  background-color: var(--color-bg);
+html {
+  background: var(--color-bg);
 }
 
 #root {
@@ -407,4 +406,10 @@ select {
 
 .animate-slide-in {
   animation: slide-in 0.3s ease-out;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.7s;
+  animation-timing-function: ease-in-out;
 }
