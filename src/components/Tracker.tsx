@@ -56,7 +56,7 @@ export function Tracker({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-3 border-b border-line bg-panel-2/50 px-3 py-2.5">
+      <div className="z-10 flex items-center justify-between gap-3 border-b border-line bg-panel-2/50 px-3 py-2.5 shadow-sm">
         <div className="min-w-0">
           <div className="font-display text-base font-semibold text-gold-2">{setup ? 'Initiative' : `Round ${round}`}</div>
           <div className="text-xs text-muted truncate">
@@ -96,16 +96,18 @@ export function Tracker({
           <li
             key={c.id}
             className={cn(
-              'cursor-pointer rounded-lg border p-2.5 transition-all hover:border-line/60',
-              i === current ? 'border-gold bg-gold/10 shadow-sm' : 'border-line bg-panel/50',
+              'cursor-pointer rounded-lg border p-2.5 transition-all',
+              i === current
+                ? 'border-gold/70 bg-gold/10 shadow-[0_4px_16px_-2px_rgba(212,175,90,0.25)]'
+                : 'border-line bg-panel/60 shadow-sm hover:border-line/80 hover:bg-panel/80',
               selectedId === c.id && 'ring-2 ring-gold/50',
               c.deathState === 'dead' && 'opacity-60',
             )}
             onClick={() => onSelect(c.id)}
           >
             <div className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full shadow-sm" style={{ background: c.color }} />
-              <span className="flex-1 font-medium text-sm">{c.name}</span>
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full shadow-sm" style={{ background: c.color }} />
+              <span className="flex-1 truncate text-sm font-semibold">{c.name}</span>
               {c.deathState === 'dying' && <span className="text-[10px] uppercase tracking-wide text-blood font-semibold">Dying</span>}
               {c.deathState === 'stable' && <span className="text-[10px] uppercase tracking-wide text-gold font-semibold">Stable</span>}
               {c.deathState === 'dead' && <span className="text-[10px] uppercase tracking-wide text-blood font-semibold">Dead</span>}
@@ -162,7 +164,7 @@ export function Tracker({
                   />
                 </>
               ) : (
-                <span className="stat-num text-sm">
+                <span className="stat-num text-base font-semibold">
                   {c.hpCurrent}/{c.hpMax}
                   {c.hpTemp ? ` +${c.hpTemp}` : ''}
                 </span>
@@ -250,7 +252,7 @@ export function Tracker({
               </div>
             )}
             {canEcon && (
-              <div className="mt-2 flex flex-wrap gap-1">
+              <div className="mt-2 flex flex-wrap gap-1 border-t border-line/40 pt-2">
                 {ECON.map(({ key, label }) => (
                   <button
                     key={key}

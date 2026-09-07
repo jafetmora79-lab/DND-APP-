@@ -60,7 +60,7 @@ export function AttackBar({
   if (named.length === 0) return null
   const twoDice = rollMode !== 'normal'
   return (
-    <div className="border-t border-line bg-panel px-3 py-2">
+    <div className="border-t border-line bg-panel px-3 py-2 shadow-[0_-4px_16px_-4px_rgba(0,0,0,0.3)]">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs uppercase tracking-wider text-muted">Attack</span>
         {named.map(({ atk, i }) => (

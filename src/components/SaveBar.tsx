@@ -134,7 +134,7 @@ export function CheckBar({
   }
 
   return (
-    <div className={compact ? 'border-t border-line bg-panel px-3 py-2' : 'mt-3 rounded-lg border border-line/70 p-2'}>
+    <div className={compact ? 'border-t border-line bg-panel px-3 py-2 shadow-[0_-4px_16px_-4px_rgba(0,0,0,0.3)]' : 'mt-3 rounded-lg border border-line/70 p-2'}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs uppercase tracking-wider text-muted">{t('check.label')}</span>
         <span className="text-xs text-ink">{target.name}</span>
