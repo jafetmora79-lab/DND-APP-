@@ -10,10 +10,14 @@ import {
   EyeOff,
   Flag,
   Home,
+  LayoutGrid,
+  LogOut,
   Moon,
   Pause,
   Play,
+  RefreshCw,
   Ruler,
+  SkipForward,
   Slash,
   Square as SquareIcon,
   Sun,
@@ -610,10 +614,10 @@ export function Live() {
         variant="outline"
         onClick={() => api.openSession(campaignId!, instance?.id ?? null, { rotateJoinCode: true }).then(load)}
       >
-        New join code
+        <RefreshCw className="h-4 w-4" /> New join code
       </Button>
       <Button size="sm" variant="ghost" disabled={busy} onClick={() => void onEndCampaign()}>
-        End campaign
+        <LogOut className="h-4 w-4" /> End campaign
       </Button>
     </>
   )
@@ -692,7 +696,7 @@ export function Live() {
   const tableActions = (
     <>
       <Button size="sm" variant="outline" disabled={busy} onClick={leaveToTable} title="Pause this fight and return to the hub. The fight stays.">
-        Table
+        <LayoutGrid className="h-4 w-4" /> Table
       </Button>
       <Button
         size="sm"
@@ -701,7 +705,7 @@ export function Live() {
         title={instance.status === 'active' ? 'Pause or Finalize this fight first.' : 'Start the next template'}
         onClick={() => setPickerOpen(true)}
       >
-        Next encounter
+        <SkipForward className="h-4 w-4" /> Next encounter
       </Button>
       <Button size="sm" variant="ember" disabled={busy || Boolean(outcome)} onClick={() => setFinalizeOpen(true)}>
         <Trophy className="h-4 w-4" /> Finalize
@@ -716,7 +720,7 @@ export function Live() {
         </Button>
       )}
       <Button size="sm" variant="ghost" disabled={busy} onClick={() => void onEndCampaign()}>
-        End campaign
+        <LogOut className="h-4 w-4" /> End campaign
       </Button>
     </>
   )

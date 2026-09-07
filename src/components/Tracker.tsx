@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ArrowUpDown, ChevronRight, Play, SkipForward } from 'lucide-react'
 import { CONDITIONS, conditionRingColor, type Combatant, type TurnEconomy } from '@/lib/types'
 import { cn, hpColor } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -66,19 +67,19 @@ export function Tracker({
         {isDm && (
           <div className="flex flex-wrap justify-end gap-1.5 shrink-0">
             <Button size="sm" variant="outline" onClick={onSort} className="h-8 px-3 text-xs">
-              Sort
+              <ArrowUpDown className="h-3.5 w-3.5" /> Sort
             </Button>
             {setup ? (
               <Button size="sm" variant="ember" onClick={onBeginRound} className="h-8 px-3 text-xs">
-                Begin round 1
+                <Play className="h-3.5 w-3.5" /> Begin round 1
               </Button>
             ) : (
               <>
                 <Button size="sm" variant="outline" onClick={onSkip ?? onNext} className="h-8 px-3 text-xs">
-                  Skip
+                  <SkipForward className="h-3.5 w-3.5" /> Skip
                 </Button>
                 <Button size="sm" variant="ember" onClick={onNext} className="h-8 px-3 text-xs">
-                  Next turn
+                  <ChevronRight className="h-3.5 w-3.5" /> Next turn
                 </Button>
               </>
             )}

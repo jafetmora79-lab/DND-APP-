@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Bell, BellOff, HeartPulse, Swords, Users, X } from 'lucide-react'
+import { Bell, BellOff, HeartPulse, LogOut, Swords, Users, X } from 'lucide-react'
 import { Brand } from '@/components/Brand'
 import { Button } from '@/components/ui/button'
 import { CharacterSheet } from '@/components/CharacterSheet'
@@ -268,7 +268,7 @@ export function Player() {
                 nav('/')
               }}
             >
-              {t('player.leave')}
+              <LogOut className="h-4 w-4" /> {t('player.leave')}
             </Button>
             <LanguageToggle />
             <ThemeToggle />
@@ -393,7 +393,7 @@ export function Player() {
               nav('/')
             }}
           >
-            {t('player.leave')}
+            <LogOut className="h-4 w-4" /> {t('player.leave')}
           </Button>
           <LanguageToggle />
           <ThemeToggle />
