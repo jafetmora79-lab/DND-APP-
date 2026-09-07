@@ -13,13 +13,23 @@ export function ThemedBackdrop() {
 
   const themedBg = publicAsset(PALETTE_BACKGROUND[palette])
 
+  const src = bgFailed ? publicAsset('tavern-hearth.jpg') : themedBg
+
   return (
     <div className="fixed inset-0 -z-10 overflow-hidden bg-bg" aria-hidden="true">
+      {/* Oversized + blurred fill so the low-res source has no hard edges to show through. */}
+      <img
+        key={`${palette}-fill`}
+        src={src}
+        alt=""
+        className="h-full w-full scale-110 object-cover opacity-50 blur-2xl"
+      />
+      {/* Sharper foreground copy, zoomed out (contain) so it isn't stretched as far. */}
       <img
         key={palette}
-        src={bgFailed ? publicAsset('tavern-hearth.jpg') : themedBg}
+        src={src}
         alt=""
-        className="h-full w-full object-cover opacity-60"
+        className="absolute inset-0 h-full w-full object-contain opacity-70"
         onError={() => setBgFailed(true)}
       />
       <div className="absolute inset-0 bg-bg/45" />
