@@ -9,9 +9,9 @@ const STORAGE_KEY = 'dlt-palette'
 
 /** Drop the matching file in /public with this exact name to give a theme its own hero background. */
 export const PALETTE_BACKGROUND: Record<Palette, string> = {
-  hoard: 'Tavern.gif',
-  verdigris: 'Vampire.gif',
-  iron: 'Dragon.gif',
+  hoard: 'tavern-hearth.jpg',
+  verdigris: 'theme-verdigris.png',
+  iron: 'theme-iron.png',
 }
 
 const PALETTES: { id: Palette; swatches: string[] }[] = [

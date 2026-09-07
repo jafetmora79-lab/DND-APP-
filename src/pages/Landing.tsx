@@ -102,24 +102,10 @@ export function Landing() {
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-bg">
-      {/* Oversized + blurred fill so the low-res source has no hard edges to show through. */}
       <img
         src={bgFailed ? publicAsset('tavern-hearth.jpg') : themedBg}
         alt=""
-        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-80 blur-2xl"
-      />
-      {/* Sharper foreground copy, zoomed out (contain) so it isn't stretched as far.
-          The GIFs are 21:9, much wider than most viewports, so contain leaves a visible
-          top/bottom band; a soft mask fade blends that edge into the blurred fill instead
-          of showing a hard seam. */}
-      <img
-        src={bgFailed ? publicAsset('tavern-hearth.jpg') : themedBg}
-        alt=""
-        className="absolute inset-0 h-full w-full object-contain"
-        style={{
-          maskImage: 'linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)',
-          WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)',
-        }}
+        className="absolute inset-0 h-full w-full object-cover"
         onError={() => setBgFailed(true)}
       />
       <div className="absolute inset-0 bg-[#11100E]/60" />
