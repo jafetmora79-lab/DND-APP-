@@ -1,6 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Check, Copy, Eye, EyeOff, Flag, Home, Moon, Pause, Play, Ruler, Sun, Sword, Trophy, X as XIcon } from 'lucide-react'
+import {
+  Check,
+  Circle as CircleIcon,
+  Cloud,
+  CloudOff,
+  Copy,
+  Eye,
+  EyeOff,
+  Flag,
+  Home,
+  Moon,
+  Pause,
+  Play,
+  Ruler,
+  Slash,
+  Square as SquareIcon,
+  Sun,
+  Sword,
+  Triangle,
+  Trophy,
+  X as XIcon,
+} from 'lucide-react'
 import { AttackBar } from '@/components/AttackBar'
 import { CombatActivityFeed } from '@/components/CombatActivityFeed'
 import { InitiativePopup } from '@/components/InitiativePopup'
@@ -1017,61 +1038,81 @@ export function Live() {
                 : undefined
             }
           />
-          <div className="absolute left-2 top-2 z-10 flex max-w-[calc(100%-3.5rem)] flex-wrap gap-1">
+          <div className="absolute left-2 top-2 z-10 flex max-w-[calc(100%-3.5rem)] flex-wrap items-center gap-0.5 rounded-lg border border-line bg-panel/90 p-1 shadow-lg backdrop-blur-sm">
             <Button
-              size="sm"
-              variant={tool === 'select' ? 'default' : 'outline'}
+              size="iconSm"
+              variant={tool === 'select' ? 'default' : 'ghost'}
+              title={t('map.move')}
+              aria-label={t('map.move')}
               onClick={() => {
                 setTool('select')
                 setAoeShape(null)
               }}
             >
-              <Sword className="h-4 w-4" /> {t('map.move')}
+              <Sword className="h-4 w-4" />
             </Button>
+
+            <span className="mx-0.5 h-5 w-px bg-line" />
+
             <Button
-              size="sm"
-              variant={lighting === 'day' ? 'default' : 'outline'}
+              size="iconSm"
+              variant={lighting === 'day' ? 'default' : 'ghost'}
+              title={t('map.day')}
+              aria-label={t('map.day')}
               onClick={() => onLighting('day')}
             >
-              <Sun className="h-4 w-4" /> {t('map.day')}
+              <Sun className="h-4 w-4" />
             </Button>
             <Button
-              size="sm"
-              variant={lighting === 'night' ? 'default' : 'outline'}
+              size="iconSm"
+              variant={lighting === 'night' ? 'default' : 'ghost'}
+              title={t('map.night')}
+              aria-label={t('map.night')}
               onClick={() => onLighting('night')}
             >
-              <Moon className="h-4 w-4" /> {t('map.night')}
+              <Moon className="h-4 w-4" />
             </Button>
             <Button
-              size="sm"
-              variant={lighting === 'interior' ? 'default' : 'outline'}
+              size="iconSm"
+              variant={lighting === 'interior' ? 'default' : 'ghost'}
+              title={t('map.interior')}
+              aria-label={t('map.interior')}
               onClick={() => onLighting('interior')}
             >
-              <Home className="h-4 w-4" /> {t('map.interior')}
+              <Home className="h-4 w-4" />
             </Button>
+
+            <span className="mx-0.5 h-5 w-px bg-line" />
+
             <Button
-              size="sm"
-              variant={tool === 'reveal' ? 'default' : 'outline'}
+              size="iconSm"
+              variant={tool === 'reveal' ? 'default' : 'ghost'}
+              title={t('map.reveal')}
+              aria-label={t('map.reveal')}
               onClick={() => {
                 if (!instance.fogState.enabled) onFog({ ...instance.fogState, enabled: true, revealed: instance.fogState.revealed.map(() => 0) })
                 setTool('reveal')
               }}
             >
-              <Eye className="h-4 w-4" /> {t('map.reveal')}
+              <Eye className="h-4 w-4" />
             </Button>
             <Button
-              size="sm"
-              variant={tool === 'hide' ? 'default' : 'outline'}
+              size="iconSm"
+              variant={tool === 'hide' ? 'default' : 'ghost'}
+              title={t('map.hide')}
+              aria-label={t('map.hide')}
               onClick={() => {
                 if (!instance.fogState.enabled) onFog({ ...instance.fogState, enabled: true })
                 setTool('hide')
               }}
             >
-              <EyeOff className="h-4 w-4" /> {t('map.hide')}
+              <EyeOff className="h-4 w-4" />
             </Button>
             <Button
-              size="sm"
-              variant="ghost"
+              size="iconSm"
+              variant={instance.fogState.enabled ? 'default' : 'ghost'}
+              title={instance.fogState.enabled ? t('map.fogOn') : t('map.fogOff')}
+              aria-label={instance.fogState.enabled ? t('map.fogOn') : t('map.fogOff')}
               onClick={() =>
                 onFog({
                   ...instance.fogState,
@@ -1079,36 +1120,73 @@ export function Live() {
                 })
               }
             >
-              {instance.fogState.enabled ? t('map.fogOn') : t('map.fogOff')}
+              {instance.fogState.enabled ? <Cloud className="h-4 w-4" /> : <CloudOff className="h-4 w-4" />}
             </Button>
-            <span className="mx-1 w-px self-stretch bg-line" />
-            <Button size="sm" variant={tool === 'aoe-circle' ? 'default' : 'outline'} onClick={() => selectAoeTool('aoe-circle')}>
-              {t('map.aoeCircle')}
+
+            <span className="mx-0.5 h-5 w-px bg-line" />
+
+            <Button
+              size="iconSm"
+              variant={tool === 'aoe-circle' ? 'default' : 'ghost'}
+              title={t('map.aoeCircle')}
+              aria-label={t('map.aoeCircle')}
+              onClick={() => selectAoeTool('aoe-circle')}
+            >
+              <CircleIcon className="h-4 w-4" />
             </Button>
-            <Button size="sm" variant={tool === 'aoe-cone' ? 'default' : 'outline'} onClick={() => selectAoeTool('aoe-cone')}>
-              {t('map.aoeCone')}
+            <Button
+              size="iconSm"
+              variant={tool === 'aoe-cone' ? 'default' : 'ghost'}
+              title={t('map.aoeCone')}
+              aria-label={t('map.aoeCone')}
+              onClick={() => selectAoeTool('aoe-cone')}
+            >
+              <Triangle className="h-4 w-4" />
             </Button>
-            <Button size="sm" variant={tool === 'aoe-line' ? 'default' : 'outline'} onClick={() => selectAoeTool('aoe-line')}>
-              {t('map.aoeLine')}
+            <Button
+              size="iconSm"
+              variant={tool === 'aoe-line' ? 'default' : 'ghost'}
+              title={t('map.aoeLine')}
+              aria-label={t('map.aoeLine')}
+              onClick={() => selectAoeTool('aoe-line')}
+            >
+              <Slash className="h-4 w-4" />
             </Button>
-            <Button size="sm" variant={tool === 'aoe-cube' ? 'default' : 'outline'} onClick={() => selectAoeTool('aoe-cube')}>
-              {t('map.aoeCube')}
+            <Button
+              size="iconSm"
+              variant={tool === 'aoe-cube' ? 'default' : 'ghost'}
+              title={t('map.aoeCube')}
+              aria-label={t('map.aoeCube')}
+              onClick={() => selectAoeTool('aoe-cube')}
+            >
+              <SquareIcon className="h-4 w-4" />
             </Button>
             {aoeShape && (
-              <Button size="sm" variant="ghost" onClick={() => setAoeShape(null)}>
-                <XIcon className="h-4 w-4" /> {t('map.aoeClear')}
+              <Button
+                size="iconSm"
+                variant="ghost"
+                className="text-blood hover:text-blood"
+                title={t('map.aoeClear')}
+                aria-label={t('map.aoeClear')}
+                onClick={() => setAoeShape(null)}
+              >
+                <XIcon className="h-4 w-4" />
               </Button>
             )}
-            <span className="mx-1 w-px self-stretch bg-line" />
+
+            <span className="mx-0.5 h-5 w-px bg-line" />
+
             <Button
-              size="sm"
-              variant={tool === 'ruler' ? 'default' : 'outline'}
+              size="iconSm"
+              variant={tool === 'ruler' ? 'default' : 'ghost'}
+              title={t('map.ruler')}
+              aria-label={t('map.ruler')}
               onClick={() => {
                 setAoeShape(null)
                 setTool((cur) => (cur === 'ruler' ? 'select' : 'ruler'))
               }}
             >
-              <Ruler className="h-4 w-4" /> {t('map.ruler')}
+              <Ruler className="h-4 w-4" />
             </Button>
           </div>
           {aoeShape && (
