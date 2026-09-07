@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { publicAsset } from '@/lib/config'
 import { PALETTE_BACKGROUND, useTheme } from '@/lib/theme'
+import { ThemeParticles } from '@/components/ThemeParticles'
 
 /** Fixed, full-viewport hero image behind pages that don't paint their own opaque background. */
 export function ThemedBackdrop() {
@@ -23,6 +24,7 @@ export function ThemedBackdrop() {
         onError={() => setBgFailed(true)}
       />
       <div className="absolute inset-0 bg-[#0c0a07]/70" />
+      <ThemeParticles />
     </div>
   )
 }

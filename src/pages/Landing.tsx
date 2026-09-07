@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronRight, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
+import { ThemeParticles } from '@/components/ThemeParticles'
 import { useAuth } from '@/lib/auth'
 import { publicAsset, usingSupabase } from '@/lib/config'
 import { LanguageToggle, useT } from '@/lib/i18n'
@@ -109,6 +110,7 @@ export function Landing() {
         onError={() => setBgFailed(true)}
       />
       <div className="absolute inset-0 bg-[#11100E]/60" />
+      <ThemeParticles />
       <div className="relative z-10 mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4 py-10">
         <header className="text-center">
           <div className="mb-3 flex justify-center gap-2">
