@@ -24,12 +24,19 @@ export function ThemedBackdrop() {
         alt=""
         className="h-full w-full scale-110 object-cover opacity-50 blur-2xl"
       />
-      {/* Sharper foreground copy, zoomed out (contain) so it isn't stretched as far. */}
+      {/* Sharper foreground copy, zoomed out (contain) so it isn't stretched as far.
+          The GIFs are 21:9, much wider than most viewports, so contain leaves a visible
+          top/bottom band; a soft mask fade blends that edge into the blurred fill instead
+          of showing a hard seam. */}
       <img
         key={palette}
         src={src}
         alt=""
         className="absolute inset-0 h-full w-full object-contain opacity-70"
+        style={{
+          maskImage: 'linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)',
+          WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)',
+        }}
         onError={() => setBgFailed(true)}
       />
       <div className="absolute inset-0 bg-bg/45" />
