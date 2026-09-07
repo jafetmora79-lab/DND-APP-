@@ -1,4 +1,4 @@
-# D&D Live Table
+# Veyra
 
 A campaign companion for running Dungeons & Dragons 5e at a real table: a persistent DM library, a live session that phones can follow, character sheets the whole party can read, and encounters you can pause mid-fight and resume next week — HP, positions, turn order, and fog included.
 

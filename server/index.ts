@@ -1830,5 +1830,5 @@ if (fs.existsSync(dist)) {
 
 const PORT = Number(process.env.PORT ?? 4732)
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`D&D Live Table API on http://127.0.0.1:${PORT}`)
+  console.log(`Veyra API on http://127.0.0.1:${PORT}`)
 })
