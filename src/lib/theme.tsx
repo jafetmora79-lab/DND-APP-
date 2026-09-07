@@ -14,6 +14,15 @@ export const PALETTE_BACKGROUND: Record<Palette, string> = {
   iron: 'theme-iron.png',
 }
 
+/** Portrait crops used on narrow viewports (see MOBILE_BACKGROUND_QUERY). */
+export const PALETTE_BACKGROUND_PORTRAIT: Record<Palette, string> = {
+  hoard: 'tavern-hearth-portrait.png',
+  verdigris: 'theme-verdigris-portrait.png',
+  iron: 'theme-iron-portrait.png',
+}
+
+export const MOBILE_BACKGROUND_QUERY = '(max-width: 767px)'
+
 const PALETTES: { id: Palette; swatches: string[] }[] = [
   { id: 'hoard', swatches: ['#1d1712', '#c9992f', '#7a1f26', '#ecdfc8'] },
   { id: 'verdigris', swatches: ['#18142a', '#8a68d6', '#3fae7a', '#e8e2f5'] },

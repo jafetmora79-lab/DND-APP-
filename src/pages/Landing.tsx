@@ -7,7 +7,7 @@ import { ThemeParticles } from '@/components/ThemeParticles'
 import { useAuth } from '@/lib/auth'
 import { publicAsset, usingSupabase } from '@/lib/config'
 import { LanguageToggle, useT } from '@/lib/i18n'
-import { PALETTE_BACKGROUND, ThemeToggle, useTheme } from '@/lib/theme'
+import { MOBILE_BACKGROUND_QUERY, PALETTE_BACKGROUND, PALETTE_BACKGROUND_PORTRAIT, ThemeToggle, useTheme } from '@/lib/theme'
 import { forgetPlayerSession, getRecentSessions, setPendingJoin, type RecentPlayerSession } from '@/lib/recent-sessions'
 import { cn } from '@/lib/utils'
 
@@ -17,6 +17,7 @@ export function Landing() {
   const { palette } = useTheme()
   const nav = useNavigate()
   const themedBg = publicAsset(PALETTE_BACKGROUND[palette])
+  const themedBgPortrait = publicAsset(PALETTE_BACKGROUND_PORTRAIT[palette])
   const [bgFailed, setBgFailed] = useState(false)
   const [mode, setMode] = useState<'dm' | 'join'>('dm')
   const [creating, setCreating] = useState(false)
@@ -103,12 +104,15 @@ export function Landing() {
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-bg">
-      <img
-        src={bgFailed ? publicAsset('tavern-hearth.jpg') : themedBg}
-        alt=""
-        className="absolute inset-0 h-full w-full object-cover"
-        onError={() => setBgFailed(true)}
-      />
+      <picture key={palette}>
+        {!bgFailed && <source media={MOBILE_BACKGROUND_QUERY} srcSet={themedBgPortrait} />}
+        <img
+          src={bgFailed ? publicAsset('tavern-hearth.jpg') : themedBg}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={() => setBgFailed(true)}
+        />
+      </picture>
       <div className="absolute inset-0 bg-[#11100E]/60" />
       <ThemeParticles />
       <div className="relative z-10 mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4 py-10">

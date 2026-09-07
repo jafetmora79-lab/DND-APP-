@@ -6,7 +6,7 @@ function seeded(i: number, salt: number) {
   return x - Math.floor(x)
 }
 
-const EMBER_COUNT = 16
+const EMBER_COUNT = 30
 const embers = Array.from({ length: EMBER_COUNT }, (_, i) => ({
   left: `${(seeded(i, 1) * 100).toFixed(1)}%`,
   size: 2 + Math.round(seeded(i, 2) * 3),
@@ -16,18 +16,18 @@ const embers = Array.from({ length: EMBER_COUNT }, (_, i) => ({
   peak: 0.5 + seeded(i, 6) * 0.4,
 }))
 
-const SPOTLIGHT_COUNT = 3
+const SPOTLIGHT_COUNT = 5
 const spotlights = Array.from({ length: SPOTLIGHT_COUNT }, (_, i) => ({
-  left: `${(10 + i * 32 + seeded(i, 7) * 8).toFixed(1)}%`,
+  left: `${(5 + (i * 90) / (SPOTLIGHT_COUNT - 1) + (seeded(i, 7) - 0.5) * 10).toFixed(1)}%`,
   top: `${(5 + seeded(i, 8) * 15).toFixed(1)}%`,
   size: 260 + Math.round(seeded(i, 9) * 140),
   duration: 10 + seeded(i, 10) * 6,
   delay: -(seeded(i, 11) * 8),
 }))
 
-const GLOW_COUNT = 6
+const GLOW_COUNT = 10
 const glows = Array.from({ length: GLOW_COUNT }, (_, i) => ({
-  left: `${(8 + i * 15 + seeded(i, 12) * 6).toFixed(1)}%`,
+  left: `${(5 + (i * 90) / (GLOW_COUNT - 1) + (seeded(i, 12) - 0.5) * 8).toFixed(1)}%`,
   top: `${(15 + seeded(i, 13) * 55).toFixed(1)}%`,
   size: 18 + Math.round(seeded(i, 14) * 16),
   duration: 2.4 + seeded(i, 15) * 2.2,
