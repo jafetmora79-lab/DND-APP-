@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Bell, BellOff, HeartPulse, Swords, Users, X } from 'lucide-react'
+import { Brand } from '@/components/Brand'
 import { Button } from '@/components/ui/button'
 import { CharacterSheet } from '@/components/CharacterSheet'
 import { EncounterOutcomeOverlay } from '@/components/EncounterOutcome'
@@ -223,6 +224,7 @@ export function Player() {
       <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
         <header className="flex flex-wrap items-center gap-2 border-b border-line bg-panel-2/30 px-3 py-2 sm:px-4 sm:py-3">
           <div className="w-full min-w-0">
+            <Brand className="mb-0.5 block" />
             <div className="truncate font-display text-sm text-gold-2">{snap.campaign.name}</div>
             <div className="truncate text-xs text-muted">{stage.caption || t('player.waiting')}</div>
           </div>
@@ -341,6 +343,7 @@ export function Player() {
 
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel-2/30 px-3 py-2 sm:px-4 sm:py-3">
         <div className="w-full min-w-0">
+          <Brand className="mb-0.5 block" />
           <div className="truncate font-display text-sm text-gold-2">{snap.campaign.name}</div>
           <div className="truncate text-xs text-muted">
             {isFightSetup(snap.session, snap.instance)

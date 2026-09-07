@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Check, Copy } from 'lucide-react'
+import { Brand } from '@/components/Brand'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/input'
 import { CharacterSheet } from '@/components/CharacterSheet'
@@ -384,6 +385,7 @@ export function Prep() {
     <div className="mx-auto max-w-7xl px-4 py-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
+          <Brand className="mb-1 block" />
           <Link to="/dm" className="text-xs uppercase tracking-[0.3em] text-gold">
             {t('prep.allCampaigns')}
           </Link>

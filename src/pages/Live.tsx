@@ -23,6 +23,7 @@ import {
   X as XIcon,
 } from 'lucide-react'
 import { AttackBar } from '@/components/AttackBar'
+import { Brand } from '@/components/Brand'
 import { CombatActivityFeed } from '@/components/CombatActivityFeed'
 import { InitiativePopup } from '@/components/InitiativePopup'
 import { SaveBar } from '@/components/SaveBar'
@@ -555,6 +556,8 @@ export function Live() {
     return (
       <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
         <header className="flex items-center gap-2 border-b border-line px-3 py-2">
+          <Brand />
+          <span className="text-muted">/</span>
           <Link to={`/dm/${campaignId}`} className="min-w-0 truncate font-display text-gold">
             {snap.campaign.name}
           </Link>
@@ -620,6 +623,8 @@ export function Live() {
       <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
         <header className="shrink-0 border-b border-line">
           <div className="flex items-center gap-2 px-3 py-2">
+            <Brand />
+            <span className="text-muted">/</span>
             <Link to={`/dm/${campaignId}`} className="min-w-0 truncate font-display text-gold">
               {snap.campaign.name}
             </Link>
@@ -720,6 +725,8 @@ export function Live() {
     <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
       <header className="shrink-0 border-b border-line bg-panel-2/30">
         <div className="flex items-center gap-3 px-4 py-3">
+          <Brand />
+          <span className="text-muted">/</span>
           <Link to={`/dm/${campaignId}`} className="min-w-0 truncate font-display text-gold-2 text-sm">
             {snap.campaign.name}
           </Link>

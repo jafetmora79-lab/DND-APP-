@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Brand } from '@/components/Brand'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
@@ -41,6 +42,7 @@ export function Campaigns() {
     <div className="mx-auto max-w-4xl px-4 py-8">
       <div className="flex items-center justify-between">
         <div>
+          <Brand className="mb-1 block" />
           <p className="text-xs uppercase tracking-[0.3em] text-gold">{user && 'name' in user ? user.name : 'Dungeon Master'}</p>
           <h1 className="font-display text-3xl text-gold-2">{t('campaigns.title')}</h1>
         </div>
