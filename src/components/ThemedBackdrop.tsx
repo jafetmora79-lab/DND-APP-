@@ -19,10 +19,10 @@ export function ThemedBackdrop() {
         key={palette}
         src={bgFailed ? publicAsset('tavern-hearth.jpg') : themedBg}
         alt=""
-        className="h-full w-full object-cover opacity-40"
+        className="h-full w-full object-cover opacity-60"
         onError={() => setBgFailed(true)}
       />
-      <div className="absolute inset-0 bg-[#0c0a07]/70" />
+      <div className="absolute inset-0 bg-bg/45" />
     </div>
   )
 }
