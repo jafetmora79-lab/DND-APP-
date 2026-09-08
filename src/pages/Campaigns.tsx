@@ -40,13 +40,13 @@ export function Campaigns() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <Brand className="mb-1 block" />
           <p className="text-xs uppercase tracking-[0.3em] text-gold">{user && 'name' in user ? user.name : 'Dungeon Master'}</p>
           <h1 className="font-display text-3xl text-gold-2">{t('campaigns.title')}</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <LanguageToggle />
           <ThemeToggle />
           <Button variant="ghost" onClick={() => { logout(); nav('/') }}>
