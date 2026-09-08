@@ -104,6 +104,13 @@ function MapImage({
   return <KImage image={img} x={bgOffsetX} y={bgOffsetY} width={img.width * bgScale} height={img.height * bgScale} listening={false} />
 }
 
+/** Freehand-painted ground texture (see TerrainPaintTool). Always exactly worldW x worldH — authored at that size, no alignment needed. */
+function PaintLayer({ url, worldW, worldH }: { url: string; worldW: number; worldH: number }) {
+  const [img] = useImage(url, 'anonymous')
+  if (!img) return null
+  return <KImage image={img} width={worldW} height={worldH} listening={false} />
+}
+
 function PropSprite({ prop, size, removable, onRemove }: { prop: MapProp; size: number; removable: boolean; onRemove?: (id: string) => void }) {
   const [img] = useImage(publicAsset(`props/${prop.propId}.png`), 'anonymous')
   if (!img) return null
@@ -577,6 +584,7 @@ export function MapBoard({
               bgScale={map.bgScale ?? null}
             />
           ) : null}
+          {map.paintUrl ? <PaintLayer url={map.paintUrl} worldW={worldW} worldH={worldH} /> : null}
           <Shape
             listening={false}
             width={worldW}

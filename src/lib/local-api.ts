@@ -65,6 +65,11 @@ export const localApi = {
     form.append('image', file)
     return req<{ map: BattleMap }>(`/api/maps/${id}/image`, { method: 'POST', body: form })
   },
+  uploadMapPaint: (id: string, file: File) => {
+    const form = new FormData()
+    form.append('paint', file)
+    return req<{ map: BattleMap }>(`/api/maps/${id}/paint`, { method: 'POST', body: form })
+  },
   patchMap: (id: string, body: Partial<BattleMap>) => req<{ map?: BattleMap }>(`/api/maps/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteMap: (id: string) => req(`/api/maps/${id}`, { method: 'DELETE' }),
   characters: (campaignId: string) => req<{ characters: PlayerCharacter[] }>(`/api/campaigns/${campaignId}/characters`),

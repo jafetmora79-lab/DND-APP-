@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Ban, Box, CircleDot, Crosshair, Droplets, Flame, Footprints, ImagePlus, Move, Snowflake, TreePine } from 'lucide-react'
+import { Ban, Box, Brush, CircleDot, Crosshair, Droplets, Flame, Footprints, ImagePlus, Move, Snowflake, TreePine } from 'lucide-react'
 import { GridAlignTool } from '@/components/map/GridAlignTool'
 import { MapBoard, type MapTool } from '@/components/map/MapBoard'
+import { TerrainPaintTool } from '@/components/map/TerrainPaintTool'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
@@ -26,6 +27,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
   const [tool, setTool] = useState<MapTool>('block')
   const [propToPlace, setPropToPlace] = useState<string | null>(null)
   const [aligning, setAligning] = useState(false)
+  const [painting, setPainting] = useState(false)
   const [msg, setMsg] = useState('')
   const saveTimer = useRef<number>(0)
   const pending = useRef<BattleMap>(map)
@@ -42,6 +44,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
       bgOffsetX: current.bgOffsetX,
       bgOffsetY: current.bgOffsetY,
       props: current.props ?? [],
+      paintUrl: current.paintUrl ?? '',
     }
   }
 
@@ -99,6 +102,30 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
   async function clearBackground() {
     patch({ imageUrl: '' })
     setMsg(t('mapMaker.backgroundRemovedMsg'))
+  }
+
+  async function attachPaint(blob: Blob) {
+    try {
+      await flush()
+      const file = new File([blob], 'terrain-paint.png', { type: 'image/png' })
+      const r = await api.uploadMapPaint(pending.current.id, file)
+      if (r.map) {
+        const next = { ...r.map, blocked: pending.current.blocked, name: pending.current.name, props: pending.current.props }
+        pending.current = next
+        setDraft(next)
+        onChange(next)
+      }
+      setMsg(t('mapPaint.savedMsg'))
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : t('mapPaint.errSave'))
+    } finally {
+      setPainting(false)
+    }
+  }
+
+  function clearPaint() {
+    patch({ paintUrl: '' })
+    setMsg(t('mapPaint.removedMsg'))
   }
 
   function placeProp(x: number, y: number) {
@@ -274,6 +301,21 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
               </>
             ) : null}
           </div>
+          <div className="rounded-md border border-line p-2">
+            <div className="flex items-center gap-2 text-sm">
+              <Brush className="h-4 w-4 text-gold" />
+              {t('mapPaint.title')}
+            </div>
+            <p className="mt-1 text-xs text-muted">{t('mapPaint.panelHint')}</p>
+            <Button size="sm" variant={painting ? 'default' : 'outline'} className="mt-2 w-full" onClick={() => setPainting((v) => !v)}>
+              <Brush className="h-4 w-4" /> {t('mapPaint.openButton')}
+            </Button>
+            {draft.paintUrl ? (
+              <Button size="sm" variant="ghost" className="mt-1 w-full" onClick={clearPaint}>
+                {t('mapPaint.remove')}
+              </Button>
+            ) : null}
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => {
@@ -322,6 +364,17 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
               setMsg(t('mapAlign.clearedMsg'))
             }}
             onCancel={() => setAligning(false)}
+          />
+        </div>
+      ) : painting ? (
+        <div className="overflow-auto rounded-xl border border-line bg-bg p-4">
+          <TerrainPaintTool
+            worldW={draft.gridCols * draft.gridSize}
+            worldH={draft.gridRows * draft.gridSize}
+            backgroundImageUrl={draft.imageUrl}
+            existingPaintUrl={draft.paintUrl ?? ''}
+            onApply={attachPaint}
+            onCancel={() => setPainting(false)}
           />
         </div>
       ) : (

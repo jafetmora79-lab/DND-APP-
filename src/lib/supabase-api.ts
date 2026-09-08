@@ -81,6 +81,7 @@ const MIGRATION_FOR_COLUMN: Record<string, string> = {
   bg_offset_y: 'migrate-map-alignment.sql',
   blocked_cells: 'migrate-map-maker.sql',
   props_json: 'migrate-map-props.sql',
+  paint_url: 'migrate-map-paint.sql',
   speed_feet: 'migrate-per-turn-movement.sql',
   movement_remaining: 'migrate-per-turn-movement.sql',
   activity_json: 'migrate-player-combat.sql',
@@ -331,6 +332,7 @@ function mapFromRow(row: Record<string, unknown>): BattleMap {
     bgOffsetX: Number(row.bg_offset_x) || 0,
     bgOffsetY: Number(row.bg_offset_y) || 0,
     props: parseMapProps(row.props_json),
+    paintUrl: String(row.paint_url ?? ''),
   }
 }
 
@@ -870,6 +872,25 @@ export const supabaseApi: TableApi = {
     return { map: mapFromRow(data as Record<string, unknown>) }
   },
 
+  async uploadMapPaint(id, file) {
+    const { data: row, error: loadErr } = await db().from('maps').select('*').eq('id', id).single()
+    throwIf(loadErr)
+    const campaignId = String(row.campaign_id)
+    const path = storageObjectPath(campaignId, file.name)
+    const { error: upErr } = await db().storage.from('maps').upload(path, file, { upsert: true })
+    if (upErr) {
+      throw new Error(
+        upErr.message.includes('Bucket not found') || upErr.message.includes('not found')
+          ? 'Create a public Storage bucket named "maps" in Supabase, then try the upload again.'
+          : upErr.message,
+      )
+    }
+    const { data: pub } = db().storage.from('maps').getPublicUrl(path)
+    const { data, error } = await db().from('maps').update({ paint_url: pub.publicUrl }).eq('id', id).select().single()
+    throwIf(error)
+    return { map: mapFromRow(data as Record<string, unknown>) }
+  },
+
   async patchMap(id, body) {
     const { data: current, error: loadErr } = await db().from('maps').select('*').eq('id', id).single()
     throwIf(loadErr)
@@ -885,6 +906,7 @@ export const supabaseApi: TableApi = {
     if (body.bgOffsetX != null) patch.bg_offset_x = body.bgOffsetX
     if (body.bgOffsetY != null) patch.bg_offset_y = body.bgOffsetY
     if (body.props != null) patch.props_json = parseMapProps(body.props)
+    if (body.paintUrl != null) patch.paint_url = body.paintUrl
     const nextCols = Number(patch.grid_cols ?? oldCols)
     const nextRows = Number(patch.grid_rows ?? oldRows)
     if (body.blocked != null) {

@@ -547,9 +547,10 @@ app.patch('/api/maps/:id', requireDm, (req, res) => {
   const bgOffsetX = req.body.bgOffsetX != null ? Number(req.body.bgOffsetX) : Number(map.bg_offset_x ?? 0)
   const bgOffsetY = req.body.bgOffsetY != null ? Number(req.body.bgOffsetY) : Number(map.bg_offset_y ?? 0)
   const props = req.body.props != null ? parseMapProps(req.body.props) : parseMapProps(map.props_json)
+  const paintUrl = req.body.paintUrl != null ? String(req.body.paintUrl) : String(map.paint_url ?? '')
   db.prepare(
-    'UPDATE maps SET name=?, image_url=?, grid_size=?, grid_cols=?, grid_rows=?, blocked_cells=?, bg_scale=?, bg_offset_x=?, bg_offset_y=?, props_json=? WHERE id=?',
-  ).run(req.body.name ?? map.name, imageUrl, gridSize, gridCols, gridRows, JSON.stringify(blocked), bgScale, bgOffsetX, bgOffsetY, JSON.stringify(props), map.id)
+    'UPDATE maps SET name=?, image_url=?, grid_size=?, grid_cols=?, grid_rows=?, blocked_cells=?, bg_scale=?, bg_offset_x=?, bg_offset_y=?, props_json=?, paint_url=? WHERE id=?',
+  ).run(req.body.name ?? map.name, imageUrl, gridSize, gridCols, gridRows, JSON.stringify(blocked), bgScale, bgOffsetX, bgOffsetY, JSON.stringify(props), paintUrl, map.id)
   res.json({
     map: mapFromDb({
       ...map,
@@ -563,6 +564,7 @@ app.patch('/api/maps/:id', requireDm, (req, res) => {
       bg_offset_x: bgOffsetX,
       bg_offset_y: bgOffsetY,
       props_json: JSON.stringify(props),
+      paint_url: paintUrl,
     }),
   })
 })
@@ -580,6 +582,21 @@ app.post('/api/maps/:id/image', requireDm, upload.single('image'), (req, res) =>
   const imageUrl = `/uploads/${req.file.filename}`
   db.prepare('UPDATE maps SET image_url=? WHERE id=?').run(imageUrl, map.id)
   res.json({ map: mapFromDb({ ...map, image_url: imageUrl }) })
+})
+
+app.post('/api/maps/:id/paint', requireDm, upload.single('paint'), (req, res) => {
+  const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(param(req, 'id')) as Record<string, unknown> | undefined
+  if (!map || !campaignOwned(map.campaign_id as string, userOf(req).id)) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  if (!req.file) {
+    res.status(400).json({ error: 'Paint image required' })
+    return
+  }
+  const paintUrl = `/uploads/${req.file.filename}`
+  db.prepare('UPDATE maps SET paint_url=? WHERE id=?').run(paintUrl, map.id)
+  res.json({ map: mapFromDb({ ...map, paint_url: paintUrl }) })
 })
 
 app.delete('/api/maps/:id', requireDm, (req, res) => {

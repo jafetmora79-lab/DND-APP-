@@ -256,6 +256,8 @@ export type BattleMap = {
   bgOffsetY: number
   /** Freely-placed decorative props (see src/lib/props.ts for the catalog). Not grid-locked. */
   props?: MapProp[]
+  /** Freehand-painted ground texture layer (PNG, worldW x worldH, transparent where unpainted). Drawn over the background image, under terrain/props. */
+  paintUrl?: string
 }
 
 /** One stamped prop instance. x/y are the prop's center, in world pixels (same space as tokens). */

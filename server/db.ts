@@ -122,6 +122,7 @@ CREATE TABLE IF NOT EXISTS maps (
   bg_offset_x REAL NOT NULL DEFAULT 0,
   bg_offset_y REAL NOT NULL DEFAULT 0,
   props_json TEXT NOT NULL DEFAULT '[]',
+  paint_url TEXT NOT NULL DEFAULT '',
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS encounter_templates (
@@ -277,6 +278,11 @@ try {
   /* already present */
 }
 try {
+  db.exec(`ALTER TABLE maps ADD COLUMN paint_url TEXT NOT NULL DEFAULT ''`)
+} catch {
+  /* already present */
+}
+try {
   db.exec(`ALTER TABLE combatants ADD COLUMN stats_json TEXT`)
 } catch {
   /* already present */
@@ -364,6 +370,7 @@ export function mapFromDb(row: Record<string, unknown>): BattleMap {
     bgOffsetX: Number(row.bg_offset_x) || 0,
     bgOffsetY: Number(row.bg_offset_y) || 0,
     props: parseMapProps(row.props_json),
+    paintUrl: String(row.paint_url ?? ''),
   }
 }
 
