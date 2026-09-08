@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   Check,
@@ -13,6 +13,7 @@ import {
   LayoutGrid,
   LogOut,
   Moon,
+  MoreVertical,
   Pause,
   Play,
   RefreshCw,
@@ -54,6 +55,28 @@ import { adjacentBeat, ambianceFromBeat, emptyBeat, ensureCombatBeatForTemplate,
 import { asCombatantLike, standingEnemies, type StartFightOpts } from '@/lib/turn-flow'
 import { applyLightingFog, coverBonusBetween, fogWithLighting, parseLighting, type Lighting } from '@/lib/vision'
 
+/** Mobile-only slide-up sheet that holds the header actions that don't fit in a row on a phone screen. */
+function MobileActionsSheet({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/70 lg:hidden" onClick={onClose}>
+      <div
+        className="max-h-[75vh] w-full overflow-y-auto rounded-t-2xl border-t border-line bg-panel p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-2 flex items-center justify-between">
+          <span className="font-display text-sm uppercase tracking-wider text-gold">Actions</span>
+          <button type="button" className="rounded-md p-1 text-muted hover:bg-panel-2" onClick={onClose} aria-label="Close">
+            <XIcon className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex flex-col gap-2" onClick={onClose}>
+          {children}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Live() {
   const { campaignId } = useParams()
   const { t } = useT()
@@ -88,6 +111,7 @@ export function Live() {
   const [saveAbility, setSaveAbility] = useState<Ability>('dex')
   const [saveDc, setSaveDc] = useState('13')
   const [initOpen, setInitOpen] = useState(true)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const captionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hubTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -635,9 +659,17 @@ export function Live() {
             <span className="hidden text-muted sm:inline">/</span>
             <span className="hidden truncate sm:inline">{stage.caption || 'At the table'}</span>
             <div className="ml-auto hidden items-center gap-2 lg:flex">{joinActions}</div>
+            <button
+              type="button"
+              className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-line text-muted hover:bg-panel-2 lg:hidden"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open actions menu"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
           </div>
-          <div className="flex gap-2 overflow-x-auto px-3 pb-2 lg:hidden">{joinActions}</div>
         </header>
+        {mobileMenuOpen && <MobileActionsSheet onClose={() => setMobileMenuOpen(false)}>{joinActions}</MobileActionsSheet>}
         {error && <p className="border-b border-line px-3 py-2 text-sm text-blood">{error}</p>}
         <TableHub
           campaignName={snap.campaign.name}
@@ -745,14 +777,28 @@ export function Live() {
             {joinActions}
             {tableActions}
           </div>
-        </div>
-        <div className="flex gap-2 overflow-x-auto px-4 pb-3 lg:hidden">
-          <LanguageToggle />
-          <ThemeToggle />
-          {joinActions}
-          {tableActions}
+          <button
+            type="button"
+            className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-line text-muted hover:bg-panel-2 lg:hidden"
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label="Open actions menu"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
         </div>
       </header>
+      {mobileMenuOpen && (
+        <MobileActionsSheet onClose={() => setMobileMenuOpen(false)}>
+          <div className="flex items-center gap-2">
+            <LanguageToggle />
+            <ThemeToggle />
+          </div>
+          <div className="my-1 border-t border-line" />
+          {joinActions}
+          <div className="my-1 border-t border-line" />
+          {tableActions}
+        </MobileActionsSheet>
+      )}
       {error && <p className="shrink-0 border-b border-line bg-blood/10 px-4 py-2 text-sm text-blood">{error}</p>}
       {setup && !outcome && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-gold/5 px-4 py-2.5 text-sm">
