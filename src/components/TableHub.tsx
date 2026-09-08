@@ -311,7 +311,7 @@ export function TableHub({
           </div>
         )}
         <div className={cn('p-3', mobileTab === 'sheet' ? 'block' : 'hidden xl:block')}>
-          <div className="mb-2 flex gap-2 overflow-x-auto">
+          <div className="mb-2 flex gap-2 overflow-x-auto scroll-thin">
             {characters.map((c) => (
               <button
                 key={c.id}

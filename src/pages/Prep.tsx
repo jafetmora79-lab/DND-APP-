@@ -392,7 +392,7 @@ export function Prep() {
           <h1 className="font-display text-3xl text-gold-2">{t('prep.title')}</h1>
           <p className="mt-1 text-sm text-muted">{t('prep.setupHint')}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <LanguageToggle />
           <ThemeToggle />
           <Button

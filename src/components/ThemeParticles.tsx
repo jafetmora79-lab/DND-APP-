@@ -16,11 +16,11 @@ const embers = Array.from({ length: EMBER_COUNT }, (_, i) => ({
   peak: 0.5 + seeded(i, 6) * 0.4,
 }))
 
-const SPOTLIGHT_COUNT = 5
+const SPOTLIGHT_COUNT = 3
 const spotlights = Array.from({ length: SPOTLIGHT_COUNT }, (_, i) => ({
-  left: `${(5 + (i * 90) / (SPOTLIGHT_COUNT - 1) + (seeded(i, 7) - 0.5) * 10).toFixed(1)}%`,
+  left: `${(10 + (i * 80) / (SPOTLIGHT_COUNT - 1) + (seeded(i, 7) - 0.5) * 10).toFixed(1)}%`,
   top: `${(5 + seeded(i, 8) * 15).toFixed(1)}%`,
-  size: 260 + Math.round(seeded(i, 9) * 140),
+  size: 150 + Math.round(seeded(i, 9) * 80),
   duration: 10 + seeded(i, 10) * 6,
   delay: -(seeded(i, 11) * 8),
 }))
