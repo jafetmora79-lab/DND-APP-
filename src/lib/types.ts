@@ -254,6 +254,16 @@ export type BattleMap = {
   bgScale: number | null
   bgOffsetX: number
   bgOffsetY: number
+  /** Freely-placed decorative props (see src/lib/props.ts for the catalog). Not grid-locked. */
+  props?: MapProp[]
+}
+
+/** One stamped prop instance. x/y are the prop's center, in world pixels (same space as tokens). */
+export type MapProp = {
+  id: string
+  propId: string
+  x: number
+  y: number
 }
 
 export type GridCell = { x: number; y: number }

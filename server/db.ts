@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs'
 import Database from 'better-sqlite3'
 import { customAlphabet, nanoid } from 'nanoid'
 import { emptySheet, TOKEN_PALETTE, type BattleMap, type CharacterSheetData, type Combatant, type CombatDeclareKind, type CombatSpendSlot, type MapToken, type NamedEntry } from '../src/lib/types.ts'
-import { abilityMod, cellCenter, parseBlockedCells, playerStartOrigin, proficiencyBonus, spreadCells, tokenCellKeys, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
+import { abilityMod, cellCenter, parseBlockedCells, parseMapProps, playerStartOrigin, proficiencyBonus, spreadCells, tokenCellKeys, tokenSizeSquares, walkablePixel } from '../src/lib/utils.ts'
 import { afterHpChange, applyDamage, attackOutcome, attacksFromMonster, canTakeAttacks, characterSaveBonus, combatantStatsFromMonster, combatantStatsFromSheet, consumeAdvantage, effectiveRollMode, emptyTurnEconomy, formatDiceUsed, grantAdvantage, hasHiddenAdvantage, isAttackInRange, movementCostFeet, parseAttackBonus, parseCombatantStats, parseDeathState, parseRangeFeet, parseRollMode, parseSpeedFeet, parseTurnEconomy, pickUsedD20, resolveDeathSave, resolveSavingThrow, saveBonusForCombatant, spendMovement, specCopyCell, statsForLiveCombatant, tokenCell, type PlayerAttackResult } from '../src/lib/combat.ts'
 import { appendActivity, parseActivity, parsePrompt } from '../src/lib/combat-activity.ts'
 import { loadSrdMonsters } from './srd.ts'
@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS maps (
   bg_scale REAL,
   bg_offset_x REAL NOT NULL DEFAULT 0,
   bg_offset_y REAL NOT NULL DEFAULT 0,
+  props_json TEXT NOT NULL DEFAULT '[]',
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS encounter_templates (
@@ -271,6 +272,11 @@ try {
   /* already present */
 }
 try {
+  db.exec(`ALTER TABLE maps ADD COLUMN props_json TEXT NOT NULL DEFAULT '[]'`)
+} catch {
+  /* already present */
+}
+try {
   db.exec(`ALTER TABLE combatants ADD COLUMN stats_json TEXT`)
 } catch {
   /* already present */
@@ -357,6 +363,7 @@ export function mapFromDb(row: Record<string, unknown>): BattleMap {
     bgScale: bgScale != null && Number.isFinite(bgScale) && bgScale > 0 ? bgScale : null,
     bgOffsetX: Number(row.bg_offset_x) || 0,
     bgOffsetY: Number(row.bg_offset_y) || 0,
+    props: parseMapProps(row.props_json),
   }
 }
 

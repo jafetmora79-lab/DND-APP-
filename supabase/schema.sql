@@ -84,7 +84,8 @@ create table if not exists public.maps (
   blocked_cells jsonb not null default '[]'::jsonb,
   bg_scale double precision,
   bg_offset_x double precision not null default 0,
-  bg_offset_y double precision not null default 0
+  bg_offset_y double precision not null default 0,
+  props_json jsonb not null default '[]'::jsonb
 );
 
 -- CREATE TABLE IF NOT EXISTS does not add new columns to an existing maps table.
@@ -92,6 +93,7 @@ alter table public.maps add column if not exists blocked_cells jsonb not null de
 alter table public.maps add column if not exists bg_scale double precision;
 alter table public.maps add column if not exists bg_offset_x double precision not null default 0;
 alter table public.maps add column if not exists bg_offset_y double precision not null default 0;
+alter table public.maps add column if not exists props_json jsonb not null default '[]'::jsonb;
 
 create table if not exists public.encounter_templates (
   id uuid primary key default gen_random_uuid(),

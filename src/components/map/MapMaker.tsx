@@ -5,9 +5,13 @@ import { MapBoard, type MapTool } from '@/components/map/MapBoard'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
+import { publicAsset } from '@/lib/config'
 import { useT } from '@/lib/i18n'
-import type { BattleMap } from '@/lib/types'
-import { clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, mapFeet, remapBlocked } from '@/lib/utils'
+import { PROP_CATALOG, PROP_CATEGORY_LABEL, propDef, type PropCategory } from '@/lib/props'
+import type { BattleMap, MapProp } from '@/lib/types'
+import { clampGridDim, clampGridSize, cn, DEFAULT_SCRATCH_CELL, mapFeet, remapBlocked } from '@/lib/utils'
+
+const PROP_CATEGORIES = Array.from(new Set(PROP_CATALOG.map((p) => p.category))) as PropCategory[]
 
 type Props = {
   map: BattleMap
@@ -20,6 +24,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
   const { t } = useT()
   const [draft, setDraft] = useState(map)
   const [tool, setTool] = useState<MapTool>('block')
+  const [propToPlace, setPropToPlace] = useState<string | null>(null)
   const [aligning, setAligning] = useState(false)
   const [msg, setMsg] = useState('')
   const saveTimer = useRef<number>(0)
@@ -36,6 +41,7 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
       bgScale: current.bgScale,
       bgOffsetX: current.bgOffsetX,
       bgOffsetY: current.bgOffsetY,
+      props: current.props ?? [],
     }
   }
 
@@ -93,6 +99,16 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
   async function clearBackground() {
     patch({ imageUrl: '' })
     setMsg(t('mapMaker.backgroundRemovedMsg'))
+  }
+
+  function placeProp(x: number, y: number) {
+    if (!propToPlace) return
+    const next: MapProp = { id: crypto.randomUUID(), propId: propToPlace, x, y }
+    patch({ props: [...(pending.current.props ?? []), next] })
+  }
+
+  function removeProp(id: string) {
+    patch({ props: (pending.current.props ?? []).filter((p) => p.id !== id) })
   }
 
   return (
@@ -192,6 +208,44 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
           </p>
           <div className="rounded-md border border-line p-2">
             <div className="flex items-center gap-2 text-sm">
+              <Box className="h-4 w-4 text-gold" />
+              {t('mapMaker.props')}
+            </div>
+            <p className="mt-1 text-xs text-muted">
+              {tool === 'prop' && propToPlace
+                ? t('mapMaker.propsPlacingHint', { name: propDef(propToPlace)?.label ?? propToPlace })
+                : t('mapMaker.propsHint')}
+            </p>
+            <div className="mt-2 max-h-56 space-y-2 overflow-y-auto scroll-thin pr-1">
+              {PROP_CATEGORIES.map((cat) => (
+                <div key={cat}>
+                  <div className="text-[10px] uppercase tracking-wider text-muted">{PROP_CATEGORY_LABEL[cat]}</div>
+                  <div className="mt-1 grid grid-cols-4 gap-1.5">
+                    {PROP_CATALOG.filter((p) => p.category === cat).map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        title={p.label}
+                        aria-label={p.label}
+                        onClick={() => {
+                          setPropToPlace(p.id)
+                          setTool('prop')
+                        }}
+                        className={cn(
+                          'flex aspect-square items-center justify-center rounded-md border p-1',
+                          tool === 'prop' && propToPlace === p.id ? 'border-gold bg-gold/10' : 'border-line hover:border-gold/40',
+                        )}
+                      >
+                        <img src={publicAsset(`props/${p.id}.png`)} alt={p.label} className="max-h-full max-w-full object-contain" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-md border border-line p-2">
+            <div className="flex items-center gap-2 text-sm">
               <ImagePlus className="h-4 w-4 text-gold" />
               {t('mapMaker.backgroundPicture')}
             </div>
@@ -282,6 +336,9 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
               const next = { ...pending.current, blocked }
               apply(next)
             }}
+            propToPlace={propToPlace}
+            onPropPlace={placeProp}
+            onPropRemove={removeProp}
           />
         </div>
       )}

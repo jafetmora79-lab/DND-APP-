@@ -17,6 +17,7 @@ import {
     clampGridSize,
     DEFAULT_SCRATCH_CELL,
     parseBlockedCells,
+    parseMapProps,
     pixelToCell,
     remapBlocked,
     spreadCells,
@@ -509,8 +510,8 @@ app.post('/api/campaigns/:id/maps', requireDm, upload.single('image'), (req, res
   const blocked = parseBlockedCells(req.body?.blocked, gridCols, gridRows)
   const id = ids.id()
   db.prepare(
-    'INSERT INTO maps (id, campaign_id, name, image_url, grid_size, grid_cols, grid_rows, grid_type, blocked_cells) VALUES (?,?,?,?,?,?,?,?,?)',
-  ).run(id, param(req, 'id'), name, imageUrl, gridSize, gridCols, gridRows, 'square', JSON.stringify(blocked))
+    'INSERT INTO maps (id, campaign_id, name, image_url, grid_size, grid_cols, grid_rows, grid_type, blocked_cells, props_json) VALUES (?,?,?,?,?,?,?,?,?,?)',
+  ).run(id, param(req, 'id'), name, imageUrl, gridSize, gridCols, gridRows, 'square', JSON.stringify(blocked), '[]')
   res.json({
     map: mapFromDb({
       id,
@@ -521,6 +522,7 @@ app.post('/api/campaigns/:id/maps', requireDm, upload.single('image'), (req, res
       grid_cols: gridCols,
       grid_rows: gridRows,
       blocked_cells: JSON.stringify(blocked),
+      props_json: '[]',
     }),
   })
 })
@@ -544,9 +546,10 @@ app.patch('/api/maps/:id', requireDm, (req, res) => {
   const bgScale = req.body.bgScale != null ? (Number(req.body.bgScale) > 0 ? Number(req.body.bgScale) : null) : (map.bg_scale ?? null)
   const bgOffsetX = req.body.bgOffsetX != null ? Number(req.body.bgOffsetX) : Number(map.bg_offset_x ?? 0)
   const bgOffsetY = req.body.bgOffsetY != null ? Number(req.body.bgOffsetY) : Number(map.bg_offset_y ?? 0)
+  const props = req.body.props != null ? parseMapProps(req.body.props) : parseMapProps(map.props_json)
   db.prepare(
-    'UPDATE maps SET name=?, image_url=?, grid_size=?, grid_cols=?, grid_rows=?, blocked_cells=?, bg_scale=?, bg_offset_x=?, bg_offset_y=? WHERE id=?',
-  ).run(req.body.name ?? map.name, imageUrl, gridSize, gridCols, gridRows, JSON.stringify(blocked), bgScale, bgOffsetX, bgOffsetY, map.id)
+    'UPDATE maps SET name=?, image_url=?, grid_size=?, grid_cols=?, grid_rows=?, blocked_cells=?, bg_scale=?, bg_offset_x=?, bg_offset_y=?, props_json=? WHERE id=?',
+  ).run(req.body.name ?? map.name, imageUrl, gridSize, gridCols, gridRows, JSON.stringify(blocked), bgScale, bgOffsetX, bgOffsetY, JSON.stringify(props), map.id)
   res.json({
     map: mapFromDb({
       ...map,
@@ -559,6 +562,7 @@ app.patch('/api/maps/:id', requireDm, (req, res) => {
       bg_scale: bgScale,
       bg_offset_x: bgOffsetX,
       bg_offset_y: bgOffsetY,
+      props_json: JSON.stringify(props),
     }),
   })
 })

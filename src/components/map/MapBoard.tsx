@@ -3,11 +3,14 @@ import { Maximize2, Minus, Plus } from 'lucide-react'
 import { Circle, Group, Layer, Line, Rect, Shape, Stage, Text, Wedge, Image as KImage } from 'react-konva'
 import useImage from 'use-image'
 import { aoeAngleDeg, CONE_FULL_ANGLE_DEG, type AoeKind, type AoeShape } from '@/lib/aoe'
-import { conditionRingColor, type BattleMap, type Combatant, type FogState, type MapToken } from '@/lib/types'
+import { publicAsset } from '@/lib/config'
+import { conditionRingColor, type BattleMap, type Combatant, type FogState, type MapProp, type MapToken } from '@/lib/types'
 import { tokenHiddenFromPlayers } from '@/lib/combat'
 import { clampMapScale, fitMapView, touchDistance, zoomAtPoint } from '@/lib/map-view'
 import { hpBarFill, initials, pixelToCell, TERRAIN, tokenOccupiedCells, tokenOccupiesBlocked } from '@/lib/utils'
 import { inkOnToken } from '@/lib/token-look'
+
+const PROP_SIZE_FACTOR = 1.6
 
 export type MapTool =
   | 'select'
@@ -27,6 +30,7 @@ export type MapTool =
   | 'aoe-line'
   | 'aoe-cube'
   | 'ruler'
+  | 'prop'
 
 const TERRAIN_TOOL: Partial<Record<MapTool, number>> = {
   open: TERRAIN.OPEN,
@@ -69,6 +73,10 @@ type Props = {
   aoeShape?: AoeShape | null
   onAoeShape?: (shape: AoeShape | null) => void
   aoeWidthFeet?: number
+  /** Catalog id of the prop armed for placement (see src/lib/props.ts). Only relevant when tool === 'prop'. */
+  propToPlace?: string | null
+  onPropPlace?: (x: number, y: number) => void
+  onPropRemove?: (id: string) => void
 }
 
 function MapImage({
@@ -94,6 +102,33 @@ function MapImage({
     return <KImage image={img} width={worldW} height={worldH} listening={false} />
   }
   return <KImage image={img} x={bgOffsetX} y={bgOffsetY} width={img.width * bgScale} height={img.height * bgScale} listening={false} />
+}
+
+function PropSprite({ prop, size, removable, onRemove }: { prop: MapProp; size: number; removable: boolean; onRemove?: (id: string) => void }) {
+  const [img] = useImage(publicAsset(`props/${prop.propId}.png`), 'anonymous')
+  if (!img) return null
+  const scale = size / Math.max(img.width, img.height)
+  const w = img.width * scale
+  const h = img.height * scale
+  return (
+    <Group
+      x={prop.x}
+      y={prop.y}
+      name="prop"
+      onClick={(e) => {
+        if (!removable) return
+        e.cancelBubble = true
+        onRemove?.(prop.id)
+      }}
+      onTap={(e) => {
+        if (!removable) return
+        e.cancelBubble = true
+        onRemove?.(prop.id)
+      }}
+    >
+      <KImage image={img} x={-w / 2} y={-h / 2} width={w} height={h} />
+    </Group>
+  )
 }
 
 function TokenPortrait({ url, r }: { url: string; r: number }) {
@@ -196,6 +231,9 @@ export function MapBoard({
   aoeShape = null,
   onAoeShape,
   aoeWidthFeet = 5,
+  propToPlace = null,
+  onPropPlace,
+  onPropRemove,
 }: Props) {
   const wrap = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -434,6 +472,17 @@ export function MapBoard({
           if (w) paintAt(w.x, w.y)
         }}
         onClick={(e) => {
+          if (tool === 'prop') {
+            if (!propToPlace || !onPropPlace) return
+            if (e.target.findAncestor('.prop')) return
+            const ptr = e.target.getStage()?.getPointerPosition()
+            const start = pointerDown.current
+            if (start && ptr && Math.hypot(ptr.x - start.x, ptr.y - start.y) > 6) return
+            const w = worldFromEvent(e)
+            if (!w) return
+            onPropPlace(w.x, w.y)
+            return
+          }
           if (!onCellClick || tool !== 'select') return
           if (e.target.findAncestor('.token')) return
           const cls = e.target.getClassName()
@@ -618,6 +667,9 @@ export function MapBoard({
               ctx.fillStrokeShape(shape)
             }}
           />
+          {(map.props ?? []).map((p) => (
+            <PropSprite key={p.id} prop={p} size={map.gridSize * PROP_SIZE_FACTOR} removable={tool === 'prop'} onRemove={onPropRemove} />
+          ))}
         </Layer>
         <Layer listening={false}>
           {fog.enabled && (

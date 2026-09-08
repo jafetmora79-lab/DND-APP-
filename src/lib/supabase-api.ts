@@ -5,7 +5,7 @@ import { parseCharacterPdf } from './parse-pdf'
 import { safeStorageFileName, storageObjectPath } from './storage-key'
 import { mapSrdMonster, type SrdMonster } from './srd-map'
 import { supabase } from './supabase'
-import { parseBlockedCells, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter, abilityMod } from './utils'
+import { parseBlockedCells, parseMapProps, tokenSizeSquares, walkablePixel, clampGridDim, clampGridSize, DEFAULT_SCRATCH_CELL, tokenOccupiesBlocked, pixelToCell, remapBlocked, playerStartOrigin, spreadCells, tokenCellKeys, cellCenter, abilityMod } from './utils'
 import { afterHpChange, clampMovementRemaining, combatantStatsFromMonster, combatantStatsFromSheet, emptyTurnEconomy, formatDiceUsed, movementCostFeet, parseCombatantStats, parseDeathState, parseSpeedFeet, parseTurnEconomy, resolveDeathSave, snapshotForPlayer, specCopyCell, spendMovement, statsForLiveCombatant, tokenCell } from './combat'
 import { lightingFromStart, makeStartFog, coverBonusAlongLine } from './vision'
 import { hidingBrokenByWatchers, isHiding, resolveHideAttempt, sheetForHide, withHiding, withoutHiding } from './stealth'
@@ -80,6 +80,7 @@ const MIGRATION_FOR_COLUMN: Record<string, string> = {
   bg_offset_x: 'migrate-map-alignment.sql',
   bg_offset_y: 'migrate-map-alignment.sql',
   blocked_cells: 'migrate-map-maker.sql',
+  props_json: 'migrate-map-props.sql',
   speed_feet: 'migrate-per-turn-movement.sql',
   movement_remaining: 'migrate-per-turn-movement.sql',
   activity_json: 'migrate-player-combat.sql',
@@ -329,6 +330,7 @@ function mapFromRow(row: Record<string, unknown>): BattleMap {
     bgScale: bgScale != null && Number.isFinite(bgScale) && bgScale > 0 ? bgScale : null,
     bgOffsetX: Number(row.bg_offset_x) || 0,
     bgOffsetY: Number(row.bg_offset_y) || 0,
+    props: parseMapProps(row.props_json),
   }
 }
 
@@ -882,6 +884,7 @@ export const supabaseApi: TableApi = {
     if (body.bgScale !== undefined) patch.bg_scale = body.bgScale != null && body.bgScale > 0 ? body.bgScale : null
     if (body.bgOffsetX != null) patch.bg_offset_x = body.bgOffsetX
     if (body.bgOffsetY != null) patch.bg_offset_y = body.bgOffsetY
+    if (body.props != null) patch.props_json = parseMapProps(body.props)
     const nextCols = Number(patch.grid_cols ?? oldCols)
     const nextRows = Number(patch.grid_rows ?? oldRows)
     if (body.blocked != null) {

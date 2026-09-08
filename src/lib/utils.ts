@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import type { MapProp } from './types.ts'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -232,6 +233,32 @@ export function parseBlockedCells(raw: unknown, cols: number, rows: number): num
     }
   }
   return normalizeBlocked(raw, cols, rows)
+}
+
+function normalizeMapProps(raw: unknown): MapProp[] {
+  if (!Array.isArray(raw)) return []
+  const out: MapProp[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const id = 'id' in item ? String((item as { id: unknown }).id) : ''
+    const propId = 'propId' in item ? String((item as { propId: unknown }).propId) : ''
+    const x = 'x' in item ? Number((item as { x: unknown }).x) : NaN
+    const y = 'y' in item ? Number((item as { y: unknown }).y) : NaN
+    if (!id || !propId || !Number.isFinite(x) || !Number.isFinite(y)) continue
+    out.push({ id, propId, x, y })
+  }
+  return out
+}
+
+export function parseMapProps(raw: unknown): MapProp[] {
+  if (typeof raw === 'string') {
+    try {
+      return normalizeMapProps(JSON.parse(raw))
+    } catch {
+      return []
+    }
+  }
+  return normalizeMapProps(raw)
 }
 
 export function remapBlocked(
