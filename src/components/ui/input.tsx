@@ -31,7 +31,7 @@ export function Label({ className, ...props }: LabelHTMLAttributes<HTMLLabelElem
 
 export function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
-    <label className={cn('grid gap-1.5 text-left', className)}>
+    <label className={cn('flex flex-col gap-1.5 text-left', className)}>
       <span className="text-xs uppercase tracking-wider text-muted">{label}</span>
       {children}
     </label>

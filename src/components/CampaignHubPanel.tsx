@@ -62,7 +62,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
       <section>
         <h3 className="text-xs uppercase tracking-wider text-muted">{t('hub.tonight')}</h3>
         {canEdit ? (
-          <div className="mt-2 grid gap-2">
+          <div className="mt-2 flex flex-col gap-2">
             <Field label={t('hub.sessionTitle')}>
               <Input value={data.sessionTitle} onChange={(e) => patch({ ...data, sessionTitle: e.target.value })} placeholder={t('hub.sessionTitlePlaceholder')} />
             </Field>
@@ -175,7 +175,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
           {data.quests.map((q, i) => (
             <li key={q.id} className="rounded-lg border border-line bg-bg px-3 py-2">
               {canEdit ? (
-                <div className="grid gap-2">
+                <div className="flex flex-col gap-2">
                   <Input value={q.name} onChange={(e) => {
                     const quests = data.quests.slice()
                     quests[i] = { ...q, name: e.target.value }
@@ -229,7 +229,7 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
           {data.npcs.map((n, i) => (
             <li key={n.id} className="rounded-lg border border-line bg-bg px-3 py-2">
               {canEdit ? (
-                <div className="grid gap-2">
+                <div className="flex flex-col gap-2">
                   <Input value={n.name} onChange={(e) => {
                     const npcs = data.npcs.slice()
                     npcs[i] = { ...n, name: e.target.value }
@@ -275,8 +275,8 @@ export function CampaignHubPanel({ hub, characters, templates = [], canEdit, com
           {data.loot.map((item, i) => (
             <li key={item.id} className="rounded-lg border border-line bg-bg px-3 py-2">
               {canEdit ? (
-                <div className="grid gap-2">
-                  <div className="grid grid-cols-[1fr_4rem] gap-2">
+                <div className="flex flex-col gap-2">
+                  <div className="grid grid-cols-[minmax(0,1fr)_4rem] gap-2">
                     <Input value={item.name} onChange={(e) => {
                       const loot = data.loot.slice()
                       loot[i] = { ...item, name: e.target.value }
@@ -388,7 +388,7 @@ function BeatEditor({
   }
 
   return (
-    <div className="grid gap-2">
+    <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
         <button
           type="button"

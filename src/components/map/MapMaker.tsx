@@ -96,14 +96,14 @@ export function MapMaker({ map, onChange, onClose, onDeleted }: Props) {
   }
 
   return (
-    <div className="mt-6 grid gap-4 lg:grid-cols-[20rem_1fr]">
+    <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[20rem_1fr]">
       <div className="rounded-xl border border-line bg-panel p-4">
         <button type="button" className="text-xs uppercase tracking-[0.3em] text-gold" onClick={() => flush().then(onClose).catch(() => undefined)}>
           {t('mapMaker.allMaps')}
         </button>
         <h2 className="font-display text-xl text-gold-2">{t('mapMaker.title')}</h2>
         <p className="mt-1 text-xs text-muted">{t('map.maker.blurb')}</p>
-        <div className="mt-3 grid gap-3">
+        <div className="mt-3 flex flex-col gap-3">
           <Field label={t('common.name')}>
             <Input
               value={draft.name}

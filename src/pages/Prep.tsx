@@ -492,11 +492,11 @@ export function Prep() {
           />
         ) : (
         <div className="mt-6 space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-line bg-panel p-4">
               <h2 className="font-display text-xl text-gold">{t('prep.newGrid')}</h2>
               <p className="mt-1 text-xs text-muted">{t('prep.newGridBlurb')}</p>
-              <div className="mt-3 grid gap-3">
+              <div className="mt-3 flex flex-col gap-3">
                 <Field label={t('common.name')}>
                   <Input value={newMapName} onChange={(e) => setNewMapName(e.target.value)} />
                 </Field>
@@ -527,7 +527,7 @@ export function Prep() {
               />
             </label>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {maps.map((m) => (
             <article key={m.id} className="overflow-hidden rounded-xl border border-line bg-panel">
               <button type="button" className="h-40 w-full bg-bg" onClick={() => setEditingMapId(m.id)}>
@@ -565,7 +565,7 @@ export function Prep() {
       )}
 
       {tab === 'Bestiary' && (
-        <div className="mt-6 grid gap-4 lg:grid-cols-[20rem_1fr]">
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[20rem_1fr]">
           <div className="rounded-xl border border-line bg-panel p-3">
             <Input placeholder={t('bestiary.searchPlaceholder')} value={q} onChange={(e) => setQ(e.target.value)} />
             <Button
@@ -604,7 +604,7 @@ export function Prep() {
           </div>
           <div>
             {selectedMonster ? (
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <MonsterForm
                   monster={selectedMonster}
                   editingNew={editingNew}
@@ -635,10 +635,10 @@ export function Prep() {
       )}
 
       {tab === 'Encounters' && (
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="rounded-xl border border-line bg-panel p-4">
             <h2 className="font-display text-xl text-gold">{tpl.id ? t('encounter.editTemplate') : t('encounter.newTemplate')}</h2>
-            <div className="mt-3 grid gap-3">
+            <div className="mt-3 flex flex-col gap-3">
               <Field label={t('common.name')}>
                 <Input value={tpl.name ?? ''} onChange={(e) => setTpl({ ...tpl, name: e.target.value })} />
               </Field>
@@ -758,7 +758,7 @@ export function Prep() {
                     />
                   </Field>
                 </div>
-                <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+                <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
                   <select
                     className="h-10 rounded-md border border-line bg-bg px-2 text-sm"
                     value={beastTypeFilter}
@@ -782,7 +782,7 @@ export function Prep() {
                   </Button>
                 </div>
                 <p className="mt-1 text-xs text-muted">{t('encounter.matchCount', { count: encounterMonsters.length })}</p>
-                <div className="mt-2 grid grid-cols-[1fr_4.5rem_auto] gap-2">
+                <div className="mt-2 grid grid-cols-[minmax(0,1fr)_4.5rem_auto] gap-2">
                   <select
                     className="h-10 rounded-md border border-line bg-bg px-2 text-sm"
                     value={beastPick}
@@ -1369,7 +1369,7 @@ export function Prep() {
       )}
 
       {tab === 'Characters' && (
-        <div className="mt-6 grid gap-4 lg:grid-cols-[18rem_1fr]">
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[18rem_1fr]">
           <div className="rounded-xl border border-line bg-panel p-3">
             <Button
               className="w-full"
