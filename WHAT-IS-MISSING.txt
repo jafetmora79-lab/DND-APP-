@@ -12,36 +12,61 @@ required to run a normal night at a real table.
 1. RULES ENGINE
 ---------------
 
-No automatic legendary / lair action economy, concentration ticks,
-AoE templates, spell-slot spend, hidden initiative, poison clocks, or
-condition expiry. Conditions are labels you add and remove. Dice stay
-physical. Half / three-quarters cover and Hide are on the map; a separate
-non-combat Challenge scene mode (skip initiative) is not.
+Already handled: Extra Attack / Multiattack, two-weapon fighting, opportunity
+attacks, Dash (adds your speed to movement left), Disengage, Dodge, Help,
+Ready, free object interaction, Grapple / Shove, spell-slot spend on Cast
+Spell, concentration saves when hit, half / three-quarters cover, and Hide.
+
+Still not automatic: legendary / lair action economy (legendary actions are
+stat-block text only), hidden initiative, poison clocks, condition expiry,
+and 5-10-5 diagonal costing. Conditions other than the ones above are
+labels you add and remove. Dice stay physical.
+A separate non-combat Challenge scene mode (skip initiative) does not exist.
 
 
 2. VTT EXTRAS
 -------------
 
-No hex grids, token animation, sound, multiple maps in
-one fight, OCR of photos, or an external monster API. Fog is day/night/inside
-with darkvision range and walls blocking sight — not a full lighting engine.
+Already handled: AoE templates (circle, cone, line, cube) and a ruler — both
+DM-only aiming aids, not synced to players or saved. Map props, freehand
+terrain paint, grid alignment for pre-gridded images, and token portraits.
+
+Still missing: hex grids, token animation, sound, multiple maps in one fight,
+OCR of photos, bundled portrait art for SRD monsters, or an external monster
+API. Fog is day/night/inside with darkvision range and walls blocking sight —
+not a full lighting engine.
 
 
 3. CHARACTER BUILDING
 ---------------------
 
 Sheets store what you type or import from a PDF. There is no full builder,
-feat picker, or automatic class features.
+feat picker, inventory manager, or automatic class features (Attacks per
+Action and the Rogue / Monk bonus-action filter are the only class-aware bits).
 
 
 4. HOSTED PROJECTS
 ------------------
 
-Existing Supabase projects that predate this flow also need:
+New projects that ran the current schema.sql already have everything.
+
+Existing Supabase projects that predate a feature need its migrate file
+(see the full list in supabase/README.md). The ones added most recently:
 
   supabase/migrate-campaign-flow.sql
   supabase/migrate-vision-terrain.sql
   supabase/migrate-cover-hide.sql
+  supabase/migrate-join-by-name.sql
+  supabase/migrate-action-economy.sql
+  supabase/migrate-turn-economy-v2.sql
+  supabase/migrate-concentration-spells.sql
+  supabase/migrate-grapple-shove.sql
+  supabase/migrate-help-advantage.sql
+  supabase/migrate-map-alignment.sql
+  supabase/migrate-token-portraits.sql
+  supabase/migrate-map-props.sql
+  supabase/migrate-map-paint.sql
   then:  notify pgrst, 'reload schema';
 
-New projects that ran the current schema.sql already have the RPCs.
+Run them in that order: several re-define the same RPCs
+(resolve_player_attack, declare_combat_action), and the last one wins.

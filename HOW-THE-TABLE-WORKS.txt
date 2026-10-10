@@ -117,16 +117,28 @@ MAPS
   - Paint walls (block sight and walking), holes, difficult ground, ice,
     fire, and water. Tokens cannot stop on walls or holes. Difficult / ice /
     fire / water cost 10 ft per square.
+  - Half cover (+2 AC / Dex saves) and three-quarters cover (+5).
   - Typical size is something like 20×15. You can go smaller or larger.
+  - Align grid to image: line a pre-gridded battlemap up with the app's grid
+    (drag over one printed square, then nudge the offset).
+  - Props: stamp crates, barrels, statues, beds, braziers, traps and more
+    anywhere on the map. Click a placed prop (tool active) to remove it.
+  - Paint terrain: freehand brush for grass, dirt, sand, stone, water, and
+    snow, with an eraser. Props and paint are decoration only; walls and
+    blocked squares still come from the grid tools.
 
 BESTIARY
   - Shared across the DM’s campaigns.
   - Seeded from the SRD (about 300 creatures) plus anything you add.
   - Full stat block editor. Quantity on an encounter places that many tokens.
+  - Attacks per Action (Multiattack) is guessed from the stat block and
+    editable. Custom monsters can have a token portrait.
 
 CHARACTERS
   - Name, sheet (Combat / Skills / Spells / Bio), personal join code.
   - Token color picker. That color is the circle on the map.
+  - Optional token portrait (Art button). The token shows the picture.
+  - Attacks per Action (Extra Attack) and a Concentration box per spell.
   - Optional PDF import fills what it can (D&D Beyond character PDFs or a fillable 5e sheet).
   - Empty sheet tabs hide. Ability modifiers, skill bonuses, and passive
     Perception calculate automatically.
@@ -137,7 +149,13 @@ ENCOUNTERS (templates)
 
   1. Name the encounter and pick a map.
   2. Add monsters from the bestiary dropdown. Quantity 4 goblins = four
-     separate tokens, not one stack. Drag them apart on the preview map.
+     separate tokens, not one stack. Filter by CR range and creature type,
+     sort by name or CR. Place on map (per monster row) moves the group to a
+     square you click; you can also drag them on the preview map.
+     Name/color each lets you pre-name copies ("Grik the Cruel") and add a
+     tactics note for the group.
+     The Encounter difficulty panel does the DMG XP math for the party and
+     calls it Easy / Medium / Hard / Deadly.
   3. Add players (see section 5). This is the part that used to feel broken.
   4. Click Save. The preview stays open so you can confirm tokens are still
      there. If you skip Save, starting squares are not stored.
@@ -147,6 +165,10 @@ ENCOUNTERS (templates)
 
   Edit placement on a saved template reloads it so you can move tokens again.
   Remember to Save after moving.
+
+  Optional: chapter (filter the list by it), read-aloud text and surprise
+  flags (shown / pre-checked when you start the fight). Drag cards to
+  reorder. Delete asks first.
 
 RUN ORDER
   Maps and encounters first, then this tab. One list, top to bottom:
@@ -221,6 +243,11 @@ MAP
   - Cover (map maker): half cover +2 AC and Dex saves, three-quarters +5.
     Full cover is a wall blocking line of sight. Cover does not block walking
     or sight.
+  - DM tools: AoE templates (circle, cone, line, cube) list every token
+    inside; Ruler measures feet between two points. Both are DM-only and not
+    saved.
+  - Add monster mid-fight with a quantity: Add (near the map center) or
+    Place… (click a square). New tokens avoid walls and other tokens.
 
 TRACKER
   - Initiative, current / max / temp HP, conditions, next turn, Skip, Sort,
@@ -261,6 +288,18 @@ PLAYERS IN COMBAT
   - See the map (fog-respecting) and a sheet drawer.
   - They can attack with their own character the same way: pick attack, tap
     target, enter the d20 and damage.
+  - Action / Bonus / Reaction menus follow 5e: Extra Attack keeps the Action
+    open until all attacks are made; off-hand attacks use the Bonus Action;
+    Dash / Disengage / Hide are bonus actions only for Rogues (Monks: Dash /
+    Disengage); the Reaction is an Opportunity Attack or Other.
+  - Dash adds speed to movement left. Dodge makes attackers roll at
+    disadvantage. Help gives an ally advantage against one chosen enemy.
+    Ready logs a trigger. One free object interaction per turn.
+  - Grapple / Shove: Athletics vs the target's Athletics / Acrobatics.
+    Success tags Grappled or Prone.
+  - Cast Spell uses a slot of the spell's level (cantrips are free).
+    Concentration spells tag Concentrating; taking damage prompts a Con save
+    (DC 10 or half the damage), and failing ends it.
 
 
 7. BETWEEN FIGHTS (THE CAMPAIGN TABLE)
@@ -289,6 +328,9 @@ on) from name/type.
 Player tokens use the color chosen on the character sheet, with a darker
 gradient stop so the initials stay readable.
 
+Any character or custom monster with a portrait shows that picture, clipped
+to a circle, instead of the colored fill.
+
 Name, HP bar, and AC sit above the circle. Condition rings (poisoned,
 unconscious, etc.) wrap the token.
 
@@ -306,7 +348,24 @@ If you want the extra columns anyway, supabase/migrate-encounter-play.sql
 and migrate-campaign-table.sql are still there. For skip-dead turns, player
 initiative, and Join this fight on existing hosted projects, also run
 migrate-campaign-flow.sql. For player monster stat blocks on token tap, also
-run migrate-vision-terrain.sql. For cover and Hide, also run migrate-cover-hide.sql. For joining by character name instead of a personal code, also run migrate-join-by-name.sql, then:
+run migrate-vision-terrain.sql. For cover and Hide, also run
+migrate-cover-hide.sql. For joining by character name instead of a personal
+code, also run migrate-join-by-name.sql.
+
+For the newer combat rules and map tools, run these in this order (several
+re-define the same functions, so the last one must win):
+
+  migrate-action-economy.sql
+  migrate-turn-economy-v2.sql
+  migrate-concentration-spells.sql
+  migrate-grapple-shove.sql
+  migrate-help-advantage.sql
+  migrate-map-alignment.sql
+  migrate-token-portraits.sql
+  migrate-map-props.sql
+  migrate-map-paint.sql
+
+Then:
 
   notify pgrst, 'reload schema';
 
@@ -347,7 +406,9 @@ If a player token never appears, check in this order:
 ------------------------------------------
 
 Hex grids, dynamic lighting, token animations, sound, multiple maps in one
-fight, OCR for handwritten sheets, and importing from an external monster API.
+fight, OCR for handwritten sheets, importing from an external monster API,
+legendary / lair action economy, and condition expiry.
 
-Measurement tools and freehand wall drawing are out of scope; blocked squares
-on the 5-ft grid cover impassable terrain.
+Freehand wall drawing is out of scope; blocked squares on the 5-ft grid cover
+impassable terrain (freehand paint and props are decoration only).
+See WHAT-IS-MISSING.txt for the full list.
