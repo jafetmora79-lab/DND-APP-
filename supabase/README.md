@@ -39,6 +39,23 @@ If it was applied before cover terrain and Hide, also run `migrate-cover-hide.sq
 
 If it was applied before players joined with their character name, also run `migrate-join-by-name.sql`. Until that runs, hosted join still expects the old personal code.
 
+If it was applied before the action-economy and spell rules, run these **in this order** (each re-defines some of the same functions, so the last one must win), then `notify pgrst, 'reload schema';`:
+
+1. `migrate-action-economy.sql` — Extra Attack, Monster Multiattack, bonus / reaction attacks
+2. `migrate-turn-economy-v2.sql` — free object interaction, Ready
+3. `migrate-concentration-spells.sql` — Cast Spell, concentration saves
+4. `migrate-grapple-shove.sql` — Grapple / Shove
+5. `migrate-help-advantage.sql` — Help grants advantage against a chosen enemy
+
+If it was applied before the newer map and token tools, also run (plain columns, any order):
+
+- `migrate-map-alignment.sql` — align a background image to the grid
+- `migrate-token-portraits.sql` — portrait art on characters and monsters
+- `migrate-map-props.sql` — props stamped on the map
+- `migrate-map-paint.sql` — freehand terrain-paint layer
+
+If a hosted save fails with *Could not find 'some_column'*, the error names the migrate file to run.
+
 ## 3. App env
 
 ```bash

@@ -10,12 +10,13 @@ Monster stat blocks are seeded from the Systems Reference Document 5.1 (© Wizar
 
 - **Dungeon Master login** with a table name and passcode. Run as many campaigns as you want.
 - **Shared bestiary** across every campaign at that table (~300 SRD creatures, plus your own).
-- **Prep library** per campaign: square 5-ft battle maps you draw from scratch (optional picture as background, blocked squares tokens cannot walk on), encounter templates, player characters. Players join with tonight’s table code plus their character name.
+- **Prep library** per campaign: square 5-ft battle maps you draw from scratch (optional picture as background with a grid-alignment tool, walls / terrain / cover on the grid, freely placed props, and a freehand terrain-paint layer), encounter templates, player characters. Players join with tonight’s table code plus their character name.
 - **Live session**: the campaign table stays open on one join code. Between fights, players see their character sheets and a scene image (or a hearth placeholder) while you talk and travel. Start or resume an encounter when you are ready. Copy buttons sit next to join codes and character names.
-- **Map & tokens** (Konva): pan/zoom, drag tokens on a square grid (5 ft per square), paint fog of war. Tokens snap back if dropped on a blocked square. Each creature has a name, HP bar, Armor Class, and a colored ring per condition (Poisoned, Unconscious / sleeping, and the rest of the tracker list).
+- **Map & tokens** (Konva): pan/zoom, drag tokens on a square grid (5 ft per square), fog of war with day / night / inside and darkvision. Tokens snap back if dropped on a blocked square. Each creature has a name, HP bar, Armor Class, a colored ring per condition, and an optional portrait. The DM has AoE templates (circle, cone, line, cube) and a ruler.
 - **Encounter tracker**: initiative, current/max/temp HP, conditions, next-turn. State hangs off the encounter instance, not the night’s join code.
 - **Attacks**: pick an attack, tap a creature in range, enter the d20 from the table and the damage. d20 + bonus must be **higher than Armor Class** to hit (equal to AC misses). Natural 20 hits. Natural 1 misses and the target has advantage against the attacker next turn — same rule for players and for the DM’s monsters.
-- **Encounter templates**: pick monsters from a bestiary dropdown (quantity places that many tokens). Place player characters on the map so you decide starting squares before you hit Start.
+- **Action economy**: Action / Bonus / Reaction slots with Extra Attack and Multiattack, two-weapon fighting, opportunity attacks, Dash, Dodge, Help, Ready, Grapple / Shove, Hide, and Cast Spell with slot spending and concentration saves.
+- **Encounter templates**: pick monsters from a bestiary dropdown filtered by CR and type (quantity places that many tokens, with optional per-copy names and tactics notes). A DMG XP-budget panel rates the difficulty. Place player characters and monsters on the map so you decide starting squares before you hit Start. Optional chapter, read-aloud text, and surprise flags.
 - **Character sheets** with Combat / Skills / Spells / Bio. Empty tabs hide. Ability modifiers, skill bonuses, and passive Perception calculate automatically. Visible to everyone; editable by the owner and the DM.
 - **Encounter outcome**: the DM finalizes a fight as won or lost. Everyone sees a victory or defeat, then the table returns to the scene + sheets. **Next encounter** loads the next template without minting a new join code.
 
@@ -82,10 +83,12 @@ Do not put the Supabase `service_role` key in the client.
 
 Hex grids, dynamic lighting, token animations, sound, multiple maps in one session, OCR for handwritten sheets, and importing from an external monster API.
 
-Measurement tools and freehand wall drawing are still out of scope; blocked squares on the 5-ft grid cover impassable terrain.
+Freehand wall drawing is still out of scope; blocked squares on the 5-ft grid cover impassable terrain. See [WHAT-IS-MISSING.txt](WHAT-IS-MISSING.txt) for the full list.
 
 ## Scripts
 
 - `npm run dev` — API + Vite together
 - `npm run build` — typecheck and production client
 - `npm start` — API only (serves `dist/` if present)
+- `npm run lint` — oxlint over `src` and `server`
+- `npx tsx scripts/verify-<name>.ts` — self-checking scripts for combat, turn flow, vision, map tools, PDF import, and more (each prints `ok` lines and exits non-zero on failure)

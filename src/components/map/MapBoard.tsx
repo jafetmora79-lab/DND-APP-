@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Maximize2, Minus, Plus } from 'lucide-react'
 import { Circle, Group, Layer, Line, Rect, Shape, Stage, Text, Wedge, Image as KImage } from 'react-konva'
 import useImage from 'use-image'
-import { aoeAngleDeg, CONE_FULL_ANGLE_DEG, type AoeKind, type AoeShape } from '@/lib/aoe'
+import { aoeAngleDeg, CONE_FULL_ANGLE_DEG, distanceFeet, type AoeKind, type AoeShape } from '@/lib/aoe'
 import { publicAsset } from '@/lib/config'
 import { conditionRingColor, type BattleMap, type Combatant, type FogState, type MapProp, type MapToken } from '@/lib/types'
 import { tokenHiddenFromPlayers } from '@/lib/combat'
@@ -203,7 +203,7 @@ function AoeOverlay({ shape, gridSize }: { shape: AoeShape; gridSize: number }) 
 }
 
 function RulerOverlay({ x1, y1, x2, y2, gridSize }: { x1: number; y1: number; x2: number; y2: number; gridSize: number }) {
-  const feet = Math.round((Math.hypot(x2 - x1, y2 - y1) / gridSize) * 5)
+  const feet = Math.round(distanceFeet(x1, y1, x2, y2, gridSize))
   const midX = (x1 + x2) / 2
   const midY = (y1 + y2) / 2
   return (

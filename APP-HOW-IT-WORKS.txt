@@ -8,6 +8,7 @@ This is a campaign companion for Dungeons & Dragons 5e at a REAL table. Dice
 are rolled in person. The app tracks the map, tokens, HP, turns, sheets, and
 the campaign notebook. It is not a VTT with hex grids, sound, or a rules engine
 that rolls attacks for you. Fog uses day/night/inside plus darkvision and walls.
+The product name in the UI is Veyra.
 
 
 WHAT YOU SEE (SCREENS)
@@ -93,17 +94,32 @@ MAPS
   Paint walls (block walking and sight), holes, difficult, ice, fire, water,
   half cover (+2 AC / Dex), three-quarters cover (+5).
   Tokens cannot stop on walls or holes. Difficult/ice/fire/water cost 10 ft.
-  Cover is walkable and does not block sight. Map maker is on the 5-ft grid
-  only (no hex, no freehand walls).
+  Cover is walkable and does not block sight. Mechanical terrain (walls,
+  cover, holes, etc.) is on the 5-ft grid only (no hex, no freehand walls).
+
+  Align grid to image: drag a box over one printed square of an uploaded
+  battlemap to set its scale, then drag / type the offset until the lines
+  match. Reset to stretched goes back to stretch-to-fill (the default).
+  Props: 36 top-down images (dungeon, furniture, lighting, nature, storage,
+  traps). Pick one, click the map to place it anywhere (not grid-snapped);
+  click a placed prop with the tool active to remove it.
+  Paint terrain: freehand brush layer (grass, dirt, sand, stone, water, snow,
+  eraser; three brush sizes). Saved as a transparent PNG over the
+  background. Paint and props are decoration only — they do not block
+  walking or sight — and fog hides them like everything else.
 
 BESTIARY
   Shared across every campaign at that DM table.
   Seeded from SRD 5.1 (~300 creatures) plus anything you add.
   Full stat block editor (abilities, actions, traits, etc.).
+  Attacks per Action (Multiattack) is guessed from the Multiattack text and
+  editable. Custom monsters can carry a token portrait (Art button).
   Quantity on an encounter = that many separate tokens, not one stack.
 
 CHARACTERS
-  Name, owner label, token color, personal join code.
+  Name, owner label, token color, optional token portrait (Art button next
+  to the color; the token shows the picture clipped to a circle).
+  Attacks per Action (Extra Attack). Spells carry a Concentration checkbox.
   Sheet tabs: Combat / Skills / Spells / Bio. Empty tabs hide for viewers.
   Mods, skill bonuses, passive Perception calculate from abilities + prof.
   XP lives on the Combat tab (sheet.xp).
@@ -114,9 +130,22 @@ CHARACTERS
 ENCOUNTER TEMPLATES
   Name, map, monsters (dropdown + quantity + start squares), player starts.
   Optional brief packed with the template: notes, objective, difficulty,
-  XP award, loot notes, sort order.
+  XP award, loot notes, sort order, chapter, read-aloud text, and
+  "party / monsters start surprised" flags.
   A template is “Ready” when it has a map and at least one monster.
   SAVE after placing/moving tokens. Unsaved starts are not stored.
+
+  Monster picker: text search, CR min/max, creature type, sort by name or CR.
+  Each monster row: Place on map (click a square; the group spreads from
+  there) and Name/color each (per-copy names like "Grik the Cruel", colors,
+  plus one tactics note for the group).
+  Encounter difficulty panel: 2014 DMG XP thresholds for the placed party (or
+  the whole roster), monster-count multiplier, Easy / Medium / Hard / Deadly.
+  "Use as difficulty/XP award" fills those fields (XP award = base XP).
+  Start fight shows the read-aloud text and tactics notes, and pre-checks the
+  saved surprise flags.
+  The list can be filtered by chapter and reordered by drag-and-drop.
+  Delete asks for confirmation.
 
   Player starts (Prep → Encounters):
     Place on map (south-center walkable square by default), drag, or click
@@ -199,8 +228,18 @@ MAP
   Blocked square: token snaps back.
   Name, HP bar, AC above the circle. Condition rings around it.
   Monster fill is thematic from name/type. Player fill is the sheet color.
+  A token with a portrait shows the picture instead.
   Players may drag their own token on their turn only.
   DM can drag any token. Off-turn DM nudges do not spend movement.
+  Map props and painted terrain from the map maker render under the tokens.
+
+AOE AND RULER (DM)
+  Toolbar: circle, cone, line, cube. Drag to size and aim; the panel shows
+  the length in feet and every token inside, and those tokens get a ring.
+  Cones follow the 5e rule (width = distance from origin).
+  Ruler: drag between two points for the distance in feet.
+  Both are aiming aids on the DM screen only: not shown to players, not
+  saved, and cleared when you switch tools.
 
 FOG
   Tools: Move, Day, Night, Inside, Reveal, Hide, Fog on/off.
@@ -244,7 +283,34 @@ TRACKER
     Action, Bonus, Reaction, Move (used / not).
   Movement line for everyone: Move remaining / speed ft.
   DM selected combatant: +5 ft, +30 ft, Reset, or type remaining
-  (Dash, teleport, forced move).
+  (teleport, forced move, a monster's Dash).
+  Add monster mid-fight: pick from the bestiary, set a quantity, then Add
+  (spreads from the map center) or Place… (click a square). New tokens
+  skip walls and occupied squares.
+
+ACTION ECONOMY (PLAYER TURN PANEL)
+  Action menu: Attack, Dash, Dodge, Help, Disengage, Hide, Ready, Other
+  (Search, Grapple, Shove, Use an Object, Cast Spell, Custom).
+  Bonus menu: Attack (off-hand / two-weapon). Dash / Disengage / Hide only for
+  a Rogue (Cunning Action); Dash / Disengage for a Monk. Never Dodge / Help /
+  Ready.
+  Reaction menu: Opportunity Attack or Other.
+  Free object interaction: once per turn, spends no slot.
+  Attacks per Action: the Action slot stays open until that many attacks
+  are made (Extra Attack for PCs, Multiattack for monsters).
+  Dash adds the combatant's speed to movement remaining.
+  Disengage / Dodge tag the combatant. Attackers against a Dodging target
+  roll at disadvantage (cancels with stored advantage).
+  Help: pick an ally, then an enemy; the ally gets advantage on their next
+  attack against that enemy.
+  Ready: spends the Action and logs your trigger + response.
+  Grapple / Shove: roll your Athletics vs a DC from the target's better of
+  Athletics / Acrobatics. Success tags Grappled or Prone.
+  Cast Spell: pick a prepared spell from the sheet. Cantrips are free;
+  leveled spells use a slot of that level (blocked when none are left).
+  Concentration spells tag Concentrating.
+  Concentration: damage on a Concentrating creature prompts a Con save at
+  DC max(10, half the damage). Failing, or dropping to 0 HP, clears it.
 
 PER-TURN MOVEMENT
   Each combatant has speedFeet (from sheet.speed or monster speed string;
@@ -345,8 +411,8 @@ WHAT THIS APP DELIBERATELY DOES NOT DO
 Hex grids, dynamic lighting, token animations, sound, AI, inventory manager,
 full character builder, OCR for handwritten sheets, external monster APIs,
 multiple maps in one fight, 5-10-5 diagonal costing, auto-rolling dice,
-spell slot automation beyond what is typed on the sheet, Dash as an automatic
-rules action (DM adds +30 ft remaining instead).
+legendary / lair action economy, condition expiry, hidden initiative.
+See WHAT-IS-MISSING.txt for the full list.
 
 
 HOSTED SQL CHEAT SHEET (EXISTING PROJECTS)
@@ -362,6 +428,18 @@ HOSTED SQL CHEAT SHEET (EXISTING PROJECTS)
   migrate-vision-terrain.sql      player read of fight bestiary rows
   migrate-cover-hide.sql          cover AC, Hide RPC (apply_hide_result)
   migrate-join-by-name.sql        players join with character name, not a code
+  migrate-action-economy.sql      Extra Attack, Multiattack, bonus/reaction slots
+  migrate-turn-economy-v2.sql     free interact, Ready
+  migrate-concentration-spells.sql Cast Spell, concentration saves
+  migrate-grapple-shove.sql       Grapple / Shove (apply_contest_result)
+  migrate-help-advantage.sql      Help grants advantage vs a chosen enemy
+  migrate-map-alignment.sql       align grid to image (bg_scale, offsets)
+  migrate-token-portraits.sql     portrait art on characters and monsters
+  migrate-map-props.sql           map props (props_json)
+  migrate-map-paint.sql           freehand terrain paint (paint_url)
+
+Run them top to bottom. The combat ones re-define the same RPCs, so the
+order matters (the last definition wins).
 
 Then: notify pgrst, 'reload schema';
 
