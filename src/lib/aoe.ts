@@ -14,8 +14,13 @@ function dist(ax: number, ay: number, bx: number, by: number) {
   return Math.hypot(bx - ax, by - ay)
 }
 
+/** Straight-line distance between two world points, in feet (one grid square = 5 ft). Used by AoE templates and the ruler. */
+export function distanceFeet(x1: number, y1: number, x2: number, y2: number, gridSize: number) {
+  return (dist(x1, y1, x2, y2) / gridSize) * 5
+}
+
 export function aoeLengthFeet(shape: AoeShape, gridSize: number) {
-  return (dist(shape.originX, shape.originY, shape.endX, shape.endY) / gridSize) * 5
+  return distanceFeet(shape.originX, shape.originY, shape.endX, shape.endY, gridSize)
 }
 
 /** Direction from origin to end, in degrees (Konva rotation convention: 0 = +x axis, clockwise). */
