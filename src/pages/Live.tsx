@@ -127,6 +127,8 @@ export function Live() {
   }, [campaignId])
 
   useEffect(() => {
+    // load() only sets state after its first await, so nothing here renders synchronously.
+    // eslint-disable-next-line react/set-state-in-effect
     load().catch((e) => setError(e.message))
   }, [load])
 
@@ -148,18 +150,19 @@ export function Live() {
     if (selectedMonster) return attacksFromMonster(selectedMonster)
     return [{ name: 'Strike', bonus: '+0', damage: '', range: '5 ft.' }]
   }, [selectedCombatant, selectedMonster, snap?.characters])
+  const liveMap = snap?.map
+  const liveTokens = snap?.tokens
   const aoeAffectedIds = useMemo(() => {
-    if (!aoeShape || !snap?.map) return []
-    const cells = new Set(
-      aoeCoveredCells(aoeShape, snap.map.gridSize, snap.map.gridCols, snap.map.gridRows).map((c) => `${c.col},${c.row}`),
-    )
+    if (!aoeShape || !liveMap || !liveTokens) return []
+    const { gridSize, gridCols, gridRows } = liveMap
+    const cells = new Set(aoeCoveredCells(aoeShape, gridSize, gridCols, gridRows).map((c) => `${c.col},${c.row}`))
     const ids: string[] = []
-    for (const tok of snap.tokens) {
-      const occ = tokenOccupiedCells(tok, snap.map.gridSize, snap.map.gridCols, snap.map.gridRows)
+    for (const tok of liveTokens) {
+      const occ = tokenOccupiedCells(tok, gridSize, gridCols, gridRows)
       if (occ.some((c) => cells.has(`${c.col},${c.row}`))) ids.push(tok.refId)
     }
     return ids
-  }, [aoeShape, snap?.map, snap?.tokens])
+  }, [aoeShape, liveMap, liveTokens])
   const highlightIds = useMemo(() => {
     if (aoeShape) return aoeAffectedIds
     if (!snap?.map || !pending || !selectedCombatant) return []
@@ -172,9 +175,9 @@ export function Live() {
       .filter((n): n is string => Boolean(n))
   }, [aoeShape, aoeAffectedIds, snap])
   const aoeLength = useMemo(() => {
-    if (!aoeShape || !snap?.map) return 0
-    return Math.round(aoeLengthFeet(aoeShape, snap.map.gridSize) / 5) * 5
-  }, [aoeShape, snap?.map])
+    if (!aoeShape || !liveMap) return 0
+    return Math.round(aoeLengthFeet(aoeShape, liveMap.gridSize) / 5) * 5
+  }, [aoeShape, liveMap])
 
   function selectAoeTool(kind: MapTool) {
     setAoeShape(null)
